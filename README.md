@@ -11,7 +11,7 @@ Bu skeleton quyidagi shaxsiy repolaringizdagi patternlar asosida yig'ildi:
 | `core/ai_tools.py`            | tgs-expert-bot + ms-file-toolkit | Function-calling tool registry va dispatch |
 | `core/channels.py`            | KanalKotibRobot      | Dinamik kanal aniqlash + admin-based ruxsat |
 | `admin/panel.py`              | StokerDownloader     | Superadmin panel (foydalanuvchilar/guruhlar/kanallar boshqaruvi) |
-| `tools/file_tools.py`         | ms-file-toolkit      | DOCX/XLSX/PPTX/PDF tool wrapper |
+| `tools/file_tools.py`         | ms-file-toolkit      | **To'liq ulandi** (PyPI v0.4.0): 36 ta DOCX/XLSX/PPTX/PDF tool, schema Claude→Groq formatiga avtomatik konvertatsiya qilinadi, har foydalanuvchi uchun alohida xavfsiz papka (`data/user_files/<user_id>/`) |
 | `core/thinking_indicator.py`  | (yangi)              | "O'ylab olay... Ns" live-status xabari + forum-topic (`message_thread_id`) qo'llab-quvvatlash |
 | `core/topic_sessions.py`      | (yangi)              | Shaxsiy chat Topics (Bot API 9.4, 2026) — har bir topic mustaqil suhbat konteksti bilan |
 | `handlers/topics.py`          | (yangi)              | `/yangi_mavzu`, `/mavzular` komandalari |
@@ -28,7 +28,17 @@ faqat "dirty" belgisini qo'yadi, background task har 5 soniyada bittalab
 flush qiladi. Kritik amallar (session saqlash, premium/ruxsat berish) uchun
 `tgdb.save(bot, force=True)` chaqiring — darhol yoziladi.
 
-## Userbot ulash oqimi
+## Fayl generatsiyasi qanday ishlaydi
+Foydalanuvchi "menga hisobot yoz" desa, AI `create_docx`/`create_xlsx`/... tool'ini
+chaqiradi, natija `data/user_files/<user_id>/` papkasida yaratiladi va bot uni
+avtomatik hujjat sifatida yuboradi (`handlers/ai_chat.py`). `file_path` sifatida
+AI qanday nom bersa ham, xavfsizlik uchun har doim foydalanuvchining o'z papkasi
+ichiga normalizatsiya qilinadi (`tools/file_tools.py`).
+
+## Userbot avtomatik qayta ulanishi
+Bot qayta ishga tushganda (`on_startup`), oldin ulangan barcha userbot
+sessiyalari DB'dan o'qilib, avtomatik qayta ulanadi — foydalanuvchi
+qayta `/userbot` qilishi shart emas.
 1. Foydalanuvchi `/userbot` yozadi
 2. Bot API ID, API HASH (https://my.telegram.org dan), telefon so'raydi
 3. Telegram SMS/ilova orqali kod yuboradi — foydalanuvchi shu yerga yozadi

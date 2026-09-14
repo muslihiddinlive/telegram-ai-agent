@@ -11,8 +11,21 @@ from aiogram.types import Message
 import core.pending_input as pending_input
 import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
+from core.userbot_runtime import start_userbot_for_owner
 
 router = Router()
+
+
+async def _activate_userbot(message: Message, user_id: int, data: dict):
+    """Login tugagach userbot'ni darhol ishga tushiradi (restart kutmasdan)."""
+    try:
+        await start_userbot_for_owner(message.bot, user_id, data["api_id"], data["api_hash"])
+        await message.answer(
+            "✅ Userbot muvaffaqiyatli ulandi va ishga tushdi! "
+            "Endi /kalitsoz_qoshish bilan avto-javob qoidalarini sozlashingiz mumkin."
+        )
+    except Exception as e:
+        await message.answer(f"✅ Session saqlandi, lekin ishga tushirishda xatolik: {e}")
 
 
 def _has_pending_state(message: Message) -> bool:
@@ -54,8 +67,8 @@ async def handle_pending(message: Message):
         if result == "need_password":
             await message.answer("🔒 Ikki bosqichli parolingizni yuboring:")
         elif result == "success":
-            session = await userbot_login.finalize_login(message.bot, user_id)
-            await message.answer("✅ Userbot muvaffaqiyatli ulandi! Endi /kalitsoz_qoshish bilan avto-javob sozlashingiz mumkin.")
+            await userbot_login.finalize_login(message.bot, user_id)
+            await _activate_userbot(message, user_id, data)
         elif result == "invalid_code":
             await message.answer("❌ Kod noto'g'ri. Qaytadan yozing:")
         else:
@@ -65,7 +78,7 @@ async def handle_pending(message: Message):
         result = await userbot_login.submit_password(user_id, text)
         if result == "success":
             await userbot_login.finalize_login(message.bot, user_id)
-            await message.answer("✅ Userbot muvaffaqiyatli ulandi!")
+            await _activate_userbot(message, user_id, data)
         else:
             await message.answer("❌ Parol noto'g'ri. Qaytadan yozing:")
 

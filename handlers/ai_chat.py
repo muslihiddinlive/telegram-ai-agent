@@ -10,8 +10,9 @@ Qo'shimcha funksiyalar:
     bilan yangilanib turadigan xabar ko'rsatiladi (core/thinking_indicator.py).
 """
 import json
+import os
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 
 from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch
@@ -35,20 +36,27 @@ async def handle_message(message: Message):
         bot=message.bot, chat_id=message.chat.id, thread_id=thread_id
     ).start()
 
+    final_text = "..."
+    tool_outputs: list[tuple[str, dict]] = []
+
     try:
         result = await ai.chat(messages, tools=TOOLS)
         response = result["response"]
         choice = response.choices[0].message
 
         if choice.tool_calls:
-            outputs = []
             for tool_call in choice.tool_calls:
                 args = json.loads(tool_call.function.arguments)
-                tool_result = await dispatch(
-                    tool_call.function.name, user_id, args, ctx
-                )
-                outputs.append(f"[{tool_call.function.name}]: {tool_result}")
-            final_text = "\n".join(outputs)
+                tool_result = await dispatch(tool_call.function.name, user_id, args, ctx)
+                tool_outputs.append((tool_call.function.name, tool_result))
+
+            has_file = any(
+                isinstance(r, dict) and (r.get("file_path") or r.get("output_path"))
+                for _, r in tool_outputs
+            )
+            final_text = "Tayyor ✅" if has_file else "\n".join(
+                f"[{n}]: {r}" for n, r in tool_outputs
+            )
         else:
             final_text = choice.content or "..."
 
@@ -56,6 +64,18 @@ async def handle_message(message: Message):
         final_text = f"⚠️ Xatolik yuz berdi: {e}"
 
     await indicator.finish(final_text)
+
+    # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларни yuboramiz
+    for tool_name, tool_result in tool_outputs:
+        if not isinstance(tool_result, dict):
+            continue
+        file_path = tool_result.get("file_path") or tool_result.get("output_path")
+        if file_path and os.path.isfile(file_path):
+            await message.answer_document(
+                FSInputFile(file_path),
+                caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
+                message_thread_id=thread_id,
+            )
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", message.text)

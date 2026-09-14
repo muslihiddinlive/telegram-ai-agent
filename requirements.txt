@@ -6,3 +6,4 @@ anthropic>=0.34
 openai>=1.30
 python-dotenv>=1.0
 telethon>=1.36
+ms-file-toolkit>=0.4.0

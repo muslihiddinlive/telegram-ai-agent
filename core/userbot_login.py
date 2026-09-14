@@ -30,6 +30,8 @@ async def start_login(user_id: int, api_id: int, api_hash: str, phone: str) -> s
         "client": client,
         "phone": phone,
         "phone_code_hash": sent.phone_code_hash,
+        "api_id": api_id,
+        "api_hash": api_hash,
     }
     pending_input.set(user_id, "userbot_wait_code")
     return "code_sent"
@@ -75,6 +77,10 @@ async def finalize_login(bot: Bot, user_id: int) -> str:
     client: TelegramClient = entry["client"]
     session_string = client.session.save()
     await save_user_secret(bot, user_id, "telegram_session", session_string)
+    # api_id/api_hash ham saqlanadi — bot qayta ishga tushganda userbot'ni
+    # avtomatik qayta ulash uchun kerak (core/userbot_runtime.py)
+    await save_user_secret(bot, user_id, "api_id", str(entry["api_id"]))
+    await save_user_secret(bot, user_id, "api_hash", entry["api_hash"])
     await client.disconnect()
     pending_input.clear(user_id)
     return session_string

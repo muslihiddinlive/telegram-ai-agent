@@ -17,6 +17,8 @@ from handlers.topics import router as topics_router
 from handlers.userbot_commands import router as userbot_commands_router
 from handlers.pending_text import router as pending_text_router
 from handlers.ai_chat import router as ai_chat_router
+from core.userbot_runtime import start_userbot_for_owner
+from core.accounts_store import get_user_secret
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,9 +36,23 @@ dp.my_chat_member.register(on_bot_added_to_chat)
 
 
 async def on_startup(bot: Bot):
-    await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa)
+    db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa)
     if config.WEBHOOK_URL:
         await bot.set_webhook(f"{config.WEBHOOK_URL}/webhook")
+
+    # Oldin ulangan barcha userbot'larni qayta ishga tushiramiz
+    for user_id_str, secrets in db.get("ai_sessions", {}).items():
+        if "telegram_session" in secrets and "api_id" in secrets and "api_hash" in secrets:
+            try:
+                await start_userbot_for_owner(
+                    bot,
+                    int(user_id_str),
+                    int(get_user_secret(int(user_id_str), "api_id")),
+                    get_user_secret(int(user_id_str), "api_hash"),
+                )
+                logging.info("Userbot qayta ulandi: %s", user_id_str)
+            except Exception as e:
+                logging.warning("Userbot ulanmadi (%s): %s", user_id_str, e)
 
 
 async def on_shutdown(bot: Bot):
