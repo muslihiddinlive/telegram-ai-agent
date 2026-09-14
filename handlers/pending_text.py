@@ -13,6 +13,7 @@ import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
 import core.roles as roles
 from core.userbot_runtime import start_userbot_for_owner
+from admin.panel import render_search_results
 
 router = Router()
 
@@ -126,6 +127,16 @@ async def handle_pending(message: Message):
             await message.bot.send_message(new_admin_id, "🛡 Sizga admin huquqi berildi.")
         except Exception:
             pass
+
+    # ── Foydalanuvchi qidirish (ID yoki ism) ──
+    elif action == "search_users_query":
+        pending_input.clear(user_id)
+        matches = roles.search_users(text)
+        kb = render_search_results(matches)
+        if not kb:
+            await message.answer(f"\"{text}\" bo'yicha hech narsa topilmadi.")
+        else:
+            await message.answer(f"🔍 \"{text}\" bo'yicha natijalar:", reply_markup=kb)
 
     else:
         pending_input.clear(user_id)

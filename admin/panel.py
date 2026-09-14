@@ -61,6 +61,7 @@ async def show_users(call: CallbackQuery):
         nav.append(InlineKeyboardButton(text="➡️", callback_data=f"panel:users:{page+1}"))
     if nav:
         buttons.append(nav)
+    buttons.append([InlineKeyboardButton(text="🔍 Qidirish (ID yoki ism)", callback_data="panel:search_users")])
     buttons.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
 
     await call.message.edit_text(
@@ -134,6 +135,31 @@ async def set_limit_start(call: CallbackQuery):
     uid = call.data.split(":")[-1]
     pending_input.set(caller, "set_user_limit", {"target_uid": uid})
     await call.message.answer(f"Foydalanuvchi {uid} uchun yangi kunlik limitni yuboring (raqam):")
+    await call.answer()
+
+
+def render_search_results(matches: dict) -> InlineKeyboardMarkup:
+    if not matches:
+        return None
+    buttons = [
+        [InlineKeyboardButton(
+            text=f"{'✅' if rec.get('role') == 'approved' else '⏳'} {rec.get('name') or uid} (ID: {uid})",
+            callback_data=f"panel:user_detail:{uid}",
+        )]
+        for uid, rec in list(matches.items())[:15]  # ko'p mos kelsa — birinchi 15 tasi
+    ]
+    buttons.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.callback_query(F.data == "panel:search_users")
+async def search_users_start(call: CallbackQuery):
+    caller = call.from_user.id
+    if not (roles.is_superadmin(caller) or roles.is_admin(caller)):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    pending_input.set(caller, "search_users_query")
+    await call.message.answer("🔍 Qidirish uchun foydalanuvchi ID'sini yoki ismini (bir qismini) yuboring:")
     await call.answer()
 
 

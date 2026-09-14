@@ -150,3 +150,22 @@ def remaining_requests(user_id: int) -> int:
     rec = _bucket(user_id)
     _reset_if_new_day(rec)
     return max(0, rec["daily_limit"] - rec["requests_today"])
+
+
+def search_users(query: str) -> dict:
+    """
+    ID (aniq mos kelish) yoki ism bo'yicha (substring, katta-kichik harf
+    farqisiz) qidiradi — StokerDownloader/search_users_by_prefix patternidan,
+    lekin prefix emas, "contains" qidiruv (qulayroq).
+    """
+    db = tgdb.get()
+    query = query.strip()
+
+    if query.isdigit() and query in db["users"]:
+        return {query: db["users"][query]}
+
+    query_lower = query.lower()
+    return {
+        uid: rec for uid, rec in db["users"].items()
+        if query_lower in (rec.get("name") or "").lower() or query_lower in uid
+    }
