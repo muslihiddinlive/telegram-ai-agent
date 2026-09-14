@@ -152,7 +152,34 @@ def remaining_requests(user_id: int) -> int:
     return max(0, rec["daily_limit"] - rec["requests_today"])
 
 
-def search_users(query: str) -> dict:
+def build_users_csv() -> str:
+    """
+    Barcha foydalanuvchilar ro'yxatini CSV matn sifatida qaytaradi —
+    StokerDownloader/build_users_csv patternidan.
+
+    Eslatma: "approved_by" (kim tasdiqlagan) ustuni QASDDAN qo'shilmagan —
+    aks holda admin CSV'ni ochib, kimning ID'si superadmin ekanini
+    (barcha yozuvlarda takrorlangan ID orqali) bilib olishi mumkin edi.
+    """
+    import csv
+    import io
+
+    db = tgdb.get()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["user_id", "name", "role", "daily_limit", "requests_today", "last_reset"])
+
+    for uid, rec in db["users"].items():
+        writer.writerow([
+            uid,
+            rec.get("name") or "",
+            rec.get("role", "pending"),
+            rec.get("daily_limit", ""),
+            rec.get("requests_today", 0),
+            rec.get("last_reset", ""),
+        ])
+
+    return buf.getvalue()
     """
     ID (aniq mos kelish) yoki ism bo'yicha (substring, katta-kichik harf
     farqisiz) qidiradi — StokerDownloader/search_users_by_prefix patternidan,

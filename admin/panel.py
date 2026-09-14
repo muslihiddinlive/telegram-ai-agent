@@ -62,6 +62,7 @@ async def show_users(call: CallbackQuery):
     if nav:
         buttons.append(nav)
     buttons.append([InlineKeyboardButton(text="🔍 Qidirish (ID yoki ism)", callback_data="panel:search_users")])
+    buttons.append([InlineKeyboardButton(text="📥 CSV yuklab olish", callback_data="panel:export_csv")])
     buttons.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
 
     await call.message.edit_text(
@@ -160,6 +161,20 @@ async def search_users_start(call: CallbackQuery):
         return
     pending_input.set(caller, "search_users_query")
     await call.message.answer("🔍 Qidirish uchun foydalanuvchi ID'sini yoki ismini (bir qismini) yuboring:")
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:export_csv")
+async def export_csv(call: CallbackQuery, bot: Bot):
+    caller = call.from_user.id
+    if not (roles.is_superadmin(caller) or roles.is_admin(caller)):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+
+    from aiogram.types import BufferedInputFile
+    csv_text = roles.build_users_csv()
+    doc = BufferedInputFile(csv_text.encode("utf-8-sig"), filename="foydalanuvchilar.csv")
+    await bot.send_document(caller, doc, caption="📥 Foydalanuvchilar ro'yxati")
     await call.answer()
 
 
