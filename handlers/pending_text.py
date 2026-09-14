@@ -1,0 +1,93 @@
+"""
+pending_input holatidagi matn xabarlarni ushlab, tegishli oqimga yo'naltiradi
+(userbot login bosqichlari, kalit-so'z qo'shish, away sozlash).
+
+MUHIM: bu router main.py'da handlers.ai_chat'dan OLDIN ro'yxatdan o'tishi
+kerak — aks holda bu xabarlar oddiy AI-suhbat sifatida ketib qoladi.
+"""
+from aiogram import Router, F
+from aiogram.types import Message
+
+import core.pending_input as pending_input
+import core.userbot_login as userbot_login
+import core.auto_reply as auto_reply
+
+router = Router()
+
+
+def _has_pending_state(message: Message) -> bool:
+    return message.text is not None and pending_input.get(message.from_user.id) is not None
+
+
+@router.message(_has_pending_state)
+async def handle_pending(message: Message):
+    user_id = message.from_user.id
+    state = pending_input.get(user_id)
+    action = state["action"]
+    data = state["data"]
+    text = message.text.strip()
+
+    # ── Userbot login oqimi ──
+    if action == "userbot_wait_api_id":
+        if not text.isdigit():
+            await message.answer("API ID faqat raqamlardan iborat bo'lishi kerak. Qayta yozing:")
+            return
+        data["api_id"] = int(text)
+        pending_input.set(user_id, "userbot_wait_api_hash", data)
+        await message.answer("Endi <b>API HASH</b>ni yuboring:")
+
+    elif action == "userbot_wait_api_hash":
+        data["api_hash"] = text
+        pending_input.set(user_id, "userbot_wait_phone", data)
+        await message.answer("Telefon raqamingizni xalqaro formatda yuboring (masalan: +998901234567):")
+
+    elif action == "userbot_wait_phone":
+        try:
+            await userbot_login.start_login(user_id, data["api_id"], data["api_hash"], text)
+            await message.answer("📩 Telegram'ga tasdiqlash kodi yuborildi. Kodni shu yerga yozing:")
+        except Exception as e:
+            pending_input.clear(user_id)
+            await message.answer(f"⚠️ Xatolik: {e}\nQaytadan /userbot bilan urinib ko'ring.")
+
+    elif action == "userbot_wait_code":
+        result = await userbot_login.submit_code(user_id, text)
+        if result == "need_password":
+            await message.answer("🔒 Ikki bosqichli parolingizni yuboring:")
+        elif result == "success":
+            session = await userbot_login.finalize_login(message.bot, user_id)
+            await message.answer("✅ Userbot muvaffaqiyatli ulandi! Endi /kalitsoz_qoshish bilan avto-javob sozlashingiz mumkin.")
+        elif result == "invalid_code":
+            await message.answer("❌ Kod noto'g'ri. Qaytadan yozing:")
+        else:
+            await message.answer("⚠️ Sessiya topilmadi, /userbot bilan qaytadan boshlang.")
+
+    elif action == "userbot_wait_password":
+        result = await userbot_login.submit_password(user_id, text)
+        if result == "success":
+            await userbot_login.finalize_login(message.bot, user_id)
+            await message.answer("✅ Userbot muvaffaqiyatli ulandi!")
+        else:
+            await message.answer("❌ Parol noto'g'ri. Qaytadan yozing:")
+
+    # ── Kalit-so'z qo'shish oqimi ──
+    elif action == "keyword_wait_trigger":
+        data["trigger"] = text
+        pending_input.set(user_id, "keyword_wait_response", data)
+        await message.answer(f"\"{text}\" so'ziga qanday javob berilsin?")
+
+    elif action == "keyword_wait_response":
+        await auto_reply.add_keyword(message.bot, user_id, data["trigger"], text)
+        pending_input.clear(user_id)
+        await message.answer(f"✅ Qo'shildi: \"{data['trigger']}\" → \"{text}\"")
+
+    # ── Away-delay sozlash ──
+    elif action == "away_wait_seconds":
+        if not text.isdigit():
+            await message.answer("Faqat raqam kiriting (soniyada):")
+            return
+        await auto_reply.set_away_delay(user_id, message.bot, int(text))
+        pending_input.clear(user_id)
+        await message.answer(f"✅ Away vaqti {text} soniyaga o'rnatildi.")
+
+    else:
+        pending_input.clear(user_id)
