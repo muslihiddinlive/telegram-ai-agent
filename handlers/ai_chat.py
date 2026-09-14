@@ -18,14 +18,24 @@ from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
+import core.roles as roles
 
 router = Router()
 
 
 @router.message(F.text)
 async def handle_message(message: Message):
-    ctx = {"bot": message.bot}
     user_id = message.from_user.id
+
+    if not roles.can_use_bot(user_id):
+        await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")
+        return
+
+    if not roles.can_make_request(user_id):
+        await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
+        return
+
+    ctx = {"bot": message.bot}
     thread_id = message.message_thread_id  # shaxsiy chatdagi topic bo'lsa to'ldiriladi
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
@@ -64,6 +74,7 @@ async def handle_message(message: Message):
         final_text = f"⚠️ Xatolik yuz berdi: {e}"
 
     await indicator.finish(final_text)
+    await roles.register_request(message.bot, user_id)
 
     # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларни yuboramiz
     for tool_name, tool_result in tool_outputs:

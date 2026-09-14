@@ -11,6 +11,7 @@ from aiogram.types import Message
 import core.pending_input as pending_input
 import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
+import core.roles as roles
 from core.userbot_runtime import start_userbot_for_owner
 
 router = Router()
@@ -101,6 +102,30 @@ async def handle_pending(message: Message):
         await auto_reply.set_away_delay(user_id, message.bot, int(text))
         pending_input.clear(user_id)
         await message.answer(f"✅ Away vaqti {text} soniyaga o'rnatildi.")
+
+    # ── Foydalanuvchi limitini o'zgartirish (admin/superadmin) ──
+    elif action == "set_user_limit":
+        if not text.isdigit():
+            await message.answer("Faqat raqam kiriting:")
+            return
+        target_uid = int(data["target_uid"])
+        await roles.set_user_limit(message.bot, target_uid, int(text))
+        pending_input.clear(user_id)
+        await message.answer(f"✅ Foydalanuvchi {target_uid} uchun kunlik limit {text} ga o'rnatildi.")
+
+    # ── Yangi admin qo'shish (faqat superadmin) ──
+    elif action == "add_admin_wait_id":
+        if not text.isdigit():
+            await message.answer("Faqat foydalanuvchi ID (raqam) kiriting:")
+            return
+        new_admin_id = int(text)
+        await roles.add_admin(message.bot, new_admin_id)
+        pending_input.clear(user_id)
+        await message.answer(f"✅ {new_admin_id} endi admin.")
+        try:
+            await message.bot.send_message(new_admin_id, "🛡 Sizga admin huquqi berildi.")
+        except Exception:
+            pass
 
     else:
         pending_input.clear(user_id)

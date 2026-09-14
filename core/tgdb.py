@@ -24,9 +24,12 @@ import config
 LOCAL_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "db.json")
 
 DEFAULT_DB = {
-    "users": {},            # user_id(str) -> {"approved": bool, "role": str, ...}
+    "users": {},            # user_id(str) -> {"role": "pending"/"approved", "daily_limit":..., ...} (core/roles.py)
+    "admins": {},           # user_id(str) -> {"name": str} — faqat superadmin tayinlagan adminlar
     "channels": {},         # chat_id(str) -> {"title": str, "added_by": int}
     "ai_sessions": {},      # user_id(str) -> {"encrypted_session": str}  (crypto_store orqali)
+    "topics": {},           # user_id(str) -> {thread_id(str): {"title":, "history": []}}
+    "auto_reply": {},       # owner_id(str) -> {"keywords": [...], "away_delay":, "last_owner_activity": {}}
     "settings": {},
 }
 

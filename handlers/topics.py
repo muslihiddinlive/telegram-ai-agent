@@ -12,6 +12,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 import core.topic_sessions as topic_sessions
+import core.roles as roles
 
 router = Router()
 
@@ -19,6 +20,8 @@ router = Router()
 @router.message(Command("yangi_mavzu"))
 async def new_topic(message: Message):
     """/yangi_mavzu <nom> — bot nomidan yangi topic yaratadi (Bot API 9.4)."""
+    if not roles.can_use_bot(message.from_user.id):
+        return
     name = message.text.replace("/yangi_mavzu", "", 1).strip() or "Yangi mavzu"
     try:
         thread_id = await topic_sessions.create_topic(message.bot, message.from_user.id, name)
@@ -38,6 +41,8 @@ async def new_topic(message: Message):
 @router.message(Command("mavzular"))
 async def list_topics(message: Message):
     """/mavzular — foydalanuvchining barcha ochiq mavzulari ro'yxati."""
+    if not roles.can_use_bot(message.from_user.id):
+        return
     topics = await topic_sessions.list_topics(message.from_user.id)
     if not topics:
         await message.answer("Hozircha alohida mavzular yo'q. /yangi_mavzu <nom> bilan oching.")

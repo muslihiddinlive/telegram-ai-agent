@@ -21,6 +21,13 @@ Bu skeleton quyidagi shaxsiy repolaringizdagi patternlar asosida yig'ildi:
 | `core/auto_reply.py`          | StokerDownloader      | Kalit-so'z auto-reply + "away" (band) tizimi |
 | `handlers/userbot_commands.py`| (yangi)               | `/userbot`, `/kalitsoz_qoshish`, `/kalitsozlar`, `/away` |
 | `handlers/pending_text.py`    | (yangi)               | pending_input holatidagi matnlarni yo'naltiradi (ai_chat'dan OLDIN ishlaydi) |
+| `core/roles.py`               | StokerDownloader (soddalashtirilgan) | 3-bosqichli ruxsat: superadmin/admin/tasdiqlangan-user + kunlik limit. **Referral/stars-wallet/premium OLIB TASHLANDI** — yopiq (faqat taklif qilingan) tizim uchun keraksiz |
+
+## Ruxsat ierarxiyasi
+- **superadmin** (`.env`dagi `SUPERADMIN_ID`, bitta) — adminlarni va barcha userlarni boshqaradi, istalgan vaqt ruxsatni bekor qila oladi
+- **admin** (superadmin tayinlaydi) — FAQAT tasdiqlangan userlarni boshqaradi; boshqa adminlar yoki superadmin haqida hech narsa ko'rmaydi (panelda "Adminlar" bo'limi umuman chiqmaydi)
+- **tasdiqlangan user** — admin yoki superadmin tasdiqlagan, kunlik so'rov limiti bilan (standart 50/kun, `/panel` orqali o'zgartiriladi)
+- **pending** (yangi /start bosgan) — botdan foydalana olmaydi, so'rovi superadmin+barcha adminlarga tugma bilan yuboriladi
 
 ## Yangilanish: debounced DB yozish (StokerDownloader patterni)
 `core/tgdb.py` endi har `save()` chaqiruvida darhol Telegram'ga yozmaydi —

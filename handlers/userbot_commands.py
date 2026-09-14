@@ -8,12 +8,15 @@ from aiogram.types import Message
 import core.pending_input as pending_input
 import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
+import core.roles as roles
 
 router = Router()
 
 
 @router.message(Command("userbot"))
 async def userbot_start(message: Message):
+    if not roles.can_use_bot(message.from_user.id):
+        return
     pending_input.set(message.from_user.id, "userbot_wait_api_id")
     await message.answer(
         "Userbot ulash uchun https://my.telegram.org dan API ID va API HASH oling.\n\n"
@@ -23,12 +26,16 @@ async def userbot_start(message: Message):
 
 @router.message(Command("kalitsoz_qoshish"))
 async def keyword_add_start(message: Message):
+    if not roles.can_use_bot(message.from_user.id):
+        return
     pending_input.set(message.from_user.id, "keyword_wait_trigger")
     await message.answer("Qaysi so'zga javob berilsin? (masalan: salom)")
 
 
 @router.message(Command("kalitsozlar"))
 async def keyword_list(message: Message):
+    if not roles.can_use_bot(message.from_user.id):
+        return
     kws = auto_reply.get_keywords(message.from_user.id)
     if not kws:
         await message.answer("Hali kalit-so'z qo'shilmagan. /kalitsoz_qoshish bilan qo'shing.")
@@ -39,6 +46,8 @@ async def keyword_list(message: Message):
 
 @router.message(Command("away"))
 async def set_away(message: Message):
+    if not roles.can_use_bot(message.from_user.id):
+        return
     pending_input.set(message.from_user.id, "away_wait_seconds")
     current = auto_reply.get_away_delay(message.from_user.id)
     await message.answer(
