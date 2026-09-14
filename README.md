@@ -1,6 +1,9 @@
 # Telegram AI Agent — Skeleton
 
-Bu skeleton quyidagi shaxsiy repolaringizdagi patternlar asosida yig'ildi:
+Bu skeleton quyidagi shaxsiy repolaringizdagi patternlar asosida yig'ildi
+(barcha 8 ta rejalashtirilgan repo endi ulandi: tgs-expert-bot, userbot-ai,
+ms-file-toolkit, weChat, StokerDownloader, groq-pptx-bot, KanalKotibRobot,
+mafia_host_bot):
 
 | Modul                        | Manba repo          | Nima olindi |
 |------------------------------|----------------------|-------------|
@@ -22,6 +25,11 @@ Bu skeleton quyidagi shaxsiy repolaringizdagi patternlar asosida yig'ildi:
 | `handlers/userbot_commands.py`| (yangi)               | `/userbot`, `/kalitsoz_qoshish`, `/kalitsozlar`, `/away` |
 | `handlers/pending_text.py`    | (yangi)               | pending_input holatidagi matnlarni yo'naltiradi (ai_chat'dan OLDIN ishlaydi) |
 | `core/roles.py`               | StokerDownloader (soddalashtirilgan) | 3-bosqichli ruxsat: superadmin/admin/tasdiqlangan-user + kunlik limit. **Referral/stars-wallet/premium OLIB TASHLANDI** — yopiq (faqat taklif qilingan) tizim uchun keraksiz |
+| `tools/diagrams.py`           | groq-pptx-bot         | To'liq ko'chirilgan — pptx slaydlar: bullet, chart, flowchart, orgchart, venn, timeline, section, stat, quote, comparison |
+| `tools/presentation_builder.py`| groq-pptx-bot (moslashtirilgan) | AI `create_presentation`/`create_diagram` tool'i chaqirganda haqiqiy `.pptx` yaratadi |
+| `tools/slide_renderer.py`     | groq-pptx-bot         | `.pptx` slaydlarini PNG rasmga aylantiradi (LibreOffice + PyMuPDF) — "🖼 Ko'rish" tugmasi |
+| `handlers/slide_preview.py`   | (yangi)               | Slaydlarni albom (media-group) sifatida yuboradi |
+| `handlers/admin_terminal.py`  | weChat                | `exec:` — Live Python terminal, **FAQAT superadmin** (admin ham yo'q) |
 
 ## Ruxsat ierarxiyasi
 - **superadmin** (`.env`dagi `SUPERADMIN_ID`, bitta) — adminlarni va barcha userlarni boshqaradi, istalgan vaqt ruxsatni bekor qila oladi
@@ -42,6 +50,23 @@ avtomatik hujjat sifatida yuboradi (`handlers/ai_chat.py`). `file_path` sifatida
 AI qanday nom bersa ham, xavfsizlik uchun har doim foydalanuvchining o'z papkasi
 ichiga normalizatsiya qilinadi (`tools/file_tools.py`).
 
+## Prezentatsiya/diagramma yaratish (groq-pptx-bot)
+AI "prezentatsiya tayyorla" yoki "diagramma chiz" desa, `create_presentation`/
+`create_diagram` tool'lari chaqiriladi — natija oddiy `ms-file-toolkit`ning
+`create_pptx`'idan farqli o'laroq, 10 xil professional slayd turi (grafik,
+flowchart, org-chart, Venn, timeline va h.k.) bilan yaratiladi. Fayl
+yuborilgandan keyin **"🖼 Slaydlarni ko'rish"** tugmasi chiqadi — bosilsa,
+PowerPoint ochmasdan har bir slaydni rasm sifatida ko'rish mumkin.
+
+**Talab:** slayd-rasm ko'rish uchun serverda **LibreOffice** o'rnatilgan
+bo'lishi kerak (bepul, https://www.libreoffice.org). Bo'lmasa, faqat shu
+funksiya ishlamaydi — fayl yaratish/yuborish baribir ishlayveradi.
+
+## ⚠️ Live Exec terminal (`exec:`) — juda ehtiyot bo'ling
+Faqat **superadmin** (config.SUPERADMIN_ID) xabar sifatida `exec: <kod>`
+yuborsa, kod serverda TO'G'RIDAN-TO'G'RI bajariladi (cheklanmagan RCE).
+Bu — production'da debugging uchun kuchli, lekin xavfli vosita. Agar kerak
+bo'lmasa, `main.py`da `admin_terminal_router`ni ro'yxatdan olib tashlang.
 ## Userbot avtomatik qayta ulanishi
 Bot qayta ishga tushganda (`on_startup`), oldin ulangan barcha userbot
 sessiyalari DB'dan o'qilib, avtomatik qayta ulanadi — foydalanuvchi

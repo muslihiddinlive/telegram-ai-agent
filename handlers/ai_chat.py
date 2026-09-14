@@ -12,13 +12,14 @@ Qo'shimcha funksiyalar:
 import json
 import os
 from aiogram import Router, F
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
 from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.roles as roles
+import core.preview_tokens as preview_tokens
 
 router = Router()
 
@@ -82,10 +83,17 @@ async def handle_message(message: Message):
             continue
         file_path = tool_result.get("file_path") or tool_result.get("output_path")
         if file_path and os.path.isfile(file_path):
+            kb = None
+            if file_path.lower().endswith(".pptx"):
+                token = preview_tokens.store(file_path)
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🖼 Slaydlarni ko'rish", callback_data=f"preview:{token}")]
+                ])
             await message.answer_document(
                 FSInputFile(file_path),
                 caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
                 message_thread_id=thread_id,
+                reply_markup=kb,
             )
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
