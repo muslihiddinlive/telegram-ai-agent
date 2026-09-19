@@ -41,10 +41,16 @@ async def start(message: Message):
         if is_new:
             await _notify_approvers(message)
     else:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔑 AI API integratsiya", callback_data="apikey:menu")],
+        ])
         await message.answer(
             "Salom! Men sizning shaxsiy AI agentingizman.\n"
             "Menga xabar yozing — kerak bo'lsa fayl yarataman, kanalga post qilaman "
-            "yoki eslatma saqlab qo'yaman."
+            "yoki eslatma saqlab qo'yaman.\n\n"
+            "Xohlasangiz, o'zingizning AI API kalitingizni ulab, botni cheksiz "
+            "ishlatishingiz mumkin:",
+            reply_markup=kb,
         )
 
 

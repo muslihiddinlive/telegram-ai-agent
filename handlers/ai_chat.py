@@ -51,7 +51,7 @@ async def handle_message(message: Message):
     tool_outputs: list[tuple[str, dict]] = []
 
     try:
-        result = await ai.chat(messages, tools=TOOLS)
+        result = await ai.chat(messages, tools=TOOLS, user_id=user_id)
         response = result["response"]
         choice = response.choices[0].message
 

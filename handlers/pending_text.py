@@ -12,6 +12,7 @@ import core.pending_input as pending_input
 import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
 import core.roles as roles
+import core.user_api_keys as user_api_keys
 from core.userbot_runtime import start_userbot_for_owner
 from admin.panel import render_search_results
 
@@ -137,6 +138,22 @@ async def handle_pending(message: Message):
             await message.answer(f"\"{text}\" bo'yicha hech narsa topilmadi.")
         else:
             await message.answer(f"🔍 \"{text}\" bo'yicha natijalar:", reply_markup=kb)
+
+    # ── Shaxsiy AI API kalitini ulash (validatsiya bilan) ──
+    elif action == "apikey_wait_value":
+        provider = data["provider"]
+        label = user_api_keys.PROVIDER_LABELS[provider]
+        status_msg = await message.answer(f"⏳ {label} kaliti tekshirilmoqda...")
+        ok, error = await user_api_keys.validate_key(provider, text)
+        if ok:
+            await user_api_keys.save_personal_key(message.bot, user_id, provider, text)
+            pending_input.clear(user_id)
+            await status_msg.edit_text(f"✅ {label} kaliti muvaffaqiyatli ulandi va tasdiqlandi!")
+        else:
+            await status_msg.edit_text(
+                f"❌ Kalit ishlamadi: {error}\n\nQaytadan {label} kalitingizni yuboring, "
+                f"yoki /apikalit bilan bekor qiling."
+            )
 
     else:
         pending_input.clear(user_id)

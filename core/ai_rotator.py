@@ -7,16 +7,16 @@ provayderga (Groq, OpenAI, Anthropic, ...) umumlashtirilgan.
 - 429 (rate limit) yoki quota xatosida avtomatik keyingi kalitga o'tadi,
   xato bergan kalitni vaqtincha "cooldown"ga qo'yadi.
 - Provayder darajasida ham fallback qilish mumkin (masalan Groq tugasa → OpenAI).
-
-# TODO: har bir provayder uchun haqiqiy SDK chaqiruvini `_call_*` funksiyalarda
-# to'ldiring (hozir Groq uchun to'liq, boshqalar uchun skelet).
+- Agar foydalanuvchi O'ZINING API kalitini ulagan bo'lsa (core/user_api_keys.py),
+  UMUMIY (botning) kalitlari o'rniga FAQAT o'sha shaxsiy kalit ishlatiladi —
+  sizning (bot egasining) limitingizga tegmaydi.
 """
 from __future__ import annotations
 import asyncio
 import itertools
+import json
 import logging
 import time
-from typing import Any
 
 import config
 
@@ -59,6 +59,43 @@ class KeyRotator:
         logger.warning("%s kalit rate-limit oldi, %ss sovutiladi", self.provider, self._cooldown_seconds)
 
 
+# ── Anthropic javobini Groq/OpenAI (choices[0].message) formatiga moslashtirish ──
+
+class _FakeFn:
+    def __init__(self, name, arguments):
+        self.name = name
+        self.arguments = arguments
+
+
+class _FakeToolCall:
+    def __init__(self, name, arguments):
+        self.function = _FakeFn(name, arguments)
+
+
+class _FakeMessage:
+    def __init__(self, content, tool_calls):
+        self.content = content
+        self.tool_calls = tool_calls
+
+
+class _FakeChoice:
+    def __init__(self, message):
+        self.message = message
+
+
+class _FakeResponse:
+    def __init__(self, choices):
+        self.choices = choices
+
+
+def _to_anthropic_tools(tools: list[dict] | None) -> list[dict]:
+    result = []
+    for t in tools or []:
+        fn = t["function"]
+        result.append({"name": fn["name"], "description": fn.get("description", ""), "input_schema": fn["parameters"]})
+    return result
+
+
 class MultiProviderAI:
     """
     Bir nechta provayderni birlashtirib, tanlangan (yoki fallback) provayder
@@ -79,8 +116,25 @@ class MultiProviderAI:
         messages: list[dict],
         tools: list[dict] | None = None,
         preferred_provider: str | None = None,
+        user_id: int | None = None,
     ) -> dict:
-        """Qaytaradi: {"provider": str, "response": <SDK javobi>}"""
+        """Qaytaradi: {"provider": str, "response": <SDK javobi>, "personal": bool}"""
+
+        # 1) Foydalanuvchining shaxsiy kaliti bo'lsa — FAQAT shuni ishlatamiz
+        if user_id is not None:
+            import core.user_api_keys as user_api_keys
+            found = user_api_keys.get_any_personal_key(user_id)
+            if found:
+                personal_provider, personal_key = found
+                try:
+                    response = await self._call(personal_provider, personal_key, messages, tools)
+                    return {"provider": personal_provider, "response": response, "personal": True}
+                except Exception as e:
+                    raise AllKeysExhaustedError(
+                        f"Sizning {personal_provider} kalitingiz ishlamadi: {e}"
+                    )
+
+        # 2) Aks holda — umumiy (bot egasining) kalitlari, rotator + fallback bilan
         order = [preferred_provider] if preferred_provider else []
         order += [p for p in self.priority if p != preferred_provider]
 
@@ -92,7 +146,7 @@ class MultiProviderAI:
             try:
                 key = await rotator.next_key()
                 response = await self._call(provider, key, messages, tools)
-                return {"provider": provider, "response": response}
+                return {"provider": provider, "response": response, "personal": False}
             except Exception as e:  # rate-limit/quota/boshqa xato
                 last_err = e
                 if 'rotator' in locals() and 'key' in locals():
@@ -111,12 +165,35 @@ class MultiProviderAI:
                 tools=tools,
                 max_tokens=1500,
             )
+
         elif provider == "openai":
-            # TODO: from openai import AsyncOpenAI ... (Groq'nikiga o'xshash chat.completions.create)
-            raise NotImplementedError("openai provider hali ulanmagan")
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=key)
+            return await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=tools,
+                max_tokens=1500,
+            )
+
         elif provider == "anthropic":
-            # TODO: anthropic.AsyncAnthropic().messages.create(...) — ms-file-toolkit/example.py'ga qarang
-            raise NotImplementedError("anthropic provider hali ulanmagan")
+            from anthropic import AsyncAnthropic
+            client = AsyncAnthropic(api_key=key)
+            resp = await client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=1500,
+                messages=messages,
+                tools=_to_anthropic_tools(tools) or None,
+            )
+            text_parts, tool_calls = [], []
+            for block in resp.content:
+                if block.type == "text":
+                    text_parts.append(block.text)
+                elif block.type == "tool_use":
+                    tool_calls.append(_FakeToolCall(block.name, json.dumps(block.input)))
+            message = _FakeMessage("\n".join(text_parts), tool_calls or None)
+            return _FakeResponse([_FakeChoice(message)])
+
         raise ValueError(f"Noma'lum provayder: {provider}")
 
 

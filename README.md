@@ -30,6 +30,17 @@ mafia_host_bot):
 | `tools/slide_renderer.py`     | groq-pptx-bot         | `.pptx` slaydlarini PNG rasmga aylantiradi (LibreOffice + PyMuPDF) — "🖼 Ko'rish" tugmasi |
 | `handlers/slide_preview.py`   | (yangi)               | Slaydlarni albom (media-group) sifatida yuboradi |
 | `handlers/admin_terminal.py`  | weChat                | `exec:` — Live Python terminal, **FAQAT superadmin** (admin ham yo'q) |
+| `core/user_api_keys.py`       | (yangi)               | Foydalanuvchi o'zining AI API kalitini ulashi (validatsiya bilan) |
+| `handlers/api_integration.py` | (yangi)               | `/apikalit`, "🔑 AI API integratsiya" tugmasi |
+
+## Shaxsiy AI API kalit ulash
+Foydalanuvchi `/apikalit` yoki `/start`dagi "🔑 AI API integratsiya" tugmasi
+orqali Groq/OpenAI/Anthropic'dan birini tanlaydi, kalitini yuboradi — kalit
+**darhol haqiqiy so'rov bilan tekshiriladi** (`core/user_api_keys.validate_key`),
+ishlasa shifrlab saqlanadi. Shundan keyin `core/ai_rotator.py` shu foydalanuvchi
+uchun UMUMIY (bot egasining) kalitlari o'rniga FAQAT uning shaxsiy kalitini
+ishlatadi — boshqa userlarga va sizning limitingizga tegmaydi (test qilindi:
+shaxsiy kalit ulangan/ulanmagan userlar bir-biriga ta'sir qilmaydi).
 
 ## Ruxsat ierarxiyasi
 - **superadmin** (`.env`dagi `SUPERADMIN_ID`, bitta) — adminlarni va barcha userlarni boshqaradi, istalgan vaqt ruxsatni bekor qila oladi
