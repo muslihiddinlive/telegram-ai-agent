@@ -25,9 +25,15 @@ async def new_topic(message: Message):
     name = message.text.replace("/yangi_mavzu", "", 1).strip() or "Yangi mavzu"
     try:
         thread_id = await topic_sessions.create_topic(message.bot, message.from_user.id, name)
-        await message.answer(
-            f"✅ \"{name}\" nomli yangi mavzu ochildi. Shu yerga yozgan xabarlaringiz "
-            f"boshqa mavzulardan mustaqil suhbat sifatida saqlanadi.",
+        # message.answer() EMAS — u joriy xabar konteksti thread_id'sini avtomatik
+        # biriktiradi va bizniki bilan to'qnashadi. Bu yerda esa ATAYLAB BOSHQA
+        # (yangi yaratilgan) thread_id kerak, shuning uchun bot.send_message() to'g'ridan-to'g'ri.
+        await message.bot.send_message(
+            chat_id=message.chat.id,
+            text=(
+                f"✅ \"{name}\" nomli yangi mavzu ochildi. Shu yerga yozgan xabarlaringiz "
+                f"boshqa mavzulardan mustaqil suhbat sifatida saqlanadi."
+            ),
             message_thread_id=thread_id,
         )
     except Exception as e:

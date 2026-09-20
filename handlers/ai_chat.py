@@ -100,10 +100,12 @@ async def handle_message(message: Message):
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🖼 Slaydlarni ko'rish", callback_data=f"preview:{token}")]
                 ])
+            # message_thread_id BERILMAYDI — aiogram buni message.is_topic_message
+            # orqali o'zi avtomatik to'g'ri biriktiradi; qo'lda ham berilsa,
+            # "got multiple values for keyword argument" xatosi chiqadi.
             await message.answer_document(
                 FSInputFile(file_path),
                 caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
-                message_thread_id=thread_id,
                 reply_markup=kb,
             )
         except Exception as e:
