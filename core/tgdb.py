@@ -61,14 +61,17 @@ async def load(bot: Bot) -> dict:
         with open(LOCAL_FILE, "r", encoding="utf-8") as f:
             _cache = json.load(f)
     else:
-        pinned_id = await _find_pinned_db_message(bot)
-        if pinned_id:
-            file = await bot.get_file((await bot.forward_message(
-                chat_id=config.SUPERADMIN_ID, from_chat_id=config.DB_GROUP_ID, message_id=pinned_id
-            )).document.file_id)
+        # MUHIM: forward_message ORQALI EMAS — bu superadminga har safar
+        # "db.json" kelib turishiga sabab bo'lardi (avvalgi xato). get_chat()
+        # o'zi pinned_message'ni TO'LIQ Message obyekti sifatida qaytaradi,
+        # .document maydoni (file_id bilan) allaqachon ichida bor.
+        chat = await bot.get_chat(config.DB_GROUP_ID)
+        pinned = chat.pinned_message
+        if pinned and pinned.document:
+            file = await bot.get_file(pinned.document.file_id)
             downloaded = await bot.download_file(file.file_path)
             _cache = json.loads(downloaded.read())
-            _pinned_msg_id = pinned_id
+            _pinned_msg_id = pinned.message_id
             with open(LOCAL_FILE, "w", encoding="utf-8") as f:
                 json.dump(_cache, f, ensure_ascii=False, indent=2)
         else:
