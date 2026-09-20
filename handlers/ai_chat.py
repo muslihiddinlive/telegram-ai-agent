@@ -11,6 +11,7 @@ Qo'shimcha funksiyalar:
 """
 import json
 import os
+import logging
 from aiogram import Router, F
 from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -23,6 +24,7 @@ import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
 
 router = Router()
+logger = logging.getLogger("ai_chat")
 
 
 @router.message(F.text)
@@ -78,12 +80,20 @@ async def handle_message(message: Message):
     await indicator.finish(final_text)
     await roles.register_request(message.bot, user_id)
 
-    # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларни yuboramiz
+    # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларni yuboramiz
     for tool_name, tool_result in tool_outputs:
         if not isinstance(tool_result, dict):
             continue
         file_path = tool_result.get("file_path") or tool_result.get("output_path")
-        if file_path and os.path.isfile(file_path):
+        if not file_path:
+            continue
+
+        if not os.path.isfile(file_path):
+            logger.warning("Tool '%s' file_path qaytardi, lekin fayl diskda topilmadi: %s", tool_name, file_path)
+            await message.answer(f"⚠️ Fayl yaratildi deb ko'rsatildi, lekin topilmadi: {os.path.basename(file_path)}")
+            continue
+
+        try:
             kb = None
             if file_path.lower().endswith(".pptx"):
                 token = preview_tokens.store(file_path)
@@ -96,13 +106,20 @@ async def handle_message(message: Message):
                 message_thread_id=thread_id,
                 reply_markup=kb,
             )
-            # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
-            # .pptx uchun "🖼 Ko'rish" tugmasi bosilishi mumkinligi uchun 15 daqiqa
-            # kutamiz, qolganlarini (docx/xlsx/pdf) DARHOL o'chiramiz.
-            if kb is not None:
-                file_cleanup.schedule_file_delete(file_path, delay_seconds=900)
-            else:
-                file_cleanup.delete_file_now(file_path)
+        except Exception as e:
+            # ENG MUHIMI: avval bu yerda xatolik jimgina yutilib ketardi (foydalanuvchi
+            # "Tayyor" degan xabardan keyin hech narsa ko'rmasdi). Endi xato ko'rinadi.
+            logger.exception("Faylni yuborishda xatolik: %s", file_path)
+            await message.answer(f"⚠️ Faylni yuborishda xatolik: {e}")
+            continue
+
+        # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
+        # .pptx uchun "🖼 Ko'rish" tugmasi bosilishi mumkinligi uchun 15 daqiqa
+        # kutamiz, qolganlarini (docx/xlsx/pdf) DARHOL o'chiramiz.
+        if kb is not None:
+            file_cleanup.schedule_file_delete(file_path, delay_seconds=900)
+        else:
+            file_cleanup.delete_file_now(file_path)
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", message.text)
