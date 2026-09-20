@@ -16,5 +16,6 @@ def _split_keys(env_name: str) -> list[str]:
 GROQ_API_KEYS = _split_keys("GROQ_API_KEYS")
 OPENAI_API_KEYS = _split_keys("OPENAI_API_KEYS")
 ANTHROPIC_API_KEYS = _split_keys("ANTHROPIC_API_KEYS")
+DEEPSEEK_API_KEYS = _split_keys("DEEPSEEK_API_KEYS")
 
 ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]  # Fernet.generate_key() bilan yarating

@@ -13,6 +13,7 @@ import core.userbot_login as userbot_login
 import core.auto_reply as auto_reply
 import core.roles as roles
 import core.user_api_keys as user_api_keys
+import core.shared_keys as shared_keys
 from core.userbot_runtime import start_userbot_for_owner
 from admin.panel import render_search_results
 
@@ -154,6 +155,32 @@ async def handle_pending(message: Message):
                 f"❌ Kalit ishlamadi: {error}\n\nQaytadan {label} kalitingizni yuboring, "
                 f"yoki /apikalit bilan bekor qiling."
             )
+
+    # ── Superadmin: umumiy (bot egasiga tegishli) AI kalit qo'shish ──
+    elif action == "add_shared_key":
+        provider = data["provider"]
+        label = shared_keys.PROVIDER_LABELS[provider]
+        status_msg = await message.answer(f"⏳ {label} kaliti tekshirilmoqda...")
+        ok, error = await shared_keys.validate_key(provider, text)
+        if ok:
+            added, err2 = await shared_keys.add_key(message.bot, provider, text)
+            pending_input.clear(user_id)
+            if added:
+                count = shared_keys.key_count(provider)
+                await status_msg.edit_text(f"✅ {label} kaliti qo'shildi! ({count}/{shared_keys.MAX_KEYS_PER_PROVIDER})")
+            else:
+                await status_msg.edit_text(f"⚠️ {err2}")
+        else:
+            await status_msg.edit_text(
+                f"❌ Kalit ishlamadi: {error}\n\nQaytadan {label} kalitini yuboring, "
+                f"yoki /panel bilan bekor qiling."
+            )
+
+    # ── Superadmin: xKiro faol modelini o'zgartirish ──
+    elif action == "set_xkiro_model":
+        await shared_keys.set_xkiro_model(message.bot, text)
+        pending_input.clear(user_id)
+        await message.answer(f"✅ Model o'zgartirildi: <code>{text}</code>")
 
     else:
         pending_input.clear(user_id)

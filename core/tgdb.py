@@ -30,7 +30,8 @@ DEFAULT_DB = {
     "ai_sessions": {},      # user_id(str) -> {"encrypted_session": str}  (crypto_store orqali)
     "topics": {},           # user_id(str) -> {thread_id(str): {"title":, "history": []}}
     "auto_reply": {},       # owner_id(str) -> {"keywords": [...], "away_delay":, "last_owner_activity": {}}
-    "settings": {},
+    "shared_keys": {},      # provider(str) -> [shifrlangan_kalit, ...] (core/shared_keys.py, superadmin panel)
+    "settings": {},         # masalan settings["xkiro_model"]
 }
 
 _cache: dict | None = None

@@ -32,6 +32,23 @@ mafia_host_bot):
 | `handlers/admin_terminal.py`  | weChat                | `exec:` — Live Python terminal, **FAQAT superadmin** (admin ham yo'q) |
 | `core/user_api_keys.py`       | (yangi)               | Foydalanuvchi o'zining AI API kalitini ulashi (validatsiya bilan) |
 | `handlers/api_integration.py` | (yangi)               | `/apikalit`, "🔑 AI API integratsiya" tugmasi |
+| `core/shared_keys.py`         | (yangi)               | **UMUMIY** (bot egasiga tegishli) kalitlar — endi `.env` EMAS, FAQAT superadmin paneldan, provayder boshiga 1-10 ta, Round-Robin |
+
+## Superadmin panel orqali umumiy AI kalitlarni boshqarish
+`.env`dagi `GROQ_API_KEYS` va h.k. endi faqat **fallback** (ixtiyoriy, eski
+uslub). Asosiy usul: `/panel → 🔑 AI kalitlar → <provayder>` — har bir
+provayderga (xKiro, Groq, OpenAI, Anthropic, DeepSeek) alohida **1 dan 10
+tagacha** kalit qo'shiladi, kalit qo'shishdan oldin haqiqiy so'rov bilan
+tekshiriladi. Bot qayta ishga tushirilishi SHART EMAS — kalit qo'shilishi
+bilan `core/ai_rotator.py` DB'dan jonli o'qib, darhol ishlata boshlaydi
+(test qilindi: rotatsiya, 10ta limit, kalit o'chirish — barchasi ishlaydi).
+
+## xKiro provayderi (joriy deploy nishoni)
+`xkiro-test-v7.html`dan aniqlandi: xKiro to'liq OpenAI-mos API
+(`https://api.xkiro.com/v1`, standart `/chat/completions`). Superadmin
+`/panel → AI kalitlar → xKiro → 🧠 Modelni o'zgartirish` orqali qaysi
+modelni ishlatishni tanlaydi (standart: `qwen/qwen3.8-max:free`). `xkiro`
+provayder ustuvorlik ro'yxatida BIRINCHI o'rinda turadi.
 
 ## Shaxsiy AI API kalit ulash
 Foydalanuvchi `/apikalit` yoki `/start`dagi "🔑 AI API integratsiya" tugmasi

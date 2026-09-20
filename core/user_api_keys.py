@@ -9,8 +9,8 @@ o'z hisobidan ishlata oladi, sizning balansingizga tegmaydi.
 from aiogram import Bot
 from core.accounts_store import save_user_secret, get_user_secret, remove_user_secret
 
-PROVIDERS = ["groq", "openai", "anthropic"]
-PROVIDER_LABELS = {"groq": "Groq", "openai": "OpenAI", "anthropic": "Anthropic (Claude)"}
+PROVIDERS = ["groq", "openai", "anthropic", "deepseek"]
+PROVIDER_LABELS = {"groq": "Groq", "openai": "OpenAI", "anthropic": "Anthropic (Claude)", "deepseek": "DeepSeek"}
 
 
 def _key_name(provider: str) -> str:
@@ -66,6 +66,14 @@ async def validate_key(provider: str, api_key: str) -> tuple[bool, str]:
             client = AsyncAnthropic(api_key=api_key)
             await client.messages.create(
                 model="claude-3-5-haiku-20241022",
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=5,
+            )
+        elif provider == "deepseek":
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            await client.chat.completions.create(
+                model="deepseek-chat",
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )

@@ -28,31 +28,48 @@ class AllKeysExhaustedError(RuntimeError):
 
 
 class KeyRotator:
-    """Bitta provayder uchun round-robin key rotator (tgs-expert-bot'dagi bilan bir xil)."""
+    """
+    Bitta provayder uchun round-robin key rotator — tgs-expert-bot/groq_rotator.py
+    patternidan, LEKIN kalitlar endi ishga tushishda emas, HAR SAFAR DB'dan
+    (core/shared_keys.py) JONLI o'qiladi — shuning uchun superadmin panel
+    orqali kalit qo'shsa/o'chirsa, bot qayta ishga tushmasdan darhol ta'sir qiladi.
 
-    def __init__(self, provider: str, api_keys: list[str], cooldown_seconds: int = 60):
+    .env'dagi *_API_KEYS ham fallback sifatida qo'shiladi (ixtiyoriy, legacy).
+    """
+
+    def __init__(self, provider: str, env_fallback_keys: list[str] | None = None, cooldown_seconds: int = 60):
         self.provider = provider
-        self._keys = api_keys
-        self._cycle = itertools.cycle(range(len(api_keys))) if api_keys else None
+        self._env_fallback = env_fallback_keys or []
+        self._cursor = 0
         self._cooldown_until: dict[str, float] = {}
         self._cooldown_seconds = cooldown_seconds
         self._lock = asyncio.Lock()
 
+    def _current_keys(self) -> list[str]:
+        import core.shared_keys as shared_keys
+        try:
+            db_keys = shared_keys.list_keys(self.provider)
+        except RuntimeError:
+            db_keys = []  # DB hali yuklanmagan (masalan validatsiya paytida)
+        return db_keys + [k for k in self._env_fallback if k not in db_keys]
+
     @property
     def available(self) -> bool:
-        return bool(self._keys)
+        return bool(self._current_keys())
 
     async def next_key(self) -> str:
-        if not self._keys:
+        keys = self._current_keys()
+        if not keys:
             raise AllKeysExhaustedError(f"{self.provider}: kalit yo'q")
         async with self._lock:
             now = time.time()
-            for _ in range(len(self._keys)):
-                idx = next(self._cycle)
-                key = self._keys[idx]
+            for _ in range(len(keys)):
+                idx = self._cursor % len(keys)
+                self._cursor += 1
+                key = keys[idx]
                 if self._cooldown_until.get(key, 0) <= now:
                     return key
-            return min(self._keys, key=lambda k: self._cooldown_until.get(k, 0))
+            return min(keys, key=lambda k: self._cooldown_until.get(k, 0))
 
     def mark_rate_limited(self, key: str):
         self._cooldown_until[key] = time.time() + self._cooldown_seconds
@@ -104,12 +121,14 @@ class MultiProviderAI:
 
     def __init__(self):
         self.rotators: dict[str, KeyRotator] = {
+            "xkiro": KeyRotator("xkiro"),  # faqat superadmin panelidan — .env fallback yo'q
             "groq": KeyRotator("groq", config.GROQ_API_KEYS),
             "openai": KeyRotator("openai", config.OPENAI_API_KEYS),
             "anthropic": KeyRotator("anthropic", config.ANTHROPIC_API_KEYS),
+            "deepseek": KeyRotator("deepseek", config.DEEPSEEK_API_KEYS),
         }
-        # Fallback tartibi: birinchi mavjud bo'lgani ishlatiladi
-        self.priority = ["groq", "openai", "anthropic"]
+        # xKiro birinchi ustuvorlikda — bu joriy deploy uchun asosiy model manbai
+        self.priority = ["xkiro", "groq", "openai", "anthropic", "deepseek"]
 
     async def chat(
         self,
@@ -171,6 +190,30 @@ class MultiProviderAI:
             client = AsyncOpenAI(api_key=key)
             return await client.chat.completions.create(
                 model="gpt-4o-mini",
+                messages=messages,
+                tools=tools,
+                max_tokens=1500,
+            )
+
+        elif provider == "deepseek":
+            # DeepSeek API OpenAI SDK bilan mos — faqat base_url o'zgaradi
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=key, base_url="https://api.deepseek.com")
+            return await client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                tools=tools,
+                max_tokens=1500,
+            )
+
+        elif provider == "xkiro":
+            # xKiro ham OpenAI-mos (xkiro-test-v7.html'dan tasdiqlandi:
+            # /chat/completions, standart choices[0].message formati)
+            import core.shared_keys as shared_keys
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=key, base_url="https://api.xkiro.com/v1")
+            return await client.chat.completions.create(
+                model=shared_keys.get_xkiro_model(),
                 messages=messages,
                 tools=tools,
                 max_tokens=1500,

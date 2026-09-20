@@ -12,6 +12,7 @@ from aiogram.filters import Command
 import core.tgdb as tgdb
 import core.roles as roles
 import core.pending_input as pending_input
+import core.shared_keys as shared_keys
 
 router = Router()
 
@@ -20,6 +21,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text="👤 Foydalanuvchilar", callback_data="panel:users:0")]]
     if roles.is_superadmin(user_id):
         rows.append([InlineKeyboardButton(text="🛡 Adminlar", callback_data="panel:admins:0")])
+        rows.append([InlineKeyboardButton(text="🔑 AI kalitlar", callback_data="panel:keys")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -175,6 +177,89 @@ async def export_csv(call: CallbackQuery, bot: Bot):
     csv_text = roles.build_users_csv()
     doc = BufferedInputFile(csv_text.encode("utf-8-sig"), filename="foydalanuvchilar.csv")
     await bot.send_document(caller, doc, caption="📥 Foydalanuvchilar ro'yxati")
+    await call.answer()
+
+
+# ── AI kalitlar (FAQAT superadmin) — .env O'RNIGA panel orqali boshqariladi ──
+
+@router.callback_query(F.data == "panel:keys")
+async def show_key_providers(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    rows = []
+    for provider in shared_keys.PROVIDERS:
+        label = shared_keys.PROVIDER_LABELS[provider]
+        count = shared_keys.key_count(provider)
+        rows.append([InlineKeyboardButton(text=f"{label} ({count} ta kalit)", callback_data=f"panel:keys_p:{provider}")])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    await call.message.edit_text(
+        "🔑 AI API kalitlari — provayderni tanlang:\n"
+        "(Har biriga 1 dan 10 tagacha kalit qo'shish mumkin, Round-Robin ishlaydi)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data.startswith("panel:keys_p:"))
+async def show_provider_keys(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    provider = call.data.split(":")[-1]
+    label = shared_keys.PROVIDER_LABELS[provider]
+    keys = shared_keys.list_keys(provider)
+
+    rows = [
+        [InlineKeyboardButton(text=f"❌ {shared_keys.masked(k)}", callback_data=f"panel:keys_rm:{provider}:{i}")]
+        for i, k in enumerate(keys)
+    ]
+    if len(keys) < shared_keys.MAX_KEYS_PER_PROVIDER:
+        rows.append([InlineKeyboardButton(text="➕ Kalit qo'shish", callback_data=f"panel:keys_add:{provider}")])
+    if provider == "xkiro":
+        rows.append([InlineKeyboardButton(text="🧠 Modelni o'zgartirish", callback_data="panel:keys_model")])
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:keys")])
+
+    extra = f"\nJoriy model: <code>{shared_keys.get_xkiro_model()}</code>" if provider == "xkiro" else ""
+    text = f"🔑 {label} — {len(keys)}/{shared_keys.MAX_KEYS_PER_PROVIDER} ta kalit{extra}"
+    if not keys:
+        text += "\n\nHali kalit qo'shilmagan."
+
+    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("panel:keys_add:"))
+async def add_key_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    provider = call.data.split(":")[-1]
+    pending_input.set(call.from_user.id, "add_shared_key", {"provider": provider})
+    label = shared_keys.PROVIDER_LABELS[provider]
+    await call.message.answer(f"{label} uchun yangi API kalitni yuboring:")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:keys_rm:"))
+async def remove_key_cb(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    _, _, provider, index = call.data.split(":")
+    await shared_keys.remove_key(bot, provider, int(index))
+    await call.answer("O'chirildi 🗑")
+    await show_provider_keys(call)  # ro'yxatni yangilab qayta chizamiz
+
+
+@router.callback_query(F.data == "panel:keys_model")
+async def set_model_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    pending_input.set(call.from_user.id, "set_xkiro_model")
+    await call.message.answer(
+        f"Joriy model: <code>{shared_keys.get_xkiro_model()}</code>\n\n"
+        "Yangi model ID'sini yuboring (masalan: <code>qwen/qwen3.8-max:free</code>):"
+    )
     await call.answer()
 
 
