@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: telegram-ai-agent
+    env: docker
+    plan: starter
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SUPERADMIN_ID
+        sync: false
+      - key: DB_GROUP_ID
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: PORT
+        value: 8080
