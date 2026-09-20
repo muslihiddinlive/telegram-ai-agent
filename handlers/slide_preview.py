@@ -4,11 +4,13 @@ orqali .pptx faylining har bir slaydini PNG rasmga aylantirib, media-group
 (albom) sifatida yuboradi. LibreOffice talab qilinadi (agar o'rnatilmagan
 bo'lsa, foydalanuvchiga tushunarli xabar chiqadi).
 """
+import os
 import asyncio
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InputMediaPhoto, FSInputFile
 
 import core.preview_tokens as preview_tokens
+import core.file_cleanup as file_cleanup
 import tools.slide_renderer as slide_renderer
 
 router = Router()
@@ -29,8 +31,18 @@ async def show_slide_preview(call: CallbackQuery):
         await call.message.answer(f"⚠️ {e}")
         return
 
-    # Telegram media-group'da bittada 10 tagacha rasm bo'ladi — kerak bo'lsa bo'laklarga bo'lamiz
-    for i in range(0, len(image_paths), 10):
-        chunk = image_paths[i:i + 10]
-        media = [InputMediaPhoto(media=FSInputFile(p)) for p in chunk]
-        await call.message.answer_media_group(media)
+    try:
+        # Telegram media-group'da bittada 10 tagacha rasm bo'ladi — kerak bo'lsa bo'laklarga bo'lamiz
+        for i in range(0, len(image_paths), 10):
+            chunk = image_paths[i:i + 10]
+            media = [InputMediaPhoto(media=FSInputFile(p)) for p in chunk]
+            await call.message.answer_media_group(media)
+    finally:
+        # Rasmlar Telegram'ga yuborilgan bo'lsa — vaqtinchalik PDF+PNG papkasi
+        # (LibreOffice chiqargan) DARHOL o'chiriladi, xotira/disk band bo'lib qolmasin.
+        # DB'dagi hech narsaga (suhbat tarixi va h.k.) bu ta'sir qilmaydi.
+        if image_paths:
+            temp_dir = os.path.dirname(image_paths[0])
+            file_cleanup.delete_dir_now(temp_dir)
+        # Ko'rish tugmasi bosilib bo'ldi — manba .pptx ham endi kerak emas
+        file_cleanup.delete_file_now(file_path)

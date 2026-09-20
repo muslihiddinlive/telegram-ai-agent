@@ -90,6 +90,22 @@ PowerPoint ochmasdan har bir slaydni rasm sifatida ko'rish mumkin.
 bo'lishi kerak (bepul, https://www.libreoffice.org). Bo'lmasa, faqat shu
 funksiya ishlamaydi — fayl yaratish/yuborish baribir ishlayveradi.
 
+## Xotira/disk tozalash (out-of-memory'dan himoya)
+Render'ning kichik tarif rejalarida (512MB RAM) LibreOffice konvertatsiyasi
+va generatsiya qilingan fayllar joy band qilib, xotira tugab qolishi mumkin.
+`core/file_cleanup.py` buni oldini oladi (test qilindi):
+- Yaratilgan fayl (docx/xlsx/pdf) foydalanuvchiga yuborilgach — **darhol** o'chiriladi
+- `.pptx` — "🖼 Ko'rish" tugmasi uchun 15 daqiqa kutiladi, keyin avtomatik o'chiriladi
+  (yoki tugma bosilishi bilan darhol)
+- Slaydlarni rasm qilib ko'rsatishda LibreOffice yaratgan vaqtinchalik PDF+PNG
+  papkasi rasmlar yuborilgach **darhol** o'chiriladi
+- Bot qayta ishga tushganda (masalan qulab tushgandan keyin), 1 soatdan katta
+  qoldiq fayllar avtomatik tozalanadi (`cleanup_stale_files`, `on_startup`da)
+
+**Muhim:** bu faqat DISKDAGI VAQTINCHALIK fayllarga tegishli — DB'dagi hech
+narsa (suhbat tarixi, foydalanuvchi holati, AI kalitlari va h.k.) bundan
+ta'sirlanmaydi, ular Telegram-kanalda saqlanishda davom etadi.
+
 ## ⚠️ Live Exec terminal (`exec:`) — juda ehtiyot bo'ling
 Faqat **superadmin** (config.SUPERADMIN_ID) xabar sifatida `exec: <kod>`
 yuborsa, kod serverda TO'G'RIDAN-TO'G'RI bajariladi (cheklanmagan RCE).

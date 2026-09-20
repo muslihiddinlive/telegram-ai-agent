@@ -20,6 +20,7 @@ from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.roles as roles
 import core.preview_tokens as preview_tokens
+import core.file_cleanup as file_cleanup
 
 router = Router()
 
@@ -95,6 +96,13 @@ async def handle_message(message: Message):
                 message_thread_id=thread_id,
                 reply_markup=kb,
             )
+            # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
+            # .pptx uchun "🖼 Ko'rish" tugmasi bosilishi mumkinligi uchun 15 daqiqa
+            # kutamiz, qolganlarini (docx/xlsx/pdf) DARHOL o'chiramiz.
+            if kb is not None:
+                file_cleanup.schedule_file_delete(file_path, delay_seconds=900)
+            else:
+                file_cleanup.delete_file_now(file_path)
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", message.text)
