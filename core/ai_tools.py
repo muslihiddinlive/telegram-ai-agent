@@ -12,6 +12,15 @@ from typing import Any, Callable, Awaitable
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 
+# tools/diagrams.py rang-temasi MODUL DARAJASIDA global (set_theme() orqali
+# almashtiriladi) — shuning uchun bir vaqtning o'zida ikki xil temadagi
+# prezentatsiya qurilishining oldini olish uchun bu lock bilan ketma-ket
+# (serial) qilib qo'yilgan. Personal/kichik jamoa boti uchun bu yetarli;
+# juda yuqori concurrency kerak bo'lsa, diagrams.py'ni har chaqiruvda
+# explicit theme-parametr qabul qiladigan qilib qayta yozish kerak bo'ladi.
+import asyncio
+_presentation_build_lock = asyncio.Lock()
+
 _PRESENTATION_SLIDE_TYPES_DOC = (
     "Har bir slide obyekti 'type' maydoniga ega bo'lishi shart. Turlari va kerakli maydonlar:\n"
     "- content: {title, bullets: [str,...]}\n"
@@ -54,6 +63,15 @@ TOOLS: list[dict] = [
                 "flowchart, org-chart, Venn, timeline va h.k. bilan (groq-pptx-bot "
                 "patternidan, ms-file-toolkit'ning oddiy create_pptx'idan ancha boyroq). "
                 "Foydalanuvchi \"prezentatsiya tayyorla\", \"slaydlar yasab ber\" desa shuni ishlating.\n\n"
+                "STANDART SIFAT — MUHIM: agar foydalanuvchi prezentatsiya qanday bo'lishi "
+                "kerakligini (uslub, uzunlik, oddiy/qisqa) ANIQ tasvirlamagan bo'lsa, "
+                "STANDART HOLATDA \"PRO\"/PREMIUM darajada tuzing: kamida 6-10 ta mazmunli "
+                "slayd, har birida yetarlicha ma'lumot va detal (2-3 so'zli bullet emas, "
+                "to'liq gaplar), imkon qadar turli slayd turlaridan (chart/stat/comparison/"
+                "quote/timeline) foydalaning — faqat 'content' turidagi oddiy bullet-slaydlar "
+                "bilan cheklanmang, buni qiziqarli va taassurot qoldiradigan qilib tuzing. "
+                "Foydalanuvchi aniq \"qisqa\", \"oddiy\" yoki \"2-3 slayd\" desagina, shunga mos "
+                "kichikroq/soddaroq variant tuzing.\n\n"
                 + _PRESENTATION_SLIDE_TYPES_DOC
             ),
             "parameters": {
@@ -65,6 +83,13 @@ TOOLS: list[dict] = [
                         "type": "array",
                         "description": "Slaydlar ro'yxati — har biri yuqoridagi turlardan biri",
                         "items": {"type": "object"},
+                    },
+                    "dark_theme": {
+                        "type": "boolean",
+                        "description": (
+                            "Prezentatsiya rangi. STANDART: true (to'q/premium ko'rinish) — "
+                            "foydalanuvchi aniq \"och/light/oq fon\" demasa, TRUE qo'yiladi."
+                        ),
                     },
                 },
                 "required": ["title", "slides"],
@@ -98,6 +123,10 @@ TOOLS: list[dict] = [
                     "set_b": {"type": "string"},
                     "overlap": {"type": "string"},
                     "events": {"type": "array", "items": {"type": "object"}},
+                    "dark_theme": {
+                        "type": "boolean",
+                        "description": "STANDART: true (to'q/premium ko'rinish), agar user 'light/och' demasa.",
+                    },
                 },
                 "required": ["diagram_type", "title"],
             },
@@ -118,18 +147,18 @@ async def _remember_note(user_id: int, args: dict, ctx: dict) -> dict:
 
 
 async def _create_presentation(user_id: int, args: dict, ctx: dict) -> dict:
-    import asyncio
     try:
-        path = await asyncio.to_thread(ppt_builder.build_presentation, user_id, args)
+        async with _presentation_build_lock:
+            path = await asyncio.to_thread(ppt_builder.build_presentation, user_id, args)
         return {"file_path": path, "status": "created", "slide_count": len(args.get("slides", [])) + 1}
     except Exception as e:
         return {"error": str(e)}
 
 
 async def _create_diagram(user_id: int, args: dict, ctx: dict) -> dict:
-    import asyncio
     try:
-        path = await asyncio.to_thread(ppt_builder.build_diagram, user_id, args)
+        async with _presentation_build_lock:
+            path = await asyncio.to_thread(ppt_builder.build_diagram, user_id, args)
         return {"file_path": path, "status": "created"}
     except Exception as e:
         return {"error": str(e)}

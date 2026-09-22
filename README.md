@@ -78,6 +78,30 @@ avtomatik hujjat sifatida yuboradi (`handlers/ai_chat.py`). `file_path` sifatida
 AI qanday nom bersa ham, xavfsizlik uchun har doim foydalanuvchining o'z papkasi
 ichiga normalizatsiya qilinadi (`tools/file_tools.py`).
 
+## Prezentatsiya sifati: standart "PRO"/premium + dark theme + brendlash
+`create_presentation`/`create_diagram` endi ikkita muhim standart xatti-harakatga ega:
+
+1. **Standart holatda "pro"** — agar foydalanuvchi prezentatsiya qanday
+   bo'lishi kerakligini (uslub/uzunlik) aniq tasvirlamasa, AI'ga tool
+   tavsifida (`core/ai_tools.py`) shunday ko'rsatma berilgan: kamida 6-10
+   mazmunli slayd, turli slayd turlari (chart/stat/comparison/quote/timeline),
+   to'liq gaplar — faqat qisqa bullet-content bilan cheklanmasin. Foydalanuvchi
+   aniq "qisqa"/"3 slayd" desagina, shunga mos kichikroq variant tuziladi.
+2. **Dark theme standart** (`tools/diagrams.py` — `_LIGHT_THEME`/`_DARK_THEME`,
+   `set_theme()`) — `dark_theme` parametri berilmasa, TRUE. Ikkala tema ham
+   vizual tekshirildi (rasm sifatida render qilib ko'rildi): kontrast,
+   grafik ranglari, karta fonlari — barchasi to'g'ri ishladi.
+   Foydalanuvchi "och/light rang" desa, AI `dark_theme: false` beradi.
+3. **Fayl NOMIGA brendlash** (slaydga emas) — `core/bot_identity.py` orqali
+   bot username'i (`main.py`da `bot.get_me()` bilan olinadi) fayl nomiga
+   `_by_<username>` qo'shiladi, masalan `Hisobot_by_ParadoksAiBot_123.pptx`.
+
+**Concurrency eslatma:** rang-tema `tools/diagrams.py`da modul darajasida
+global (`set_theme()` orqali almashtiriladi), shuning uchun bir vaqtning
+o'zida ikki xil temadagi qurilish aralashib ketmasligi uchun
+`core/ai_tools.py`da `asyncio.Lock()` bilan barcha prezentatsiya/diagramma
+qurilishlari ketma-ket (serial) qilib qo'yilgan.
+
 ## Prezentatsiya/diagramma yaratish (groq-pptx-bot)
 AI "prezentatsiya tayyorla" yoki "diagramma chiz" desa, `create_presentation`/
 `create_diagram` tool'lari chaqiriladi — natija oddiy `ms-file-toolkit`ning

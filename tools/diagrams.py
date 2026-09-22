@@ -18,16 +18,79 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 
 # ---------------------------------------------------------------------------
-# RANG PALITRASI (professional, ko'k-yashil ohangda)
+# RANG PALITRASI — LIGHT va DARK ikkala tema uchun ("premium showcase" —
+# standart endi DARK, chunki foydalanuvchi aynan shuni so'ragan).
+#
+# MUHIM (concurrency): bu ranglar quyida set_theme() orqali MODUL DARAJASIDA
+# almashtiriladi. Bir vaqtning o'zida ikki xil temada prezentatsiya
+# qurilishining oldini olish uchun core/ai_tools.py'da build chaqiruvlari
+# asyncio.Lock() bilan ketma-ket (serial) qilib qo'yilgan — aks holda ikki
+# foydalanuvchi bir vaqtda so'rasa, ranglar aralashib ketishi mumkin edi.
 # ---------------------------------------------------------------------------
-COLOR_BG = RGBColor(0xFF, 0xFF, 0xFF)
-COLOR_TITLE = RGBColor(0x1A, 0x1A, 0x2E)          # deyarli qora-ko'k
-COLOR_TEXT = RGBColor(0x3A, 0x3A, 0x4A)
-COLOR_ACCENT = RGBColor(0x16, 0x6D, 0x7C)          # teal
-COLOR_ACCENT_LIGHT = RGBColor(0xE3, 0xF2, 0xF3)    # och teal (fon uchun)
-COLOR_ACCENT2 = RGBColor(0xE8, 0x7B, 0x3E)         # to'q sariq (kontrast uchun)
-COLOR_WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-CHART_PALETTE = [0x16_6D_7C, 0xE8_7B_3E, 0x4C_A6_A8, 0xF2_C1_4E, 0x8E_44_AD, 0x2E_86_AB]
+_LIGHT_THEME = dict(
+    BG=RGBColor(0xFF, 0xFF, 0xFF),
+    TITLE=RGBColor(0x1A, 0x1A, 0x2E),
+    TEXT=RGBColor(0x3A, 0x3A, 0x4A),
+    ACCENT=RGBColor(0x16, 0x6D, 0x7C),
+    ACCENT_LIGHT=RGBColor(0xE3, 0xF2, 0xF3),
+    ACCENT2=RGBColor(0xE8, 0x7B, 0x3E),
+    WHITE=RGBColor(0xFF, 0xFF, 0xFF),
+    DARK_SHAPE=RGBColor(0x1A, 0x1A, 0x2E),      # divider/orgchart-root fon (doim "to'q" bo'lishi kerak)
+    CARD_BG=RGBColor(0xF7, 0xF8, 0xF9),
+    MUTED_LINE=RGBColor(0xCC, 0xCC, 0xCC),
+    MUTED_TEXT=RGBColor(0xAA, 0xAA, 0xAA),
+    CHART_PALETTE=[0x16_6D_7C, 0xE8_7B_3E, 0x4C_A6_A8, 0xF2_C1_4E, 0x8E_44_AD, 0x2E_86_AB],
+)
+
+_DARK_THEME = dict(
+    BG=RGBColor(0x12, 0x12, 0x1E),               # chuqur to'q ko'k-qora
+    TITLE=RGBColor(0xF5, 0xF5, 0xF9),             # deyarli oq sarlavha matni
+    TEXT=RGBColor(0xC9, 0xC9, 0xD6),              # och kulrang matn
+    ACCENT=RGBColor(0x3D, 0xD6, 0xC8),            # yorqin teal/mint (to'q fonda porlaydi)
+    ACCENT_LIGHT=RGBColor(0x20, 0x38, 0x3E),      # muted to'q teal panel (kontrast uchun)
+    ACCENT2=RGBColor(0xFF, 0xA0, 0x5C),           # issiq apelsin, yorqinroq
+    WHITE=RGBColor(0xFF, 0xFF, 0xFF),
+    DARK_SHAPE=RGBColor(0x22, 0x2A, 0x40),        # bazadan biroz ochroq "to'q" panel (ajralib tursin)
+    CARD_BG=RGBColor(0x1D, 0x1D, 0x2E),
+    MUTED_LINE=RGBColor(0x40, 0x40, 0x52),
+    MUTED_TEXT=RGBColor(0x8E, 0x8E, 0xA0),
+    CHART_PALETTE=[0x3D_D6_C8, 0xFF_A0_5C, 0x6E_C9_CC, 0xF5_D4_6B, 0xB0_7A_E0, 0x5B_A8_D6],
+)
+
+COLOR_BG = _LIGHT_THEME["BG"]
+COLOR_TITLE = _LIGHT_THEME["TITLE"]
+COLOR_TEXT = _LIGHT_THEME["TEXT"]
+COLOR_ACCENT = _LIGHT_THEME["ACCENT"]
+COLOR_ACCENT_LIGHT = _LIGHT_THEME["ACCENT_LIGHT"]
+COLOR_ACCENT2 = _LIGHT_THEME["ACCENT2"]
+COLOR_WHITE = _LIGHT_THEME["WHITE"]
+COLOR_DARK_SHAPE = _LIGHT_THEME["DARK_SHAPE"]
+COLOR_CARD_BG = _LIGHT_THEME["CARD_BG"]
+COLOR_MUTED_LINE = _LIGHT_THEME["MUTED_LINE"]
+COLOR_MUTED_TEXT = _LIGHT_THEME["MUTED_TEXT"]
+CHART_PALETTE = _LIGHT_THEME["CHART_PALETTE"]
+
+
+def set_theme(dark: bool):
+    """Prezentatsiya qurishdan OLDIN chaqiriladi (presentation_builder.py)."""
+    global COLOR_BG, COLOR_TITLE, COLOR_TEXT, COLOR_ACCENT, COLOR_ACCENT_LIGHT
+    global COLOR_ACCENT2, COLOR_WHITE, COLOR_DARK_SHAPE, COLOR_CARD_BG
+    global COLOR_MUTED_LINE, COLOR_MUTED_TEXT, CHART_PALETTE
+
+    t = _DARK_THEME if dark else _LIGHT_THEME
+    COLOR_BG = t["BG"]
+    COLOR_TITLE = t["TITLE"]
+    COLOR_TEXT = t["TEXT"]
+    COLOR_ACCENT = t["ACCENT"]
+    COLOR_ACCENT_LIGHT = t["ACCENT_LIGHT"]
+    COLOR_ACCENT2 = t["ACCENT2"]
+    COLOR_WHITE = t["WHITE"]
+    COLOR_DARK_SHAPE = t["DARK_SHAPE"]
+    COLOR_CARD_BG = t["CARD_BG"]
+    COLOR_MUTED_LINE = t["MUTED_LINE"]
+    COLOR_MUTED_TEXT = t["MUTED_TEXT"]
+    CHART_PALETTE = t["CHART_PALETTE"]
+
 
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
@@ -77,7 +140,7 @@ def add_footer(slide, page_num: int, total: int, brand: str = ""):
     p = tf.paragraphs[0]
     p.text = brand
     p.font.size = Pt(10)
-    p.font.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
+    p.font.color.rgb = COLOR_MUTED_TEXT
     p.font.name = "Calibri"
 
     num_box = slide.shapes.add_textbox(Inches(12.4), Inches(7.08), Inches(0.7), Inches(0.35))
@@ -86,7 +149,7 @@ def add_footer(slide, page_num: int, total: int, brand: str = ""):
     np.alignment = PP_ALIGN.RIGHT
     np.text = f"{page_num}/{total}"
     np.font.size = Pt(10)
-    np.font.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
+    np.font.color.rgb = COLOR_MUTED_TEXT
     np.font.name = "Calibri"
 
 
@@ -220,9 +283,9 @@ def add_chart_slide(prs: Presentation, title: str, chart_type: str,
             series.format.line.width = Pt(3)
         chart.category_axis.tick_labels.font.size = Pt(13)
         chart.value_axis.tick_labels.font.size = Pt(13)
-        chart.category_axis.format.line.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+        chart.category_axis.format.line.color.rgb = COLOR_MUTED_LINE
         chart.value_axis.has_major_gridlines = True
-        chart.value_axis.major_gridlines.format.line.color.rgb = RGBColor(0xEE, 0xEE, 0xEE)
+        chart.value_axis.major_gridlines.format.line.color.rgb = COLOR_MUTED_LINE
 
     return slide
 
@@ -310,7 +373,7 @@ def add_orgchart_slide(prs: Presentation, title: str, root: str, children: list[
     root_y = Inches(1.9)
     root_shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, root_x, root_y, root_w, root_h)
     root_shape.fill.solid()
-    root_shape.fill.fore_color.rgb = COLOR_TITLE
+    root_shape.fill.fore_color.rgb = COLOR_DARK_SHAPE
     root_shape.line.fill.background()
     root_shape.shadow.inherit = False
     tf = root_shape.text_frame
@@ -340,7 +403,7 @@ def add_orgchart_slide(prs: Presentation, title: str, root: str, children: list[
         connector = slide.shapes.add_connector(
             MSO_CONNECTOR.ELBOW, root_center_x, root_bottom_y, child_center_x, child_y
         )
-        connector.line.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
+        connector.line.color.rgb = COLOR_MUTED_LINE
         connector.line.width = Pt(1.75)
 
         child_shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, child_y, child_w, child_h)
@@ -468,7 +531,7 @@ def add_timeline_slide(prs: Presentation, title: str, events: list[dict]):
         label_y = Emu(int(line_y) - int(Inches(0.85))) if above else Emu(int(line_y) + int(Inches(0.85)))
 
         connector = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Emu(cx), Emu(int(line_y)), Emu(cx), Emu(int(line_y) + (-int(Inches(0.45)) if above else int(Inches(0.45)))))
-        connector.line.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+        connector.line.color.rgb = COLOR_MUTED_LINE
         connector.line.width = Pt(1.5)
 
         date_box = slide.shapes.add_textbox(Emu(cx - int(Inches(1.0))), date_y, Inches(2.0), Inches(0.5))
@@ -489,7 +552,7 @@ def add_section_slide(prs: Presentation, title: str, subtitle: str = ""):
 
     panel = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Emu(0), Emu(0), SLIDE_W, SLIDE_H)
     panel.fill.solid()
-    panel.fill.fore_color.rgb = COLOR_TITLE
+    panel.fill.fore_color.rgb = COLOR_DARK_SHAPE
     panel.line.fill.background()
     panel.shadow.inherit = False
 
@@ -516,7 +579,7 @@ def add_section_slide(prs: Presentation, title: str, subtitle: str = ""):
         sp = stf.paragraphs[0]
         sp.text = subtitle
         sp.font.size = Pt(18)
-        sp.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+        sp.font.color.rgb = COLOR_MUTED_TEXT
         sp.font.name = "Calibri"
 
     return slide
@@ -619,7 +682,7 @@ def add_comparison_slide(prs: Presentation, title: str,
     ):
         card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, col_w, col_h)
         card.fill.solid()
-        card.fill.fore_color.rgb = RGBColor(0xF7, 0xF8, 0xF9)
+        card.fill.fore_color.rgb = COLOR_CARD_BG
         card.line.color.rgb = color
         card.line.width = Pt(1.5)
         card.shadow.inherit = False

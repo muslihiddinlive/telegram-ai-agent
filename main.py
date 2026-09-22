@@ -23,6 +23,7 @@ from handlers.slide_preview import router as slide_preview_router
 from core.userbot_runtime import start_userbot_for_owner
 from core.accounts_store import get_user_secret
 import core.file_cleanup as file_cleanup
+import core.bot_identity as bot_identity
 from tools.file_tools import USER_FILES_ROOT
 
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +45,9 @@ dp.my_chat_member.register(on_bot_added_to_chat)
 
 
 async def on_startup(bot: Bot):
+    me = await bot.get_me()
+    bot_identity.set_username(me.username)  # fayl nomlarida "by @username" uchun
+
     file_cleanup.cleanup_stale_files(USER_FILES_ROOT)  # oldingi sessiyadan qolgan qoldiqlar
     db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa)
     if config.WEBHOOK_URL:

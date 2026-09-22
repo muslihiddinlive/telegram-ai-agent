@@ -13,6 +13,7 @@ import time
 
 import tools.diagrams as dg
 from tools.file_tools import USER_FILES_ROOT
+import core.bot_identity as bot_identity
 
 
 def _safe_filename(text: str) -> str:
@@ -27,12 +28,23 @@ def _user_dir(user_id: int) -> str:
     return path
 
 
+def _brand_suffix() -> str:
+    """Fayl NOMIGA qo'shiladigan brend (slaydga emas) — masalan '_by_ParadoksAiBot'."""
+    username = bot_identity.get_username()
+    return f"_by_{username}" if username else ""
+
+
 def build_presentation(user_id: int, data: dict) -> str:
     """
-    :param data: {"title", "subtitle", "slides": [{"type": ..., ...}, ...]}
+    :param data: {"title", "subtitle", "slides": [...], "dark_theme": bool}
                  (AI create_presentation tool'ini chaqirganda shu formatda beradi)
     :return: yaratilgan .pptx faylining to'liq yo'li
+
+    dark_theme standart holatda TRUE — foydalanuvchi aniq "oddiy/light" demasa,
+    "pro"/premium ko'rinish (to'q fon, ko'proq detal) standart hisoblanadi.
     """
+    dg.set_theme(dark=data.get("dark_theme", True))
+
     prs = dg.new_presentation()
     brand = data.get("title", "")
 
@@ -95,14 +107,15 @@ def build_presentation(user_id: int, data: dict) -> str:
     for i, slide in enumerate(created_slides, start=2):
         dg.add_footer(slide, i, total, brand)
 
-    filename = f"{_safe_filename(data.get('title', 'prezentatsiya'))}_{int(time.time())}.pptx"
+    filename = f"{_safe_filename(data.get('title', 'prezentatsiya'))}{_brand_suffix()}_{int(time.time())}.pptx"
     filepath = os.path.join(_user_dir(user_id), filename)
     prs.save(filepath)
     return filepath
 
 
 def build_diagram(user_id: int, data: dict) -> str:
-    """:param data: {"diagram_type": "chart"/"flowchart"/"orgchart"/"venn"/"timeline", ...}"""
+    """:param data: {"diagram_type": ..., "dark_theme": bool, ...}"""
+    dg.set_theme(dark=data.get("dark_theme", True))
     prs = dg.new_presentation()
     diagram_type = data.get("diagram_type")
     title = data.get("title", "Diagramma")
@@ -123,7 +136,7 @@ def build_diagram(user_id: int, data: dict) -> str:
     else:
         raise ValueError(f"Noma'lum diagramma turi: {diagram_type}")
 
-    filename = f"diagram_{_safe_filename(title)}_{int(time.time())}.pptx"
+    filename = f"diagram_{_safe_filename(title)}{_brand_suffix()}_{int(time.time())}.pptx"
     filepath = os.path.join(_user_dir(user_id), filename)
     prs.save(filepath)
     return filepath
