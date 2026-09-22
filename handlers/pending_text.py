@@ -127,6 +127,8 @@ async def handle_pending(message: Message):
         pending_input.clear(user_id)
         await message.answer(f"✅ {new_admin_id} endi admin.")
         try:
+            import core.bot_commands as bot_commands
+            await bot_commands.register_admin_commands(message.bot, new_admin_id)
             await message.bot.send_message(new_admin_id, "🛡 Sizga admin huquqi berildi.")
         except Exception:
             pass

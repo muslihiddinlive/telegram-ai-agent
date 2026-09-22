@@ -19,7 +19,7 @@ from aiogram.types import Message
 
 
 class ThinkingIndicator:
-    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, label: str = "🤔 O'ylab olay"):
+    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, label: str = "🌀 O'ylayapti"):
         self.bot = bot
         self.chat_id = chat_id
         self.thread_id = thread_id

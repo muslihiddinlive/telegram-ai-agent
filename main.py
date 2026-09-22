@@ -7,9 +7,12 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommandScopeDefault
+import core.bot_commands as bot_commands
 
 import config
 import core.tgdb as tgdb
+import core.roles as roles
 from core.channels import on_bot_added_to_chat
 from admin.panel import router as panel_router
 from handlers.start import router as start_router
@@ -49,7 +52,9 @@ async def on_startup(bot: Bot):
     bot_identity.set_username(me.username)  # fayl nomlarida "by @username" uchun
 
     file_cleanup.cleanup_stale_files(USER_FILES_ROOT)  # oldingi sessiyadan qolgan qoldiqlar
-    db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa)
+    db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa) — _register_commands'dan OLDIN kerak (roles.list_admins() DB'ni talab qiladi)
+    await _register_commands(bot)
+
     if config.WEBHOOK_URL:
         await bot.set_webhook(f"{config.WEBHOOK_URL}/webhook")
 
@@ -66,6 +71,25 @@ async def on_startup(bot: Bot):
                 logging.info("Userbot qayta ulandi: %s", user_id_str)
             except Exception as e:
                 logging.warning("Userbot ulanmadi (%s): %s", user_id_str, e)
+
+
+async def _register_commands(bot: Bot):
+    """
+    Telegram'ning "/" menyu tugmasida komandalar KO'RINISHI uchun shart —
+    aks holda ular kodda ishlab tursa ham, foydalanuvchi ularni qo'lda
+    yozib bilishi shart bo'lib qolardi (masalan /yangi_mavzu — Topics
+    funksiyasi "yo'q" deb ko'rinishining asosiy sababi shu edi).
+    """
+    await bot.set_my_commands(bot_commands.GENERAL_COMMANDS, scope=BotCommandScopeDefault())
+
+    # Superadmin va barcha adminlarga qo'shimcha /panel komandasi — faqat
+    # ULARNING shaxsiy chatida ko'rinadi (oddiy userlarga chiqmaydi)
+    admin_ids = [config.SUPERADMIN_ID] + [int(uid) for uid in roles.list_admins()]
+    for admin_id in set(admin_ids):
+        try:
+            await bot_commands.register_admin_commands(bot, admin_id)
+        except Exception as e:
+            logging.warning("Admin (%s) uchun maxsus komandalar o'rnatilmadi: %s", admin_id, e)
 
 
 async def on_shutdown(bot: Bot):
