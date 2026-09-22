@@ -34,6 +34,19 @@ mafia_host_bot):
 | `handlers/api_integration.py` | (yangi)               | `/apikalit`, "🔑 AI API integratsiya" tugmasi |
 | `core/shared_keys.py`         | (yangi)               | **UMUMIY** (bot egasiga tegishli) kalitlar — endi `.env` EMAS, FAQAT superadmin paneldan, provayder boshiga 1-10 ta, Round-Robin |
 
+## AI shaxsiyati (system prompt) — FAQAT superadmin
+`/panel → 🎭 AI shaxsiyati` — AI o'zini kim deb tanishtirishini, qaysi
+community/kanalga tegishli ekanini belgilaysiz (masalan: "Sen Paradoks AI
+san, Paradoks Hub community'ning AI agentisan. Kanal: @ParadoksHub").
+Bu matn HAR BIR foydalanuvchining HAR BIR xabariga avtomatik qo'shiladi
+(`core/ai_persona.py`, `handlers/ai_chat.py`). "↩️ Standartga qaytarish"
+tugmasi bilan bekor qilish mumkin.
+
+**Texnik eslatma:** Anthropic (Claude) API `system` rolini messages
+ro'yxati ICHIDA emas, alohida parametr sifatida talab qiladi — Groq/OpenAI/
+DeepSeek/xKiro esa standart tarzda messages ichida qabul qiladi.
+`core/ai_rotator.py` buni avtomatik ajratib beradi (test qilindi).
+
 ## Superadmin panel orqali umumiy AI kalitlarni boshqarish
 `.env`dagi `GROQ_API_KEYS` va h.k. endi faqat **fallback** (ixtiyoriy, eski
 uslub). Asosiy usul: `/panel → 🔑 AI kalitlar → <provayder>` — har bir

@@ -13,6 +13,7 @@ import core.tgdb as tgdb
 import core.roles as roles
 import core.pending_input as pending_input
 import core.shared_keys as shared_keys
+import core.ai_persona as ai_persona
 
 router = Router()
 
@@ -22,6 +23,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
     if roles.is_superadmin(user_id):
         rows.append([InlineKeyboardButton(text="🛡 Adminlar", callback_data="panel:admins:0")])
         rows.append([InlineKeyboardButton(text="🔑 AI kalitlar", callback_data="panel:keys")])
+        rows.append([InlineKeyboardButton(text="🎭 AI shaxsiyati", callback_data="panel:persona")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -261,6 +263,53 @@ async def set_model_start(call: CallbackQuery):
         "Yangi model ID'sini yuboring (masalan: <code>qwen/qwen3.8-max:free</code>):"
     )
     await call.answer()
+
+
+# ── AI shaxsiyati / system prompt (FAQAT superadmin) ──
+
+@router.callback_query(F.data == "panel:persona")
+async def show_persona(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    current = ai_persona.get_system_prompt()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ O'zgartirish", callback_data="panel:persona_edit")],
+        [InlineKeyboardButton(text="↩️ Standartga qaytarish", callback_data="panel:persona_reset")],
+        [InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")],
+    ])
+    await call.message.edit_text(
+        f"🎭 <b>AI shaxsiyati</b> (system prompt)\n\n"
+        f"Bu matn AI'ning HAR BIR suhbatiga (barcha foydalanuvchilar uchun) "
+        f"avtomatik qo'shiladi — AI o'zini kim deb tanishtirishini shu belgilaydi.\n\n"
+        f"<b>Joriy:</b>\n<i>{current}</i>",
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data == "panel:persona_edit")
+async def persona_edit_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    pending_input.set(call.from_user.id, "set_system_prompt")
+    await call.message.answer(
+        "Yangi system prompt'ni yuboring. Masalan:\n\n"
+        "<i>Sen Paradoks AI san, Paradoks Hub community'ning AI agentisan. "
+        "Seni yaratgan community'ning Telegram kanali: @ParadoksHub. "
+        "Foydalanuvchilarga shu ruhda, do'stona va foydali javob ber.</i>"
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:persona_reset")
+async def persona_reset_cb(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    await ai_persona.reset_system_prompt(bot)
+    await call.answer("Standart holatga qaytarildi ✅")
+    await show_persona(call)
 
 
 # ── Adminlar (FAQAT superadmin ko'radi) ──

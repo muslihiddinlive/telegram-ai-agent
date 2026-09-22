@@ -14,6 +14,7 @@ import core.auto_reply as auto_reply
 import core.roles as roles
 import core.user_api_keys as user_api_keys
 import core.shared_keys as shared_keys
+import core.ai_persona as ai_persona
 from core.userbot_runtime import start_userbot_for_owner
 from admin.panel import render_search_results
 
@@ -181,6 +182,12 @@ async def handle_pending(message: Message):
         await shared_keys.set_xkiro_model(message.bot, text)
         pending_input.clear(user_id)
         await message.answer(f"✅ Model o'zgartirildi: <code>{text}</code>")
+
+    # ── Superadmin: AI shaxsiyati (system prompt) ──
+    elif action == "set_system_prompt":
+        await ai_persona.set_system_prompt(message.bot, text)
+        pending_input.clear(user_id)
+        await message.answer("✅ AI shaxsiyati yangilandi! Endi shu bo'yicha javob beradi.")
 
     else:
         pending_input.clear(user_id)

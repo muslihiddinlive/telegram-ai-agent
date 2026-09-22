@@ -22,6 +22,7 @@ import core.topic_sessions as topic_sessions
 import core.roles as roles
 import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
+import core.ai_persona as ai_persona
 
 router = Router()
 logger = logging.getLogger("ai_chat")
@@ -44,7 +45,8 @@ async def handle_message(message: Message):
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
     history = topic_sessions.get_history(user_id, thread_id)
-    messages = history + [{"role": "user", "content": message.text}]
+    system_prompt = ai_persona.get_system_prompt()
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": message.text}]
 
     indicator = await ThinkingIndicator(
         bot=message.bot, chat_id=message.chat.id, thread_id=thread_id

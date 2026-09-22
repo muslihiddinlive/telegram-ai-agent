@@ -220,12 +220,19 @@ class MultiProviderAI:
             )
 
         elif provider == "anthropic":
+            # Anthropic'ning o'ziga xosligi: "system" messages ro'yxati ICHIDA
+            # emas, alohida `system=` parametr sifatida berilishi kerak —
+            # aks holda API xato qaytaradi. Shuning uchun ajratib olamiz.
+            system_texts = [m["content"] for m in messages if m.get("role") == "system"]
+            non_system_messages = [m for m in messages if m.get("role") != "system"]
+
             from anthropic import AsyncAnthropic
             client = AsyncAnthropic(api_key=key)
             resp = await client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=1500,
-                messages=messages,
+                system="\n\n".join(system_texts) if system_texts else None,
+                messages=non_system_messages,
                 tools=_to_anthropic_tools(tools) or None,
             )
             text_parts, tool_calls = [], []
