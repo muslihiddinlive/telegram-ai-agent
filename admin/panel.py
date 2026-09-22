@@ -86,11 +86,13 @@ async def user_detail(call: CallbackQuery):
     db = tgdb.get()
     rec = db["users"].get(uid, {})
     role = "✅ Tasdiqlangan" if rec.get("role") == "approved" else "⏳ Kutilmoqda"
+    notes_count = len(rec.get("notes", []))
     text = (
         f"👤 {rec.get('name') or uid} (ID: <code>{uid}</code>)\n"
         f"Holat: {role}\n"
         f"Kunlik limit: {rec.get('daily_limit')}\n"
-        f"Bugun ishlatilgan: {rec.get('requests_today', 0)}"
+        f"Bugun ishlatilgan: {rec.get('requests_today', 0)}\n"
+        f"🧠 Eslab qolingan narsalar: {notes_count} ta"
     )
 
     kb_rows = []
@@ -101,9 +103,47 @@ async def user_detail(call: CallbackQuery):
             kb_rows.append([InlineKeyboardButton(text="🚫 Ruxsatni bekor qilish", callback_data=f"panel:revoke:{uid}")])
     else:
         kb_rows.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"panel:approve:{uid}")])
+    # Xotira/maxfiylik nazorati — superadmin va admin ikkalasi ham ko'ra oladi
+    # (chunki ular allaqachon foydalanuvchini tasdiqlash huquqiga ega)
+    if notes_count:
+        kb_rows.append([InlineKeyboardButton(text="🧠 Xotirani ko'rish", callback_data=f"panel:notes:{uid}")])
     kb_rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:users:0")])
 
     await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+
+
+@router.callback_query(F.data.startswith("panel:notes:"))
+async def show_user_notes(call: CallbackQuery):
+    caller = call.from_user.id
+    if not (roles.is_superadmin(caller) or roles.is_admin(caller)):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    uid = call.data.split(":")[-1]
+    import core.ai_tools as ai_tools
+    notes = ai_tools.get_user_notes(int(uid))
+
+    text = f"🧠 Foydalanuvchi {uid} haqida AI eslab qolgan narsalar:\n\n"
+    text += "\n".join(f"{i+1}. {n}" for i, n in enumerate(notes)) if notes else "(bo'sh)"
+
+    kb_rows = []
+    if notes:
+        kb_rows.append([InlineKeyboardButton(text="🗑 Hammasini tozalash", callback_data=f"panel:notes_clear:{uid}")])
+    kb_rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data=f"panel:user_detail:{uid}")])
+
+    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+
+
+@router.callback_query(F.data.startswith("panel:notes_clear:"))
+async def clear_user_notes_cb(call: CallbackQuery, bot: Bot):
+    caller = call.from_user.id
+    if not (roles.is_superadmin(caller) or roles.is_admin(caller)):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    uid = call.data.split(":")[-1]
+    import core.ai_tools as ai_tools
+    await ai_tools.clear_user_notes(bot, int(uid))
+    await call.answer("Tozalandi 🗑")
+    await user_detail(call)  # tafsilot oynasiga qaytamiz (yangilangan notes_count bilan)
 
 
 @router.callback_query(F.data.startswith("panel:approve:"))

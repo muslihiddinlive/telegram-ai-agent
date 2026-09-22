@@ -34,6 +34,29 @@ mafia_host_bot):
 | `handlers/api_integration.py` | (yangi)               | `/apikalit`, "🔑 AI API integratsiya" tugmasi |
 | `core/shared_keys.py`         | (yangi)               | **UMUMIY** (bot egasiga tegishli) kalitlar — endi `.env` EMAS, FAQAT superadmin paneldan, provayder boshiga 1-10 ta, Round-Robin |
 
+## Foydalanuvchi haqida DOIMIY xotira (uzoq muddatli, "meni ... deb chaqir")
+**Muhim farq:**
+- **Topic suhbat tarixi** (`core/topic_sessions.py`) — faqat oxirgi 20 xabar,
+  shundan keyin unutiladi (qisqa muddatli kontekst)
+- **`remember_note` tool** (`core/ai_tools.py`) — foydalanuvchi "eslab qol",
+  "meni ... deb chaqir" desa, AI buni DB'ga DOIMIY yozadi (foydalanuvchi
+  boshiga eng ko'pi 30 ta, eskilari avtomatik siljib chiqadi) va **HAR BIR
+  keyingi suhbatga** (hatto boshqa kun/topic'da ham) avtomatik qaytariladi
+  (`handlers/ai_chat.py` — system prompt'ga qo'shiladi). Test qilindi:
+  saqlash, qaytarish, foydalanuvchilar orasida aralashmaslik — barchasi to'g'ri.
+
+**Superadmin/admin nazorati (xavfsizlik va maxfiylik uchun):**
+`/panel → Foydalanuvchilar → <user> → 🧠 Xotirani ko'rish` — har bir
+foydalanuvchi haqida AI nimalarni "eslab qolgani"ni to'liq ko'rish, va
+`🗑 Hammasini tozalash` bilan istalgan vaqt o'chirish mumkin (masalan
+foydalanuvchi so'rasa, yoki noto'g'ri/nomaqbul narsa saqlangan bo'lsa).
+
+**Shaffoflik bo'yicha eslatma:** bot yopiq (faqat tasdiqlangan userlar)
+tizim bo'lgani uchun, foydalanuvchilarga botdan foydalanishdan oldin
+suhbatlari va saqlangan eslatmalari admin tomonidan ko'rilishi/nazorat
+qilinishi mumkinligini bildirish (masalan `/start` xabarida bir qatorda)
+tavsiya etiladi — bu kod darajasida majburlanmagan, faqat tavsiya.
+
 ## AI shaxsiyati (system prompt) — FAQAT superadmin
 `/panel → 🎭 AI shaxsiyati` — AI o'zini kim deb tanishtirishini, qaysi
 community/kanalga tegishli ekanini belgilaysiz (masalan: "Sen Paradoks AI

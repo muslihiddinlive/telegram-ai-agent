@@ -41,13 +41,19 @@ TOOLS: list[dict] = [
         "function": {
             "name": "remember_note",
             "description": (
-                "Foydalanuvchi biror narsani botga 'eslab qol' desa yoki muhim "
-                "ma'lumot bersa, shu tool orqali DB'ga yoziladi."
+                "Foydalanuvchi haqida DOIMIY eslab qolinishi kerak bo'lgan narsani "
+                "saqlaydi — masalan ismi/laqabi ('meni Falonchi aka deb chaqir'), "
+                "tili/uslubi bo'yicha afzalligi, takrorlanadigan konteksti. Bu "
+                "eslatma KEYINGI BARCHA suhbatlarga (hatto boshqa topic/kunlarda "
+                "ham) avtomatik qo'shiladi — vaqtinchalik suhbat tarixidan farqli "
+                "o'laroq (u faqat ~20 xabardan keyin unutiladi), bu DOIMIY saqlanadi. "
+                "Foydalanuvchi 'eslab qol', 'meni ... deb chaqir', 'har doim ... qil' "
+                "kabi so'zlar bilan iltimos qilganda shu tool'ni chaqiring."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "note": {"type": "string", "description": "Eslab qolinadigan matn"},
+                    "note": {"type": "string", "description": "Eslab qolinadigan matn, foydalanuvchining o'z so'zlari bilan"},
                 },
                 "required": ["note"],
             },
@@ -137,13 +143,34 @@ TOOLS: list[dict] = [
 ]
 
 
+MAX_NOTES_PER_USER = 30  # foydalanuvchi boshiga eng ko'pi (eskirgan/keraksiz to'planib ketmasin)
+
+
 async def _remember_note(user_id: int, args: dict, ctx: dict) -> dict:
     import core.tgdb as tgdb
     db = tgdb.get()
     notes = db["users"].setdefault(str(user_id), {}).setdefault("notes", [])
     notes.append(args["note"])
+    notes[:] = notes[-MAX_NOTES_PER_USER:]  # eng oxirgi N tasi qoladi
     await tgdb.save(ctx["bot"])
     return {"status": "saqlandi"}
+
+
+def get_user_notes(user_id: int) -> list[str]:
+    """Superadmin panel VA ai_chat.py (kontekstga qaytarish uchun) ishlatadi."""
+    import core.tgdb as tgdb
+    db = tgdb.get()
+    return db["users"].get(str(user_id), {}).get("notes", [])
+
+
+async def clear_user_notes(bot, user_id: int):
+    """Superadmin — maxfiylik/nazorat maqsadida foydalanuvchi eslatmalarini tozalash."""
+    import core.tgdb as tgdb
+    db = tgdb.get()
+    rec = db["users"].get(str(user_id))
+    if rec and "notes" in rec:
+        rec["notes"] = []
+        await tgdb.save(bot, force=True)
 
 
 async def _create_presentation(user_id: int, args: dict, ctx: dict) -> dict:
