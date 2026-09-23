@@ -32,18 +32,32 @@ logger = logging.getLogger("thinking_indicator")
 
 DRAFT_REFRESH_SECONDS = 20  # draft 30s'da tugaydi — shundan oldin yangilaymiz
 
+# Do'stona/kulgili iboralar — native rejimda har DRAFT_REFRESH_SECONDS'da
+# birin-ketin almashtiriladi (bir xil draft_id — Telegram buni animatsiyali
+# o'tish sifatida ko'rsatadi, chunki 'text' bo'sh bo'lmasa native 'Thinking…'
+# placeholder o'rniga aynan shu matn ko'rsatiladi).
+FUNNY_THINKING_PHRASES = [
+    "🌀 Miyamni ishga solyapman...",
+    "🤔 Fikr yuritayapman...",
+    "☕ Bir oz sabr, g'oyalar pishmoqda...",
+    "⚡ Neyronlarni uyg'otyapman...",
+    "🧠 Aql bovar qilmas javob tayyorlanmoqda...",
+    "🔍 Kerakli so'zlarni termoqdaman...",
+]
+
 
 class ThinkingIndicator:
-    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, label: str = "🌀 O'ylayapti"):
+    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, label: str | None = None):
         self.bot = bot
         self.chat_id = chat_id
         self.thread_id = thread_id
-        self.label = label
+        self.label = label or random.choice(FUNNY_THINKING_PHRASES)
         self._draft_id = random.randint(1, 2**31 - 1)
         self._use_native = False
         self._msg: Message | None = None  # faqat fallback rejimida ishlatiladi
         self._task: asyncio.Task | None = None
         self._start = 0.0
+        self._phrase_index = 0
 
     async def start(self):
         self._start = time.monotonic()
@@ -52,7 +66,7 @@ class ThinkingIndicator:
                 chat_id=self.chat_id,
                 draft_id=self._draft_id,
                 message_thread_id=self.thread_id,
-                text="",  # bo'sh -> native "Thinking…" placeholder (o'z logosi bilan)
+                text=FUNNY_THINKING_PHRASES[0],
             )
             self._use_native = True
             self._task = asyncio.create_task(self._refresh_draft_loop())
@@ -60,7 +74,7 @@ class ThinkingIndicator:
             logger.info("Native 'Thinking' draft ishlamadi (%s) — matnli fallback'ga o'tildi", e)
             self._use_native = False
             self._msg = await self.bot.send_message(
-                self.chat_id, f"{self.label}... 0s", message_thread_id=self.thread_id
+                self.chat_id, f"{self.label}", message_thread_id=self.thread_id
             )
             self._task = asyncio.create_task(self._tick_fallback())
         return self
@@ -69,11 +83,12 @@ class ThinkingIndicator:
         try:
             while True:
                 await asyncio.sleep(DRAFT_REFRESH_SECONDS)
+                self._phrase_index = (self._phrase_index + 1) % len(FUNNY_THINKING_PHRASES)
                 await self.bot.send_message_draft(
                     chat_id=self.chat_id,
                     draft_id=self._draft_id,
                     message_thread_id=self.thread_id,
-                    text="",
+                    text=FUNNY_THINKING_PHRASES[self._phrase_index],
                 )
         except asyncio.CancelledError:
             pass
@@ -86,7 +101,7 @@ class ThinkingIndicator:
                 await asyncio.sleep(1.5)
                 elapsed = int(time.monotonic() - self._start)
                 await self.bot.edit_message_text(
-                    f"{self.label}... {elapsed}s",
+                    f"{self.label} ({elapsed}s)",
                     chat_id=self.chat_id,
                     message_id=self._msg.message_id,
                 )
