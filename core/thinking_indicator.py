@@ -32,10 +32,9 @@ logger = logging.getLogger("thinking_indicator")
 
 DRAFT_REFRESH_SECONDS = 20  # draft 30s'da tugaydi — shundan oldin yangilaymiz
 
-# Do'stona/kulgili iboralar — native rejimda har DRAFT_REFRESH_SECONDS'da
-# birin-ketin almashtiriladi (bir xil draft_id — Telegram buni animatsiyali
-# o'tish sifatida ko'rsatadi, chunki 'text' bo'sh bo'lmasa native 'Thinking…'
-# placeholder o'rniga aynan shu matn ko'rsatiladi).
+# Do'stona/kulgili iboralar — FAQAT fallback rejimida ishlatiladi (native
+# draft'da matn har doim bo'sh bo'lishi SHART, aks holda maxsus ikonka
+# yo'qoladi — pastdagi start() izohiga qarang).
 FUNNY_THINKING_PHRASES = [
     "🌀 Miyamni ishga solyapman...",
     "🤔 Fikr yuritayapman...",
@@ -57,16 +56,23 @@ class ThinkingIndicator:
         self._msg: Message | None = None  # faqat fallback rejimida ishlatiladi
         self._task: asyncio.Task | None = None
         self._start = 0.0
-        self._phrase_index = 0
 
     async def start(self):
         self._start = time.monotonic()
         try:
+            # MUHIM (amaliy kuzatuv, rasmiy hujjatda aniq yozilmagan): faqat
+            # text="" (BO'SH) berilganda Telegram maxsus native "Thinking"
+            # kartasini (o'z ikonkasi + animatsiyasi + hisoblagichi bilan)
+            # ko'rsatadi. Har qanday MATN bersak (hatto qisqa bo'lsa ham),
+            # bu maxsus UI yo'qoladi va oddiy "yuborilgan xabar"ga aylanib
+            # qoladi (✓✓ belgisi bilan) — buni foydalanuvchi bilan birga
+            # sinab, aniq tasdiqladik. Shuning uchun native yo'lda matnни
+            # HAR DOIM bo'sh qoldiramiz.
             await self.bot.send_message_draft(
                 chat_id=self.chat_id,
                 draft_id=self._draft_id,
                 message_thread_id=self.thread_id,
-                text=FUNNY_THINKING_PHRASES[0],
+                text="",
             )
             self._use_native = True
             self._task = asyncio.create_task(self._refresh_draft_loop())
@@ -83,12 +89,11 @@ class ThinkingIndicator:
         try:
             while True:
                 await asyncio.sleep(DRAFT_REFRESH_SECONDS)
-                self._phrase_index = (self._phrase_index + 1) % len(FUNNY_THINKING_PHRASES)
                 await self.bot.send_message_draft(
                     chat_id=self.chat_id,
                     draft_id=self._draft_id,
                     message_thread_id=self.thread_id,
-                    text=FUNNY_THINKING_PHRASES[self._phrase_index],
+                    text="",  # bo'sh — native ikonka saqlanib qolishi uchun
                 )
         except asyncio.CancelledError:
             pass

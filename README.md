@@ -91,8 +91,14 @@ Telegram klientining o'zi chizadigan native ko'rsatkich (o'z ikonkasi bilan).
 Manba: https://core.telegram.org/bots/api#sendmessagedraft
 
 - `bot.send_message_draft(text="")` — bo'sh matn "Thinking…" placeholder'ni
-  ko'rsatadi; draft efemer (30s) bo'lgani uchun har 20s'da bir xil `draft_id`
-  bilan yangilanadi (animatsiyali)
+  (native ikonka + animatsiya bilan) ko'rsatadi; draft efemer (30s) bo'lgani
+  uchun har 20s'da bir xil `draft_id` bilan yangilanadi (animatsiyali)
+- **Amaliy kuzatuv (foydalanuvchi bilan birga sinab tasdiqlangan):** `text`
+  maydoniga BO'SH BO'LMAGAN matn (masalan kulgili ibora) berilsa, maxsus
+  native ikonka/karta YO'QOLADI va oddiy "yuborilgan xabar" (✓✓ belgili)ga
+  aylanib qoladi. Shuning uchun kulgili iboralar (`FUNNY_THINKING_PHRASES`)
+  FAQAT fallback (native ishlamagan) holatda ishlatiladi — native yo'lda
+  matn HAR DOIM bo'sh qoldiriladi.
 - Javob tayyor bo'lgach oddiy `send_message()` chaqiriladi — draft o'zi yopiladi
 - **Talab:** shu funksiya ishlashi uchun botingizda BotFather orqali forum-topic
   rejimi yoqilgan bo'lishi kerak (Topics funksiyasi bilan bir xil sozlama
