@@ -23,6 +23,7 @@ import core.roles as roles
 import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
 import core.ai_persona as ai_persona
+from core.markdown_format import markdown_to_telegram_html
 
 router = Router()
 logger = logging.getLogger("ai_chat")
@@ -59,7 +60,10 @@ async def handle_message(message: Message):
         bot=message.bot, chat_id=message.chat.id, thread_id=thread_id
     ).start()
 
-    final_text = "..."
+    final_text = "..."       # Telegram'ga YUBORILADIGAN (HTML'ga o'girilgan) matn
+    raw_text_for_history = "..."  # suhbat tarixiga SAQLANADIGAN asl (markdown) matn —
+                                    # HTML teglarini tarixga saqlasak, AI keyingi safar
+                                    # o'sha teglarni o'zi ham qaytara boshlashi mumkin edi
     tool_outputs: list[tuple[str, dict]] = []
 
     try:
@@ -80,11 +84,14 @@ async def handle_message(message: Message):
             final_text = "Tayyor ✅" if has_file else "\n".join(
                 f"[{n}]: {r}" for n, r in tool_outputs
             )
+            raw_text_for_history = final_text
         else:
-            final_text = choice.content or "..."
+            raw_text_for_history = choice.content or "..."
+            final_text = markdown_to_telegram_html(choice.content) if choice.content else "..."
 
     except Exception as e:
         final_text = f"⚠️ Xatolik yuz berdi: {e}"
+        raw_text_for_history = final_text
 
     await indicator.finish(final_text)
     await roles.register_request(message.bot, user_id)
@@ -134,6 +141,6 @@ async def handle_message(message: Message):
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", message.text)
-    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "assistant", final_text)
+    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "assistant", raw_text_for_history)
 
 

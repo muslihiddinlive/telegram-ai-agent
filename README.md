@@ -70,6 +70,20 @@ ro'yxati ICHIDA emas, alohida parametr sifatida talab qiladi — Groq/OpenAI/
 DeepSeek/xKiro esa standart tarzda messages ichida qabul qiladi.
 `core/ai_rotator.py` buni avtomatik ajratib beradi (test qilindi).
 
+## Markdown -> Telegram HTML avtomatik konvertatsiya
+AI odatda oddiy Markdown formatida javob beradi (`**qalin**`, `` `kod` ``,
+```` ```kod bloki``` ````, `[link](url)`, `# Sarlavha`), lekin bot HTML
+parse_mode'da ishlaydi — bular avval mos kelmasdi (`"**so'z**"` literal
+yulduzchalar bilan ko'rinardi). `core/markdown_format.py` endi AI javobini
+yuborishdan OLDIN avtomatik Telegram HTML'ga o'giradi (test qilindi:
+qalin/kursiv/aralash, kod bloklari, linklar, sarlavhalar, va HTML-injection
+xavfsizligi — `<script>` kabi matnlar avtomatik escape qilinadi).
+
+**Muhim texnik nozik nuqta:** suhbat TARIXIGA (keyingi xabarlar uchun AI
+kontekstiga) HTML'ga o'girilgan matn EMAS, AI'ning ASL (markdown) matni
+saqlanadi — aks holda AI o'z tarixida `<b>` kabi teglarni ko'rib, ularni
+o'zi ham qaytara boshlashi mumkin edi.
+
 ## Native "Thinking…" ko'rsatkichi (Bot API 9.3+)
 Bu — Telegram'ning AI-botlar uchun MAXSUS rasmiy funksiyasi (`sendMessageDraft`,
 2025-12-31, umumiy botlarga 2026-03-01'dan ochiq), oddiy matn-emoji emas —
