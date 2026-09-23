@@ -1,21 +1,36 @@
 """
-Live "o'ylab olay..." status indikatori — ekranda ko'rgan skrinshotingizdagi
-"Думаю... 0c" effekti (odatda Telegram AI-botlarida uchraydigan pattern).
+"O'ylayapti..." status indikatori.
 
-Ishlash tartibi:
-  1. AI so'roviga ketishdan oldin "🤔 O'ylab olay... 0s" xabari yuboriladi.
-  2. Background task har ~1-2 soniyada shu xabarni "...Ns" ga edit qiladi.
-  3. AI javobi tayyor bo'lgach, background task to'xtatiladi va xabar
-     yakuniy javob matni bilan almashtiriladi (edit_message_text).
+MUHIM YANGILANISH: Telegram Bot API 9.3+ (2025-12-31) rasmiy `sendMessageDraft`
+metodini qo'shdi — bu AI-botlar uchun maxsus, NATIVE "Thinking…" ko'rsatkichi
+(o'z ikonkasi/animatsiyasi bilan, Telegram klienti tomonidan chizilgan — oddiy
+matn xabari emas). Manba: https://core.telegram.org/bots/api#sendmessagedraft
 
-Forum-topic (superguruh topics) qo'llab-quvvatlash: message_thread_id bo'lsa,
-status xabari ham javob ham O'SHA topic ichida yuboriladi/edit qilinadi —
-shuning uchun barcha chaqiruvlarda thread_id ni uzatib turing.
+Ishlash tartibi (native, ustuvor):
+  1. bot.send_message_draft(chat_id, draft_id, text="") — bo'sh matn native
+     "Thinking…" placeholder'ni ko'rsatadi.
+  2. Draft EFEMER (30 soniyalik vaqtinchalik preview) — shuning uchun har
+     ~20 soniyada bir xil draft_id bilan qayta chaqirilib, "tirik" ushlab
+     turiladi (bir xil draft_id — animatsiyali yangilanish beradi).
+  3. Javob tayyor bo'lgach, oddiy bot.send_message() chaqiriladi — bu draft'ni
+     avtomatik yopadi/almashtiradi (alohida o'chirish/edit shart emas).
+
+FALLBACK: agar botingizda bu funksiya hali yoqilmagan bo'lsa (BotFather'da
+"Private Chat Topics"/shunga bog'liq sozlama kerak bo'lishi mumkin) yoki
+eski aiogram/Bot API muhitida ishlasa, avtomatik ravishda ESKI usulga
+o'tiladi: oddiy xabar yuborilib, matn orqali "🌀 O'ylayapti... Ns" ko'rsatiladi
+va edit qilinadi — funksionallik hech qachon butunlay singib qolmaydi.
 """
 import asyncio
+import logging
+import random
 import time
 from aiogram import Bot
 from aiogram.types import Message
+
+logger = logging.getLogger("thinking_indicator")
+
+DRAFT_REFRESH_SECONDS = 20  # draft 30s'da tugaydi — shundan oldin yangilaymiz
 
 
 class ThinkingIndicator:
@@ -24,19 +39,48 @@ class ThinkingIndicator:
         self.chat_id = chat_id
         self.thread_id = thread_id
         self.label = label
-        self._msg: Message | None = None
+        self._draft_id = random.randint(1, 2**31 - 1)
+        self._use_native = False
+        self._msg: Message | None = None  # faqat fallback rejimida ishlatiladi
         self._task: asyncio.Task | None = None
         self._start = 0.0
 
     async def start(self):
         self._start = time.monotonic()
-        self._msg = await self.bot.send_message(
-            self.chat_id, f"{self.label}... 0s", message_thread_id=self.thread_id
-        )
-        self._task = asyncio.create_task(self._tick())
+        try:
+            await self.bot.send_message_draft(
+                chat_id=self.chat_id,
+                draft_id=self._draft_id,
+                message_thread_id=self.thread_id,
+                text="",  # bo'sh -> native "Thinking…" placeholder (o'z logosi bilan)
+            )
+            self._use_native = True
+            self._task = asyncio.create_task(self._refresh_draft_loop())
+        except Exception as e:
+            logger.info("Native 'Thinking' draft ishlamadi (%s) — matnli fallback'ga o'tildi", e)
+            self._use_native = False
+            self._msg = await self.bot.send_message(
+                self.chat_id, f"{self.label}... 0s", message_thread_id=self.thread_id
+            )
+            self._task = asyncio.create_task(self._tick_fallback())
         return self
 
-    async def _tick(self):
+    async def _refresh_draft_loop(self):
+        try:
+            while True:
+                await asyncio.sleep(DRAFT_REFRESH_SECONDS)
+                await self.bot.send_message_draft(
+                    chat_id=self.chat_id,
+                    draft_id=self._draft_id,
+                    message_thread_id=self.thread_id,
+                    text="",
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass  # draft muddati tugagan yoki chat yopilgan bo'lishi mumkin — jim o'tkazamiz
+
+    async def _tick_fallback(self):
         try:
             while True:
                 await asyncio.sleep(1.5)
@@ -49,14 +93,20 @@ class ThinkingIndicator:
         except asyncio.CancelledError:
             pass
         except Exception:
-            pass  # edit ba'zan "message not modified" xatosi berishi mumkin — e'tiborsiz qoldiramiz
+            pass  # "message not modified" kabi xatolar — e'tiborsiz qoldiramiz
 
     async def finish(self, final_text: str):
         if self._task:
             self._task.cancel()
-        try:
-            await self.bot.edit_message_text(
-                final_text, chat_id=self.chat_id, message_id=self._msg.message_id
-            )
-        except Exception:
+
+        if self._use_native:
+            # sendMessage chaqirilishi bilan draft o'zi yopiladi/almashtiriladi —
+            # alohida o'chirish yoki edit qilish shart emas.
             await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
+        else:
+            try:
+                await self.bot.edit_message_text(
+                    final_text, chat_id=self.chat_id, message_id=self._msg.message_id
+                )
+            except Exception:
+                await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)

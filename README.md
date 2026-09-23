@@ -15,7 +15,7 @@ mafia_host_bot):
 | `core/channels.py`            | KanalKotibRobot      | Dinamik kanal aniqlash + admin-based ruxsat |
 | `admin/panel.py`              | StokerDownloader     | Superadmin panel (foydalanuvchilar/guruhlar/kanallar boshqaruvi) |
 | `tools/file_tools.py`         | ms-file-toolkit      | **To'liq ulandi** (PyPI v0.4.0): 36 ta DOCX/XLSX/PPTX/PDF tool, schema Claude→Groq formatiga avtomatik konvertatsiya qilinadi, har foydalanuvchi uchun alohida xavfsiz papka (`data/user_files/<user_id>/`) |
-| `core/thinking_indicator.py`  | (yangi)              | "O'ylab olay... Ns" live-status xabari + forum-topic (`message_thread_id`) qo'llab-quvvatlash |
+| `core/thinking_indicator.py`  | (yangi)              | Native "Thinking…" (Bot API 9.3+ `sendMessageDraft`) + matnli fallback |
 | `core/topic_sessions.py`      | (yangi)              | Shaxsiy chat Topics (Bot API 9.4, 2026) — har bir topic mustaqil suhbat konteksti bilan |
 | `handlers/topics.py`          | (yangi)              | `/yangi_mavzu`, `/mavzular` komandalari |
 | `core/pending_input.py`       | StokerDownloader      | Matn-kiritish orqali bosqichma-bosqich oqimlar (FSM, xotirada) |
@@ -69,6 +69,25 @@ tugmasi bilan bekor qilish mumkin.
 ro'yxati ICHIDA emas, alohida parametr sifatida talab qiladi — Groq/OpenAI/
 DeepSeek/xKiro esa standart tarzda messages ichida qabul qiladi.
 `core/ai_rotator.py` buni avtomatik ajratib beradi (test qilindi).
+
+## Native "Thinking…" ko'rsatkichi (Bot API 9.3+)
+Bu — Telegram'ning AI-botlar uchun MAXSUS rasmiy funksiyasi (`sendMessageDraft`,
+2025-12-31, umumiy botlarga 2026-03-01'dan ochiq), oddiy matn-emoji emas —
+Telegram klientining o'zi chizadigan native ko'rsatkich (o'z ikonkasi bilan).
+Manba: https://core.telegram.org/bots/api#sendmessagedraft
+
+- `bot.send_message_draft(text="")` — bo'sh matn "Thinking…" placeholder'ni
+  ko'rsatadi; draft efemer (30s) bo'lgani uchun har 20s'da bir xil `draft_id`
+  bilan yangilanadi (animatsiyali)
+- Javob tayyor bo'lgach oddiy `send_message()` chaqiriladi — draft o'zi yopiladi
+- **Talab:** shu funksiya ishlashi uchun botingizda BotFather orqali forum-topic
+  rejimi yoqilgan bo'lishi kerak (Topics funksiyasi bilan bir xil sozlama
+  bo'lishi mumkin — aniqlashtiring)
+- **Avtomatik fallback:** agar bu sozlama yoqilmagan bo'lsa yoki xatolik
+  chiqsa, kod avtomatik eski usulga (`"🌀 O'ylayapti... Ns"` matnli xabar,
+  edit qilib turiladigan) o'tadi — funksionallik hech qachon butunlay
+  ishlamay qolmaydi. Ikkala yo'l ham mock-test bilan tekshirildi.
+- `requirements.txt`: `aiogram>=3.31` talab qilinadi (bu metod shu versiyada qo'shilgan)
 
 ## Superadmin panel orqali umumiy AI kalitlarni boshqarish
 `.env`dagi `GROQ_API_KEYS` va h.k. endi faqat **fallback** (ixtiyoriy, eski
