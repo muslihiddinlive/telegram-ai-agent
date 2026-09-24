@@ -4,7 +4,12 @@ main.py (ishga tushishda) va handlers/pending_text.py (yangi admin
 qo'shilganda, darhol) ikkalasi ham shu yerdan foydalanadi.
 """
 from aiogram import Bot
-from aiogram.types import BotCommand, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeAllGroupChats
+
+GROUP_COMMANDS = [
+    BotCommand(command="guruh_ruxsat", description="🔒 Bot javobini tanlangan userlarga cheklash"),
+    BotCommand(command="guruh_ruxsat_ochirish", description="🔓 Cheklovni bekor qilish"),
+]
 
 GENERAL_COMMANDS = [
     BotCommand(command="start", description="Botni ishga tushirish"),
@@ -25,3 +30,8 @@ ADMIN_COMMANDS = GENERAL_COMMANDS + [
 async def register_admin_commands(bot: Bot, chat_id: int):
     """Bitta admin/superadmin uchun /panel'ni ularning shaxsiy '/'' menyusiga qo'shadi."""
     await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=chat_id))
+
+
+async def register_group_commands(bot: Bot):
+    """/guruh_ruxsat va /guruh_ruxsat_ochirish — FAQAT guruh chatlarida ko'rinadi."""
+    await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())

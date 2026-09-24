@@ -20,6 +20,7 @@ from core.ai_tools import TOOLS, dispatch, get_user_notes
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.roles as roles
+import core.group_permissions as group_permissions
 import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
 import core.ai_persona as ai_persona
@@ -36,6 +37,12 @@ async def handle_message(message: Message):
     if not roles.can_use_bot(user_id):
         await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")
         return
+
+    # Guruhda cheklangan ro'yxat o'rnatilgan bo'lsa (/guruh_ruxsat), ro'yxatda
+    # yo'q foydalanuvchilarga bot BUTUNLAY jim qoladi — shovqin/xato ham yo'q
+    if message.chat.type in ("group", "supergroup"):
+        if not group_permissions.is_allowed_in_group(message.chat.id, message.from_user.username):
+            return
 
     if not roles.can_make_request(user_id):
         await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")

@@ -160,6 +160,24 @@ avtomatik hujjat sifatida yuboradi (`handlers/ai_chat.py`). `file_path` sifatida
 AI qanday nom bersa ham, xavfsizlik uchun har doim foydalanuvchining o'z papkasi
 ichiga normalizatsiya qilinadi (`tools/file_tools.py`).
 
+## Guruhda bot javobini cheklash (admin shart emas!)
+Botni guruhga admin qilmasdan ham qo'shsa bo'ladi — u yozishi uchun admin
+huquqi shart emas (faqat pin/o'chirish/cheklash kabi moderatsiya amallari
+uchun kerak). Standart holatda (Group Privacy yoqilgan bo'lsa) bot faqat
+o'ziga tegib yozilgan/reply qilingan/komanda xabarlarni ko'radi.
+
+Qo'shimcha: **shu GURUHNING Telegram-admini/egasi** (bizning superadmin/admin
+tizimimizdan mustaqil) quyidagi komanda bilan botni faqat tanlangan
+odamlarga javob beradigan qilib cheklashi mumkin:
+```
+/guruh_ruxsat @mira @ali @MuslihiddinDev
+```
+Shundan keyin ro'yxatda YO'Q odamlar yozsa, bot **butunlay jim** qoladi
+(hatto xato xabari ham bermaydi — shovqin qilmaslik uchun). Bekor qilish:
+`/guruh_ruxsat_ochirish`. Test qilindi: katta-kichik harf farqisiz mos
+kelish, cheklovsiz holatda hamma o'tishi, cheklov qo'yilganda faqat
+ro'yxatdagilar o'tishi — barchasi to'g'ri ishladi.
+
 ## Prezentatsiya sifati: standart "PRO"/premium + dark theme + brendlash
 `create_presentation`/`create_diagram` endi ikkita muhim standart xatti-harakatga ega:
 

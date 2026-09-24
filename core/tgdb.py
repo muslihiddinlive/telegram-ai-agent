@@ -31,6 +31,7 @@ DEFAULT_DB = {
     "topics": {},           # user_id(str) -> {thread_id(str): {"title":, "history": []}}
     "auto_reply": {},       # owner_id(str) -> {"keywords": [...], "away_delay":, "last_owner_activity": {}}
     "shared_keys": {},      # provider(str) -> [shifrlangan_kalit, ...] (core/shared_keys.py, superadmin panel)
+    "group_settings": {},   # chat_id(str) -> {"allowed_usernames": [...], "set_by": int} (core/group_permissions.py)
     "settings": {},         # masalan settings["xkiro_model"]
 }
 

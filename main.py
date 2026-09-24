@@ -17,6 +17,7 @@ from core.channels import on_bot_added_to_chat
 from admin.panel import router as panel_router
 from handlers.start import router as start_router
 from handlers.topics import router as topics_router
+from handlers.group_settings import router as group_settings_router
 from handlers.userbot_commands import router as userbot_commands_router
 from handlers.api_integration import router as api_integration_router
 from handlers.pending_text import router as pending_text_router
@@ -37,6 +38,7 @@ dp = Dispatcher()
 dp.include_router(panel_router)
 dp.include_router(start_router)
 dp.include_router(topics_router)
+dp.include_router(group_settings_router)
 dp.include_router(userbot_commands_router)
 dp.include_router(api_integration_router)
 dp.include_router(admin_terminal_router)  # ai_chat'dan OLDIN — "exec:" AI'ga ketmasin
@@ -81,6 +83,7 @@ async def _register_commands(bot: Bot):
     funksiyasi "yo'q" deb ko'rinishining asosiy sababi shu edi).
     """
     await bot.set_my_commands(bot_commands.GENERAL_COMMANDS, scope=BotCommandScopeDefault())
+    await bot_commands.register_group_commands(bot)
 
     # Superadmin va barcha adminlarga qo'shimcha /panel komandasi — faqat
     # ULARNING shaxsiy chatida ko'rinadi (oddiy userlarga chiqmaydi)
