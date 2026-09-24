@@ -1,47 +1,45 @@
 """
-"O'ylayapti..." status indikatori.
+"O'ylayapti..." status indikatori — 3 bosqichli fallback zanjiri bilan.
 
-MUHIM YANGILANISH: Telegram Bot API 9.3+ (2025-12-31) rasmiy `sendMessageDraft`
-metodini qo'shdi — bu AI-botlar uchun maxsus, NATIVE "Thinking…" ko'rsatkichi
-(o'z ikonkasi/animatsiyasi bilan, Telegram klienti tomonidan chizilgan — oddiy
-matn xabari emas). Manba: https://core.telegram.org/bots/api#sendmessagedraft
+MUHIM KASHFIYOT (foydalanuvchi bilan birga aniqlandi): Telegram'da ikkita
+yaqin, lekin FARQLI metod bor:
 
-Ishlash tartibi (native, ustuvor):
-  1. bot.send_message_draft(chat_id, draft_id, text="") — bo'sh matn native
-     "Thinking…" placeholder'ni ko'rsatadi.
-  2. Draft EFEMER (30 soniyalik vaqtinchalik preview) — shuning uchun har
-     ~20 soniyada bir xil draft_id bilan qayta chaqirilib, "tirik" ushlab
-     turiladi (bir xil draft_id — animatsiyali yangilanish beradi).
-  3. Javob tayyor bo'lgach, oddiy bot.send_message() chaqiriladi — bu draft'ni
-     avtomatik yopadi/almashtiradi (alohida o'chirish/edit shart emas).
+1. `sendRichMessageDraft` + `<tg-thinking>MATN</tg-thinking>` tegi — BOY
+   (rich) draft. Bu YAGONA yo'l — matnни O'ZINGIZ moslashtirib, SHU BILAN
+   BIRGA native yulduzcha-logo+taymerni saqlab qolish mumkin. Rasmiy hujjat
+   maxsus emoji-ikonkalar tavsiya qiladi (https://t.me/addemoji/AIActions).
+2. `sendMessageDraft` (oddiy, rich emas) + text="" — faqat BO'SH matn
+   bilan native logo chiqadi; istalgan MATN berilsa, logo yo'qolib, oddiy
+   yuborilgan xabarga aylanadi (bu holatni skrinshot bilan tasdiqladik).
 
-FALLBACK: agar botingizda bu funksiya hali yoqilmagan bo'lsa (BotFather'da
-"Private Chat Topics"/shunga bog'liq sozlama kerak bo'lishi mumkin) yoki
-eski aiogram/Bot API muhitida ishlasa, avtomatik ravishda ESKI usulga
-o'tiladi: oddiy xabar yuborilib, matn orqali "🌀 O'ylayapti... Ns" ko'rsatiladi
-va edit qilinadi — funksionallik hech qachon butunlay singib qolmaydi.
+Shuning uchun ustuvorlik tartibi:
+  A) sendRichMessageDraft + <tg-thinking>kulgili ibora</tg-thinking> —
+     ENG YAXSHISI: logo HAM, o'zimizning matn HAM birga
+  B) sendMessageDraft (text="") — logo bor, lekin matn moslashtirib
+     bo'lmaydi (agar A ishlamasa, masalan aiogram/Bot API versiyasi eski)
+  C) Oddiy xabar + qo'lda edit qilish — hech biri ishlamasa (eng oxirgi chora)
+
+Manba: https://core.telegram.org/bots/api#sendrichmessagedraft
+       https://core.telegram.org/bots/api#sendmessagedraft
 """
 import asyncio
 import logging
 import random
 import time
 from aiogram import Bot
-from aiogram.types import Message
+from aiogram.types import Message, InputRichMessage
 
 logger = logging.getLogger("thinking_indicator")
 
 DRAFT_REFRESH_SECONDS = 20  # draft 30s'da tugaydi — shundan oldin yangilaymiz
 
-# Do'stona/kulgili iboralar — FAQAT fallback rejimida ishlatiladi (native
-# draft'da matn har doim bo'sh bo'lishi SHART, aks holda maxsus ikonka
-# yo'qoladi — pastdagi start() izohiga qarang).
 FUNNY_THINKING_PHRASES = [
-    "🌀 Miyamni ishga solyapman...",
-    "🤔 Fikr yuritayapman...",
-    "☕ Bir oz sabr, g'oyalar pishmoqda...",
-    "⚡ Neyronlarni uyg'otyapman...",
-    "🧠 Aql bovar qilmas javob tayyorlanmoqda...",
-    "🔍 Kerakli so'zlarni termoqdaman...",
+    "Miyamni ishga solyapman...",
+    "Fikr yuritayapman...",
+    "Bir oz sabr, g'oyalar pishmoqda...",
+    "Neyronlarni uyg'otyapman...",
+    "Aql bovar qilmas javob tayyorlanmoqda...",
+    "Kerakli so'zlarni termoqdaman...",
 ]
 
 
@@ -52,53 +50,78 @@ class ThinkingIndicator:
         self.thread_id = thread_id
         self.label = label or random.choice(FUNNY_THINKING_PHRASES)
         self._draft_id = random.randint(1, 2**31 - 1)
-        self._use_native = False
-        self._msg: Message | None = None  # faqat fallback rejimida ishlatiladi
+        self._mode = "fallback"  # "rich" | "native" | "fallback"
+        self._msg: Message | None = None  # faqat "fallback" rejimida ishlatiladi
         self._task: asyncio.Task | None = None
         self._start = 0.0
+        self._phrase_index = 0
 
     async def start(self):
         self._start = time.monotonic()
+
+        # A) Eng yaxshisi — sendRichMessageDraft + <tg-thinking>: logo + o'z matnimiz
         try:
-            # MUHIM (amaliy kuzatuv, rasmiy hujjatda aniq yozilmagan): faqat
-            # text="" (BO'SH) berilganda Telegram maxsus native "Thinking"
-            # kartasini (o'z ikonkasi + animatsiyasi + hisoblagichi bilan)
-            # ko'rsatadi. Har qanday MATN bersak (hatto qisqa bo'lsa ham),
-            # bu maxsus UI yo'qoladi va oddiy "yuborilgan xabar"ga aylanib
-            # qoladi (✓✓ belgisi bilan) — buni foydalanuvchi bilan birga
-            # sinab, aniq tasdiqladik. Shuning uchun native yo'lda matnни
-            # HAR DOIM bo'sh qoldiramiz.
-            await self.bot.send_message_draft(
+            await self.bot.send_rich_message_draft(
                 chat_id=self.chat_id,
                 draft_id=self._draft_id,
                 message_thread_id=self.thread_id,
-                text="",
+                rich_message=InputRichMessage(html=f"<tg-thinking>{FUNNY_THINKING_PHRASES[0]}</tg-thinking>"),
             )
-            self._use_native = True
-            self._task = asyncio.create_task(self._refresh_draft_loop())
+            self._mode = "rich"
+            self._task = asyncio.create_task(self._refresh_rich_loop())
+            return self
         except Exception as e:
-            logger.info("Native 'Thinking' draft ishlamadi (%s) — matnli fallback'ga o'tildi", e)
-            self._use_native = False
-            self._msg = await self.bot.send_message(
-                self.chat_id, f"{self.label}", message_thread_id=self.thread_id
+            logger.info("sendRichMessageDraft ishlamadi (%s) — oddiy draft'ga o'tildi", e)
+
+        # B) O'rtacha — sendMessageDraft (text="" — logo bor, matn yo'q)
+        try:
+            await self.bot.send_message_draft(
+                chat_id=self.chat_id, draft_id=self._draft_id,
+                message_thread_id=self.thread_id, text="",
             )
-            self._task = asyncio.create_task(self._tick_fallback())
+            self._mode = "native"
+            self._task = asyncio.create_task(self._refresh_native_loop())
+            return self
+        except Exception as e:
+            logger.info("sendMessageDraft ham ishlamadi (%s) — matnli fallback'ga o'tildi", e)
+
+        # C) Eng oxirgi chora — oddiy xabar + qo'lda edit
+        self._mode = "fallback"
+        self._msg = await self.bot.send_message(
+            self.chat_id, f"🌀 {self.label}", message_thread_id=self.thread_id
+        )
+        self._task = asyncio.create_task(self._tick_fallback())
         return self
 
-    async def _refresh_draft_loop(self):
+    async def _refresh_rich_loop(self):
         try:
             while True:
                 await asyncio.sleep(DRAFT_REFRESH_SECONDS)
-                await self.bot.send_message_draft(
-                    chat_id=self.chat_id,
-                    draft_id=self._draft_id,
+                self._phrase_index = (self._phrase_index + 1) % len(FUNNY_THINKING_PHRASES)
+                await self.bot.send_rich_message_draft(
+                    chat_id=self.chat_id, draft_id=self._draft_id,
                     message_thread_id=self.thread_id,
-                    text="",  # bo'sh — native ikonka saqlanib qolishi uchun
+                    rich_message=InputRichMessage(
+                        html=f"<tg-thinking>{FUNNY_THINKING_PHRASES[self._phrase_index]}</tg-thinking>"
+                    ),
                 )
         except asyncio.CancelledError:
             pass
         except Exception:
-            pass  # draft muddati tugagan yoki chat yopilgan bo'lishi mumkin — jim o'tkazamiz
+            pass
+
+    async def _refresh_native_loop(self):
+        try:
+            while True:
+                await asyncio.sleep(DRAFT_REFRESH_SECONDS)
+                await self.bot.send_message_draft(
+                    chat_id=self.chat_id, draft_id=self._draft_id,
+                    message_thread_id=self.thread_id, text="",
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
 
     async def _tick_fallback(self):
         try:
@@ -106,7 +129,7 @@ class ThinkingIndicator:
                 await asyncio.sleep(1.5)
                 elapsed = int(time.monotonic() - self._start)
                 await self.bot.edit_message_text(
-                    f"{self.label} ({elapsed}s)",
+                    f"🌀 {self.label} ({elapsed}s)",
                     chat_id=self.chat_id,
                     message_id=self._msg.message_id,
                 )
@@ -119,9 +142,20 @@ class ThinkingIndicator:
         if self._task:
             self._task.cancel()
 
-        if self._use_native:
-            # sendMessage chaqirilishi bilan draft o'zi yopiladi/almashtiriladi —
-            # alohida o'chirish yoki edit qilish shart emas.
+        if self._mode == "rich":
+            # Rich draft'ni yopish uchun rasmiy hujjat sendRichMessage'ni
+            # tavsiya qiladi (oddiy sendMessage emas).
+            try:
+                await self.bot.send_rich_message(
+                    chat_id=self.chat_id,
+                    message_thread_id=self.thread_id,
+                    rich_message=InputRichMessage(html=final_text),
+                )
+                return
+            except Exception as e:
+                logger.warning("send_rich_message muvaffaqiyatsiz (%s) — oddiy send_message bilan", e)
+
+        if self._mode in ("rich", "native"):
             await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
         else:
             try:

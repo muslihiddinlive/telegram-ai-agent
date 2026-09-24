@@ -84,21 +84,28 @@ kontekstiga) HTML'ga o'girilgan matn EMAS, AI'ning ASL (markdown) matni
 saqlanadi — aks holda AI o'z tarixida `<b>` kabi teglarni ko'rib, ularni
 o'zi ham qaytara boshlashi mumkin edi.
 
-## Native "Thinking…" ko'rsatkichi (Bot API 9.3+)
-Bu — Telegram'ning AI-botlar uchun MAXSUS rasmiy funksiyasi (`sendMessageDraft`,
-2025-12-31, umumiy botlarga 2026-03-01'dan ochiq), oddiy matn-emoji emas —
-Telegram klientining o'zi chizadigan native ko'rsatkich (o'z ikonkasi bilan).
-Manba: https://core.telegram.org/bots/api#sendmessagedraft
+## Native "Thinking…" ko'rsatkichi — 3 bosqichli (sendRichMessageDraft)
+Telegram'da ikkita YAQIN, lekin FARQLI AI-draft metodi bor:
 
-- `bot.send_message_draft(text="")` — bo'sh matn "Thinking…" placeholder'ni
-  (native ikonka + animatsiya bilan) ko'rsatadi; draft efemer (30s) bo'lgani
-  uchun har 20s'da bir xil `draft_id` bilan yangilanadi (animatsiyali)
-- **Amaliy kuzatuv (foydalanuvchi bilan birga sinab tasdiqlangan):** `text`
-  maydoniga BO'SH BO'LMAGAN matn (masalan kulgili ibora) berilsa, maxsus
-  native ikonka/karta YO'QOLADI va oddiy "yuborilgan xabar" (✓✓ belgili)ga
-  aylanib qoladi. Shuning uchun kulgili iboralar (`FUNNY_THINKING_PHRASES`)
-  FAQAT fallback (native ishlamagan) holatda ishlatiladi — native yo'lda
-  matn HAR DOIM bo'sh qoldiriladi.
+- **`sendRichMessageDraft`** + `<tg-thinking>MATN</tg-thinking>` tegi — BOY
+  (rich) draft. Bu YAGONA yo'l — matnni o'zimiz moslashtirib, SHU BILAN
+  BIRGA native yulduzcha-logo+taymerni saqlab qolish mumkin. Rasmiy hujjat
+  hatto maxsus emoji-ikonkalar tavsiya qiladi: https://t.me/addemoji/AIActions
+  Manba: https://core.telegram.org/bots/api#sendrichmessagedraft
+- **`sendMessageDraft`** (oddiy) + `text=""` — faqat BO'SH matn bilan native
+  logo chiqadi; istalgan matn berilsa logo yo'qolib, oddiy yuborilgan
+  xabarga aylanadi (buni foydalanuvchi bilan birga skrinshot orqali
+  tasdiqladik). Manba: https://core.telegram.org/bots/api#sendmessagedraft
+
+`core/thinking_indicator.py` shu sababli **3 bosqichli** ishlaydi (har biri
+mock-test bilan tekshirilgan):
+1. `send_rich_message_draft` + `<tg-thinking>kulgili ibora</tg-thinking>` —
+   ENG YAXSHISI (logo + o'zimizning matn birga)
+2. Ishlamasa: `send_message_draft(text="")` — logo bor, matn yo'q
+3. Ikkalasi ham ishlamasa: oddiy xabar + qo'lda edit (eski usul)
+
+Yakunlashda (`finish()`): rich draft uchun `send_rich_message` (rasmiy
+hujjat tavsiyasi), qolganlarida oddiy `send_message`/`edit_message_text`.
 - Javob tayyor bo'lgach oddiy `send_message()` chaqiriladi — draft o'zi yopiladi
 - **Talab:** shu funksiya ishlashi uchun botingizda BotFather orqali forum-topic
   rejimi yoqilgan bo'lishi kerak (Topics funksiyasi bilan bir xil sozlama
