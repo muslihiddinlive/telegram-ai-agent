@@ -46,7 +46,7 @@ def _user_dir(user_id: int) -> str:
     return path
 
 
-_PATH_KEYS = ("file_path", "image_path", "output_path")
+_PATH_KEYS = ("file_path", "image_path", "output_path", "dir_path")
 _PATH_LIST_KEYS = ("file_paths",)
 
 

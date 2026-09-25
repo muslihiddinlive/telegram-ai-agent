@@ -14,7 +14,7 @@ mafia_host_bot):
 | `core/ai_tools.py`            | tgs-expert-bot + ms-file-toolkit | Function-calling tool registry va dispatch |
 | `core/channels.py`            | KanalKotibRobot      | Dinamik kanal aniqlash + admin-based ruxsat |
 | `admin/panel.py`              | StokerDownloader     | Superadmin panel (foydalanuvchilar/guruhlar/kanallar boshqaruvi) |
-| `tools/file_tools.py`         | ms-file-toolkit      | **To'liq ulandi** (PyPI v0.4.0): 36 ta DOCX/XLSX/PPTX/PDF tool, schema Claude→Groq formatiga avtomatik konvertatsiya qilinadi, har foydalanuvchi uchun alohida xavfsiz papka (`data/user_files/<user_id>/`) |
+| `tools/file_tools.py`         | ms-file-toolkit      | **v0.6.0ga yangilandi**: 36 dan **82 ta** tool'ga o'sdi — DOCX/XLSX/PPTX/PDF'dan tashqari endi: rasm tahrirlash (crop/resize/rotate/OCR), arxivlar (zip), kod fayllar bilan ishlash, OpenDocument (odt/ods/odp), **`search_web`/`fetch_url_text`/`download_file`** (internet qidiruv/o'qish/yuklab olish). Schema avtomatik konvertatsiya qilinadi, har foydalanuvchi uchun alohida xavfsiz papka, path-normalizatsiya `dir_path`ni ham qamrab oladi (test qilindi: traversal urinishi xavfsiz qoldi) |
 | `core/thinking_indicator.py`  | (yangi)              | Native "Thinking…" (Bot API 9.3+ `sendMessageDraft`) + matnli fallback |
 | `core/topic_sessions.py`      | (yangi)              | Shaxsiy chat Topics (Bot API 9.4, 2026) — har bir topic mustaqil suhbat konteksti bilan |
 | `handlers/topics.py`          | (yangi)              | `/yangi_mavzu`, `/mavzular` komandalari |
@@ -152,6 +152,23 @@ shaxsiy kalit ulangan/ulanmagan userlar bir-biriga ta'sir qilmaydi).
 faqat "dirty" belgisini qo'yadi, background task har 5 soniyada bittalab
 flush qiladi. Kritik amallar (session saqlash, premium/ruxsat berish) uchun
 `tgdb.save(bot, force=True)` chaqiring — darhol yoziladi.
+
+## ms-file-toolkit v0.6.0 — nima yangi va nima kerak edi
+82 ta tool orasida eng muhimlari: **`search_web`** (internet qidiruv),
+**`fetch_url_text`**/**`scrape_page_text`** (sahifa o'qish), **`download_file`**,
+`read_image_text` (OCR — rasmdagi matnni o'qiydi), rasm tahrirlash
+(crop/resize/rotate/convert), arxiv (zip) yaratish/o'qish, kod fayllar bilan
+ishlash (yaratish/o'qish/tahrirlash/qidirish), OpenDocument formatlar.
+
+**Yangilashda 2 ta muammo topilib tuzatildi:**
+1. `Dockerfile`da faqat `libreoffice-impress` bor edi — `convert_docx_to_pdf`/
+   `convert_xlsx_to_pdf` kabi funksiyalar ishlamas edi (test qilib aniqlandi).
+   Endi `libreoffice-writer` + `libreoffice-calc` ham qo'shildi.
+2. `read_image_text` (OCR) uchun tizim darajasidagi `tesseract-ocr` kerak —
+   Dockerfile'ga qo'shildi (avval umuman yo'q edi).
+3. Yangi `dir_path` parametri (`list_directory_files`, `search_in_files`)
+   bizning xavfsizlik-normalizatsiyamizda yo'q edi — qo'shildi va
+   path-traversal urinishi bilan test qilindi (xavfsiz qoldi).
 
 ## Fayl generatsiyasi qanday ishlaydi
 Foydalanuvchi "menga hisobot yoz" desa, AI `create_docx`/`create_xlsx`/... tool'ini
