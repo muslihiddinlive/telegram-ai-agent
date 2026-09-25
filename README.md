@@ -57,6 +57,17 @@ suhbatlari va saqlangan eslatmalari admin tomonidan ko'rilishi/nazorat
 qilinishi mumkinligini bildirish (masalan `/start` xabarida bir qatorda)
 tavsiya etiladi — bu kod darajasida majburlanmagan, faqat tavsiya.
 
+## AI o'z imkoniyatlarini biladi (CAPABILITIES_BLOCK)
+`core/ai_persona.py`dagi `CAPABILITIES_BLOCK` — botning barcha imkoniyatlari
+(hujjatlar, prezentatsiya/diagramma, rasm+OCR, arxiv, internet qidiruv,
+doimiy xotira, topics) tushunarli tarzda tasvirlangan matn. Bu superadmin
+belgilagan "kim ekanligi" (identifikatsiya) matnidan **ALOHIDA** — ikkalasi
+`get_full_system_prompt()` orqali HAR DOIM birga qo'shiladi. Shuning uchun
+superadmin `/panel → AI shaxsiyati`da faqat "kim ekanligini" yozadi
+(masalan "Men Paradoks AI man..."), imkoniyatlarni alohida tasvirlashning
+hojati yo'q — ular avtomatik. Test qilindi: standart holatda ham, custom
+persona o'rnatilganda ham, ikkalasi to'g'ri birlashadi.
+
 ## AI shaxsiyati (system prompt) — FAQAT superadmin
 `/panel → 🎭 AI shaxsiyati` — AI o'zini kim deb tanishtirishini, qaysi
 community/kanalga tegishli ekanini belgilaysiz (masalan: "Sen Paradoks AI

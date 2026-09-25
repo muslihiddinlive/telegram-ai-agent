@@ -322,6 +322,10 @@ async def show_persona(call: CallbackQuery):
         f"🎭 <b>AI shaxsiyati</b> (system prompt)\n\n"
         f"Bu matn AI'ning HAR BIR suhbatiga (barcha foydalanuvchilar uchun) "
         f"avtomatik qo'shiladi — AI o'zini kim deb tanishtirishini shu belgilaydi.\n\n"
+        f"ℹ️ Bu yerga botning imkoniyatlarini (fayl yaratish, prezentatsiya va h.k.) "
+        f"yozib o'tirish shart EMAS — ular alohida, avtomatik ravishda har doim "
+        f"qo'shiladi. Bu yerda faqat <b>kim ekanligini</b> (ism, community, kanal) "
+        f"yozing.\n\n"
         f"<b>Joriy:</b>\n<i>{current}</i>",
         reply_markup=kb,
     )

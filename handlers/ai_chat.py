@@ -89,7 +89,7 @@ async def handle_message(message: Message):
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
     history = topic_sessions.get_history(user_id, thread_id)
-    system_prompt = ai_persona.get_system_prompt()
+    system_prompt = ai_persona.get_full_system_prompt()
     # DOIMIY eslatmalar (remember_note orqali saqlangan) — topic tarixidan farqli
     # o'laroq, bular HAR DOIM (20-xabar chegarasidan tashqari ham) qo'shiladi.
     saved_notes = get_user_notes(user_id)
