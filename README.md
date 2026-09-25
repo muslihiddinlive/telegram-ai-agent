@@ -160,23 +160,43 @@ avtomatik hujjat sifatida yuboradi (`handlers/ai_chat.py`). `file_path` sifatida
 AI qanday nom bersa ham, xavfsizlik uchun har doim foydalanuvchining o'z papkasi
 ichiga normalizatsiya qilinadi (`tools/file_tools.py`).
 
-## Guruhda bot javobini cheklash (admin shart emas!)
-Botni guruhga admin qilmasdan ham qo'shsa bo'ladi — u yozishi uchun admin
-huquqi shart emas (faqat pin/o'chirish/cheklash kabi moderatsiya amallari
-uchun kerak). Standart holatda (Group Privacy yoqilgan bo'lsa) bot faqat
-o'ziga tegib yozilgan/reply qilingan/komanda xabarlarni ko'radi.
+## Guruhda bot bilan ishlash — qoidalari
+Botni guruhga admin qilmasdan ham qo'shsa bo'ladi (admin huquqi faqat
+pin/o'chirish/cheklash kabi moderatsiya amallari uchun kerak).
+
+**Murojaat qilishning FAQAT 2 ta yo'li** (`handlers/ai_chat.py`, kod
+darajasida qat'iy cheklangan — Group Privacy sozlamasiga tayanmaydi):
+1. Botni **tag qilish**: `@BotUsername savolingiz`
+2. Botning **o'z xabariga reply** qilish
+
+Boshqa har qanday oddiy xabar botga umuman yetib bormaydi/e'tiborsiz
+qoldiriladi. Tag qilinganda `@BotUsername` matndan avtomatik olib
+tashlanadi (AI'ga toza savol boradi).
+
+**Limit — kim yozsa, o'shaning hisobidan ketadi:** guruhda ham, shaxsiy
+chatda ham BITTA UMUMIY kunlik limit ishlatiladi (chat bo'yicha emas,
+foydalanuvchi bo'yicha). **Guruhda foydalanish uchun global tasdiqlash
+(admin `/panel` orqali tasdiqlashi) SHART EMAS** — kimdir birinchi marta
+guruhda botga yozganda, standart 20/kun limit bilan avtomatik
+ro'yxatga olinadi. Shaxsiy chatda esa avvalgidek tasdiqlash talab qilinadi.
+
+**Standart kunlik limit: 50 dan 20 ga tushirildi** (`DEFAULT_DAILY_LIMIT`).
+
+**Fayl/prezentatsiya/diagramma yaratish — 3x qimmat** (`FILE_GENERATION_WEIGHT`),
+guruhda ham, shaxsiy chatda ham bir xil qoida bilan.
 
 Qo'shimcha: **shu GURUHNING Telegram-admini/egasi** (bizning superadmin/admin
 tizimimizdan mustaqil) quyidagi komanda bilan botni faqat tanlangan
-odamlarga javob beradigan qilib cheklashi mumkin:
+odamlarga javob beradigan qilib **yana ham** cheklashi mumkin:
 ```
 /guruh_ruxsat @mira @ali @MuslihiddinDev
 ```
-Shundan keyin ro'yxatda YO'Q odamlar yozsa, bot **butunlay jim** qoladi
-(hatto xato xabari ham bermaydi — shovqin qilmaslik uchun). Bekor qilish:
-`/guruh_ruxsat_ochirish`. Test qilindi: katta-kichik harf farqisiz mos
-kelish, cheklovsiz holatda hamma o'tishi, cheklov qo'yilganda faqat
-ro'yxatdagilar o'tishi — barchasi to'g'ri ishladi.
+Ro'yxatda YO'Q odamlar yozsa, bot butunlay jim qoladi. Bekor qilish:
+`/guruh_ruxsat_ochirish`.
+
+Barchasi test qilindi: limit=20, guruhda tasdiqlashsiz avtomatik kvota,
+20-so'rovdan keyin bloklanish, fayl-generatsiya 3x hisoblanishi, tag/reply
+aniqlash va matn tozalash (katta-kichik harf farqisiz).
 
 ## Prezentatsiya sifati: standart "PRO"/premium + dark theme + brendlash
 `create_presentation`/`create_diagram` endi ikkita muhim standart xatti-harakatga ega:

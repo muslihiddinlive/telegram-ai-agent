@@ -15,7 +15,7 @@ import datetime
 import config
 import core.tgdb as tgdb
 
-DEFAULT_DAILY_LIMIT = 50
+DEFAULT_DAILY_LIMIT = 20
 
 
 def _bucket(user_id: int) -> dict:
@@ -117,7 +117,16 @@ def list_pending_users() -> dict:
     return {uid: rec for uid, rec in db["users"].items() if rec.get("role") == "pending"}
 
 
-# ── Kunlik limit tekshiruvi (approved userlar uchun; admin/superadmin cheksiz) ──
+# ── Kunlik limit tekshiruvi ──
+# MUHIM: shaxsiy chatda foydalanish uchun global tasdiqlash (role="approved")
+# SHART, lekin GURUHDA bot bilan gaplashish uchun bu shart emas — faqat
+# kunlik limit tekshiriladi (can_use_in_group). Ikkalasi ham BIR XIL
+# hisoblagichni (requests_today/daily_limit) ishlatadi — ya'ni bitta odam
+# shaxsiy chatda va guruhlarda ishlatgani BIRGALIKDA bitta kunlik limitdan
+# kamayadi (chat bo'yicha alohida emas, foydalanuvchi bo'yicha yagona).
+
+FILE_GENERATION_WEIGHT = 3  # fayl/prezentatsiya/diagramma yaratish — 3x qimmatroq
+
 
 def _reset_if_new_day(rec: dict):
     if rec.get("last_reset") != today_str():
@@ -126,6 +135,7 @@ def _reset_if_new_day(rec: dict):
 
 
 def can_make_request(user_id: int) -> bool:
+    """Shaxsiy chat uchun — global tasdiqlash (approved) SHART."""
     role = get_role(user_id)
     if role in ("superadmin", "admin"):
         return True
@@ -136,13 +146,33 @@ def can_make_request(user_id: int) -> bool:
     return rec["requests_today"] < rec["daily_limit"]
 
 
-async def register_request(bot, user_id: int):
+def can_use_in_group(user_id: int) -> bool:
+    """
+    Guruh uchun — global tasdiqlash SHART EMAS, faqat kunlik limit
+    tekshiriladi. Foydalanuvchi yozuvi hali bo'lmasa, standart (20/kun)
+    limit bilan avtomatik yaratiladi — admin tasdig'i kutilmaydi.
+    """
+    role = get_role(user_id)
+    if role in ("superadmin", "admin"):
+        return True
+    rec = _bucket(user_id)  # avtomatik yaratadi (role="pending" bo'lib qoladi)
+    _reset_if_new_day(rec)
+    return rec["requests_today"] < rec["daily_limit"]
+
+
+async def register_request(bot, user_id: int, weight: int = 1):
+    """
+    weight — nechta so'rov sifatida hisoblansin (oddiy suhbat=1,
+    fayl/prezentatsiya/diagramma generatsiyasi=FILE_GENERATION_WEIGHT).
+    Ishlaydi role'idan qat'iy nazar (pending guruh-userlari uchun ham) —
+    faqat superadmin/admin uchun sanalmaydi (ular limitsiz).
+    """
     role = get_role(user_id)
     if role in ("superadmin", "admin"):
         return  # limitsiz — sanamaymiz
     rec = _bucket(user_id)
     _reset_if_new_day(rec)
-    rec["requests_today"] += 1
+    rec["requests_today"] += weight
     await tgdb.save(bot)  # debounced — kritik emas
 
 
@@ -180,6 +210,9 @@ def build_users_csv() -> str:
         ])
 
     return buf.getvalue()
+
+
+def search_users(query: str) -> dict:
     """
     ID (aniq mos kelish) yoki ism bo'yicha (substring, katta-kichik harf
     farqisiz) qidiradi — StokerDownloader/search_users_by_prefix patternidan,

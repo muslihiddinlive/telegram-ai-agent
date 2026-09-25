@@ -11,6 +11,7 @@ Qo'shimcha funksiyalar:
 """
 import json
 import os
+import re
 import logging
 from aiogram import Router, F
 from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
@@ -24,29 +25,64 @@ import core.group_permissions as group_permissions
 import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
 import core.ai_persona as ai_persona
+import core.bot_identity as bot_identity
 from core.markdown_format import markdown_to_telegram_html
+
+GROUP_CHAT_TYPES = ("group", "supergroup")
 
 router = Router()
 logger = logging.getLogger("ai_chat")
 
 
+def _strip_bot_mention(text: str, bot_username: str | None) -> str:
+    """'@BotUsername savol' -> 'savol' (AI'ga tozaroq matn borishi uchun)."""
+    if not bot_username:
+        return text
+    return re.sub(rf"@{re.escape(bot_username)}\b", "", text, flags=re.IGNORECASE).strip() or text
+
+
 @router.message(F.text)
 async def handle_message(message: Message):
     user_id = message.from_user.id
+    is_group = message.chat.type in GROUP_CHAT_TYPES
+    user_text = message.text
 
-    if not roles.can_use_bot(user_id):
-        await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")
-        return
+    if is_group:
+        # GURUHDA faqat IKKI yo'l bilan murojaat qilinadi: (1) botni tag
+        # qilish, (2) botning O'Z xabariga reply qilish. Boshqa har qanday
+        # xabar — hatto Group Privacy o'chirilgan bo'lsa ham — E'TIBORSIZ
+        # qoldiriladi (himoya sifatida, Telegram sozlamasiga tayanmasdan).
+        bot_username = bot_identity.get_username()
+        is_mentioned = bool(bot_username) and f"@{bot_username.lower()}" in (message.text or "").lower()
+        is_reply_to_bot = (
+            message.reply_to_message is not None
+            and message.reply_to_message.from_user is not None
+            and message.reply_to_message.from_user.id == bot_identity.get_id()
+        )
+        if not (is_mentioned or is_reply_to_bot):
+            return
 
-    # Guruhda cheklangan ro'yxat o'rnatilgan bo'lsa (/guruh_ruxsat), ro'yxatda
-    # yo'q foydalanuvchilarga bot BUTUNLAY jim qoladi — shovqin/xato ham yo'q
-    if message.chat.type in ("group", "supergroup"):
+        # Guruh admini /guruh_ruxsat bilan ro'yxat o'rnatgan bo'lsa, ro'yxatda
+        # yo'q foydalanuvchilarga bot BUTUNLAY jim qoladi
         if not group_permissions.is_allowed_in_group(message.chat.id, message.from_user.username):
             return
 
-    if not roles.can_make_request(user_id):
-        await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
-        return
+        # GURUHDA global tasdiqlash (role="approved") SHART EMAS — faqat
+        # kunlik limit tekshiriladi (avtomatik 20/kun bilan boshlanadi)
+        if not roles.can_use_in_group(user_id):
+            await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
+            return
+
+        user_text = _strip_bot_mention(message.text, bot_username)
+
+    else:
+        # SHAXSIY chatda — global tasdiqlash SHART
+        if not roles.can_use_bot(user_id):
+            await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")
+            return
+        if not roles.can_make_request(user_id):
+            await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
+            return
 
     ctx = {"bot": message.bot}
     thread_id = message.message_thread_id  # shaxsiy chatdagi topic bo'lsa to'ldiriladi
@@ -61,7 +97,7 @@ async def handle_message(message: Message):
         notes_block = "\n".join(f"- {n}" for n in saved_notes)
         system_prompt += f"\n\nBu foydalanuvchi haqida siz avval eslab qolgan narsalar:\n{notes_block}"
 
-    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": message.text}]
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_text}]
 
     indicator = await ThinkingIndicator(
         bot=message.bot, chat_id=message.chat.id, thread_id=thread_id
@@ -101,7 +137,15 @@ async def handle_message(message: Message):
         raw_text_for_history = final_text
 
     await indicator.finish(final_text)
-    await roles.register_request(message.bot, user_id)
+
+    # Fayl/prezentatsiya/diagramma yaratish — 3x qimmatroq (guruhda ham,
+    # shaxsiy chatda ham bir xil qoida)
+    has_file_result = any(
+        isinstance(r, dict) and (r.get("file_path") or r.get("output_path"))
+        for _, r in tool_outputs
+    )
+    weight = roles.FILE_GENERATION_WEIGHT if has_file_result else 1
+    await roles.register_request(message.bot, user_id, weight=weight)
 
     # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларni yuboramiz
     for tool_name, tool_result in tool_outputs:
@@ -147,7 +191,7 @@ async def handle_message(message: Message):
             file_cleanup.delete_file_now(file_path)
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
-    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", message.text)
+    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", user_text)
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "assistant", raw_text_for_history)
 
 

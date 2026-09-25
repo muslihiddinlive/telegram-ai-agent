@@ -52,6 +52,7 @@ dp.my_chat_member.register(on_bot_added_to_chat)
 async def on_startup(bot: Bot):
     me = await bot.get_me()
     bot_identity.set_username(me.username)  # fayl nomlarida "by @username" uchun
+    bot_identity.set_id(me.id)  # guruhda "botga reply qilinganmi?" tekshiruvi uchun
 
     file_cleanup.cleanup_stale_files(USER_FILES_ROOT)  # oldingi sessiyadan qolgan qoldiqlar
     db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa) — _register_commands'dan OLDIN kerak (roles.list_admins() DB'ni talab qiladi)
