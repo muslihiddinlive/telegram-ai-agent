@@ -27,6 +27,8 @@ import core.file_cleanup as file_cleanup
 import core.ai_persona as ai_persona
 import core.bot_identity as bot_identity
 import core.user_profile as user_profile
+import core.bot_loop_guard as bot_loop_guard
+import config
 from core.markdown_format import markdown_to_telegram_html
 
 GROUP_CHAT_TYPES = ("group", "supergroup")
@@ -61,6 +63,26 @@ async def handle_message(message: Message):
             and message.reply_to_message.from_user.id == bot_identity.get_id()
         )
         if not (is_mentioned or is_reply_to_bot):
+            return
+
+        # Bot-to-Bot Communication Mode yoqilgani uchun endi guruhda BOSHQA
+        # botlardan ham xabar kelishi mumkin — ular bir-birini cheksiz
+        # "tag"lab, RUNAWAY tsiklga tushib qolishi mumkin (Telegram BotFather
+        # ham shu haqda ochiq ogohlantiradi). Ketma-ket N martadan ortiq
+        # bot-javob bo'lsa, zanjir jimgina uziladi; haqiqiy INSON yozishi
+        # bilan hisoblagich qayta nolga tushadi.
+        is_from_bot = bool(message.from_user.is_bot)
+        if not bot_loop_guard.register_incoming(message.chat.id, is_from_bot):
+            if bot_loop_guard.should_warn_once(message.chat.id):
+                try:
+                    await message.bot.send_message(
+                        config.SUPERADMIN_ID,
+                        "⚠️ Bot-bot cheksiz tsikl xavfi aniqlandi va to'xtatildi.\n"
+                        f"Guruh: {message.chat.title or message.chat.id} (ID: <code>{message.chat.id}</code>)\n"
+                        f"Boshqa bot: @{message.from_user.username or message.from_user.full_name}",
+                    )
+                except Exception:
+                    logger.exception("Superadminga bot-loop ogohlantirishini yuborib bo'lmadi")
             return
 
         # Botga chindan MUROJAAT qilgan (tag/reply) HAR BIR foydalanuvchining
