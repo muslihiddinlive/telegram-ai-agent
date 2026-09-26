@@ -11,6 +11,7 @@ from typing import Any, Callable, Awaitable
 
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
+import core.user_profile as user_profile
 
 # tools/diagrams.py rang-temasi MODUL DARAJASIDA global (set_theme() orqali
 # almashtiriladi) — shuning uchun bir vaqtning o'zida ikki xil temadagi
@@ -138,6 +139,30 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_user_profile",
+            "description": (
+                "Foydalanuvchining bio'sini (agar mavjud bo'lsa) va profil rasmini "
+                "oladi (rasmni to'g'ridan-to'g'ri chatga yuboradi). Username/ID/ism "
+                "kabi asosiy ma'lumotlar ALLAQACHON sizga har xabarda berilgan — "
+                "buni FAQAT bio yoki profil rasmi kerak bo'lganda chaqiring. "
+                "Boshqa birovning (o'zi emas) profilini so'rash FAQAT admin/"
+                "superadmin uchun ruxsat etilgan."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_user_id": {
+                        "type": "integer",
+                        "description": "Kimning profilini olish kerak — berilmasa, so'ragan odamning o'zi.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
     # TODO: o'zingizning agent-specific tool'laringizni (masalan "post_to_channel",
     # "list_my_channels" — core/channels.py bilan bog'liq) shu yerga qo'shing.
 ]
@@ -191,10 +216,19 @@ async def _create_diagram(user_id: int, args: dict, ctx: dict) -> dict:
         return {"error": str(e)}
 
 
+async def _get_user_profile(user_id: int, args: dict, ctx: dict) -> dict:
+    target_id = args.get("target_user_id") or user_id
+    return await user_profile.get_full_profile(
+        ctx["bot"], requester_id=user_id, target_user_id=target_id,
+        chat_id=ctx["chat_id"], thread_id=ctx["thread_id"],
+    )
+
+
 DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "remember_note": _remember_note,
     "create_presentation": _create_presentation,
     "create_diagram": _create_diagram,
+    "get_user_profile": _get_user_profile,
 }
 
 

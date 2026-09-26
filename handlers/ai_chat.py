@@ -26,6 +26,7 @@ import core.preview_tokens as preview_tokens
 import core.file_cleanup as file_cleanup
 import core.ai_persona as ai_persona
 import core.bot_identity as bot_identity
+import core.user_profile as user_profile
 from core.markdown_format import markdown_to_telegram_html
 
 GROUP_CHAT_TYPES = ("group", "supergroup")
@@ -84,12 +85,13 @@ async def handle_message(message: Message):
             await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
             return
 
-    ctx = {"bot": message.bot}
+    ctx = {"bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id}
     thread_id = message.message_thread_id  # shaxsiy chatdagi topic bo'lsa to'ldiriladi
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
     history = topic_sessions.get_history(user_id, thread_id)
     system_prompt = ai_persona.get_full_system_prompt()
+    system_prompt += f"\n\n{user_profile.basic_info_line(message)}"
     # DOIMIY eslatmalar (remember_note orqali saqlangan) — topic tarixidan farqli
     # o'laroq, bular HAR DOIM (20-xabar chegarasidan tashqari ham) qo'shiladi.
     saved_notes = get_user_notes(user_id)

@@ -57,6 +57,21 @@ suhbatlari va saqlangan eslatmalari admin tomonidan ko'rilishi/nazorat
 qilinishi mumkinligini bildirish (masalan `/start` xabarida bir qatorda)
 tavsiya etiladi — bu kod darajasida majburlanmagan, faqat tavsiya.
 
+## Foydalanuvchi profili — username, ID, ism, bio, profil rasmi
+- **Avtomatik (har xabarda, qo'shimcha so'rovsiz)**: username, ID, ism,
+  familiya — `core/user_profile.basic_info_line()` orqali AI'ning system
+  promptiga qo'shiladi (`handlers/ai_chat.py`)
+- **Talab bo'yicha (AI tool, faqat kerak bo'lganda)**: `get_user_profile` —
+  bio'ni oladi (`bot.get_chat`) va eng so'nggi profil rasmini chatga
+  yuboradi (`bot.get_user_profile_photos` + `send_photo`)
+- **Maxfiylik**: o'z profilini har kim so'rashi mumkin; **boshqa birovning**
+  profilini FAQAT admin/superadmin so'rashi mumkin — oddiy user so'rasa,
+  aniq xato qaytariladi. Test qilindi: o'zini so'rash, boshqa birovni admin
+  emas holda so'rash (bloklanadi), superadmin sifatida so'rash (ruxsat) —
+  barchasi to'g'ri ishladi.
+- **Cheklov**: bio faqat bot bilan SHAXSIY chatni boshlagan foydalanuvchilar
+  uchun olinishi mumkin (Telegram API cheklovi).
+
 ## AI o'z imkoniyatlarini biladi (CAPABILITIES_BLOCK)
 `core/ai_persona.py`dagi `CAPABILITIES_BLOCK` — botning barcha imkoniyatlari
 (hujjatlar, prezentatsiya/diagramma, rasm+OCR, arxiv, internet qidiruv,
