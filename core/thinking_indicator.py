@@ -51,10 +51,11 @@ FUNNY_THINKING_PHRASES = [
 
 
 class ThinkingIndicator:
-    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None):
+    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, reply_to_message_id: int | None = None):
         self.bot = bot
         self.chat_id = chat_id
         self.thread_id = thread_id
+        self.reply_to_message_id = reply_to_message_id
         self._draft_id = random.randint(1, 2**31 - 1)
         self._mode = "fallback"  # "rich" | "native" | "fallback"
         self._task: asyncio.Task | None = None
@@ -166,6 +167,7 @@ class ThinkingIndicator:
                     chat_id=self.chat_id,
                     message_thread_id=self.thread_id,
                     rich_message=InputRichMessage(html=final_text),
+                    reply_parameters=self._reply_parameters(),
                 )
                 return
             except Exception as e:
@@ -173,5 +175,19 @@ class ThinkingIndicator:
 
         # "native" va "fallback" (typing) rejimlarida ko'rinadigan xabar
         # yaratilmagan — ikkalasida ham yakuniy javobni oddiy yangi xabar
-        # sifatida yuboramiz.
-        await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
+        # sifatida yuboramiz. Foydalanuvchi/bot yozgan xabarga REPLY qilib
+        # yuboriladi (kim yozganini aniq bildiradi, guruhda bir nechta
+        # AI-bot bir-biriga javob berayotganda ham aralashib ketmasligi uchun).
+        await self.bot.send_message(
+            self.chat_id, final_text, message_thread_id=self.thread_id,
+            reply_parameters=self._reply_parameters(),
+        )
+
+    def _reply_parameters(self):
+        if self.reply_to_message_id is None:
+            return None
+        from aiogram.types import ReplyParameters
+        return ReplyParameters(
+            message_id=self.reply_to_message_id,
+            allow_sending_without_reply=True,  # asl xabar o'chirilgan bo'lsa ham, javob baribir yuborilsin
+        )

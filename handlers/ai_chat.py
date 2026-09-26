@@ -111,7 +111,8 @@ async def handle_message(message: Message):
     messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_text}]
 
     indicator = await ThinkingIndicator(
-        bot=message.bot, chat_id=message.chat.id, thread_id=thread_id
+        bot=message.bot, chat_id=message.chat.id, thread_id=thread_id,
+        reply_to_message_id=message.message_id,
     ).start()
 
     final_text = "..."       # Telegram'ga YUBORILADIGAN (HTML'ga o'girilgan) matn
@@ -168,7 +169,7 @@ async def handle_message(message: Message):
 
         if not os.path.isfile(file_path):
             logger.warning("Tool '%s' file_path qaytardi, lekin fayl diskda topilmadi: %s", tool_name, file_path)
-            await message.answer(f"⚠️ Fayl yaratildi deb ko'rsatildi, lekin topilmadi: {os.path.basename(file_path)}")
+            await message.reply(f"⚠️ Fayl yaratildi deb ko'rsatildi, lekin topilmadi: {os.path.basename(file_path)}")
             continue
 
         try:
@@ -181,16 +182,20 @@ async def handle_message(message: Message):
             # message_thread_id BERILMAYDI — aiogram buni message.is_topic_message
             # orqali o'zi avtomatik to'g'ri biriktiradi; qo'lda ham berilsa,
             # "got multiple values for keyword argument" xatosi chiqadi.
-            await message.answer_document(
+            # reply_document — foydalanuvchi/botning ASL xabariga REPLY qilib
+            # yuboradi (kim so'ragani aniq bo'lishi uchun, guruhda bir nechta
+            # AI-bot bir-biriga javob berayotganda ham aralashib ketmasin).
+            await message.reply_document(
                 FSInputFile(file_path),
                 caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
                 reply_markup=kb,
+                allow_sending_without_reply=True,
             )
         except Exception as e:
             # ENG MUHIMI: avval bu yerda xatolik jimgina yutilib ketardi (foydalanuvchi
             # "Tayyor" degan xabardan keyin hech narsa ko'rmasdi). Endi xato ko'rinadi.
             logger.exception("Faylni yuborishda xatolik: %s", file_path)
-            await message.answer(f"⚠️ Faylni yuborishda xatolik: {e}")
+            await message.reply(f"⚠️ Faylni yuborishda xatolik: {e}")
             continue
 
         # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
