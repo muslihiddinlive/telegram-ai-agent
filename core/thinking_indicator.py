@@ -64,41 +64,51 @@ class ThinkingIndicator:
     async def start(self):
         self._start = time.monotonic()
 
+        # sendRichMessageDraft/sendMessageDraft — rasmiy Bot API bo'yicha
+        # FAQAT shaxsiy (private) chatlar uchun ishlaydi (guruh/supergroup/
+        # kanalda umuman qo'llab-quvvatlanmaydi). Telegram'da guruh/kanal
+        # chat_id'lari doim MANFIY son, shaxsiy chat_id'lar esa MUSBAT —
+        # shu bilan guruhda A/B'ni bekorga urinib ko'rmasdan, to'g'ridan-to'g'ri
+        # C (typing) ga o'tamiz.
+        is_private_chat = self.chat_id > 0
+
         # A) Eng yaxshisi — sendRichMessageDraft + <tg-thinking>: logo + o'z matnimiz
-        try:
-            await self.bot.send_rich_message_draft(
-                chat_id=self.chat_id,
-                draft_id=self._draft_id,
-                message_thread_id=self.thread_id,
-                rich_message=InputRichMessage(html=f"<tg-thinking>{FUNNY_THINKING_PHRASES[0]}</tg-thinking>"),
-            )
-            self._mode = "rich"
-            self._task = asyncio.create_task(self._refresh_rich_loop())
-            return self
-        except Exception as e:
-            logger.info("sendRichMessageDraft ishlamadi (%s) — oddiy draft'ga o'tildi", e)
+        if is_private_chat:
+            try:
+                await self.bot.send_rich_message_draft(
+                    chat_id=self.chat_id,
+                    draft_id=self._draft_id,
+                    message_thread_id=self.thread_id,
+                    rich_message=InputRichMessage(html=f"<tg-thinking>{FUNNY_THINKING_PHRASES[0]}</tg-thinking>"),
+                )
+                self._mode = "rich"
+                self._task = asyncio.create_task(self._refresh_rich_loop())
+                return self
+            except Exception as e:
+                logger.info("sendRichMessageDraft ishlamadi (%s) — oddiy draft'ga o'tildi", e)
 
-        # B) O'rtacha — sendMessageDraft (text="" — logo bor, matn yo'q)
-        try:
-            await self.bot.send_message_draft(
-                chat_id=self.chat_id, draft_id=self._draft_id,
-                message_thread_id=self.thread_id, text="",
-            )
-            self._mode = "native"
-            self._task = asyncio.create_task(self._refresh_native_loop())
-            return self
-        except Exception as e:
-            logger.info("sendMessageDraft ham ishlamadi (%s) — matnli fallback'ga o'tildi", e)
+            # B) O'rtacha — sendMessageDraft (text="" — logo bor, matn yo'q)
+            try:
+                await self.bot.send_message_draft(
+                    chat_id=self.chat_id, draft_id=self._draft_id,
+                    message_thread_id=self.thread_id, text="",
+                )
+                self._mode = "native"
+                self._task = asyncio.create_task(self._refresh_native_loop())
+                return self
+            except Exception as e:
+                logger.info("sendMessageDraft ham ishlamadi (%s) — matnli fallback'ga o'tildi", e)
 
-        # C) Eng oxirgi chora — hech qanday xabar yubormasdan, native
+        # C) Eng oxirgi chora (yoki guruh/kanal bo'lsa — TO'G'RIDAN-TO'G'RI shu
+        # yerdan boshlanadi) — hech qanday xabar yubormasdan, native
         # "<Bot> yozmoqda..." (typing) holatini ko'rsatamiz
         self._mode = "fallback"
         try:
             await self.bot.send_chat_action(
                 self.chat_id, action="typing", message_thread_id=self.thread_id
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("send_chat_action ishlamadi: %s", e)
         self._task = asyncio.create_task(self._tick_fallback())
         return self
 
