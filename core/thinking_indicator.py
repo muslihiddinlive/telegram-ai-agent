@@ -17,7 +17,13 @@ Shuning uchun ustuvorlik tartibi:
      ENG YAXSHISI: logo HAM, o'zimizning matn HAM birga
   B) sendMessageDraft (text="") — logo bor, lekin matn moslashtirib
      bo'lmaydi (agar A ishlamasa, masalan aiogram/Bot API versiyasi eski)
-  C) Oddiy xabar + qo'lda edit qilish — hech biri ishlamasa (eng oxirgi chora)
+  C) `sendChatAction(action="typing")` — hech biri ishlamasa (eng oxirgi
+     chora). Bu — Telegram'ning eski/klassik "<Bot> yozmoqda..." indikatori
+     (foydalanuvchi terayotganda chiqadigan xabar bilan bir xil turkum),
+     HECH QANDAY xabar yubormaydi — shuning uchun guruhda "Miyamni ishga
+     solyapman..." kabi matn ko'rinib qolmaydi. ~5 soniyada bir marta
+     avtomatik o'chadi, shuning uchun tayyor bo'lgunicha davriy ravishda
+     qayta yuborib turiladi.
 
 Manba: https://core.telegram.org/bots/api#sendrichmessagedraft
        https://core.telegram.org/bots/api#sendmessagedraft
@@ -27,11 +33,12 @@ import logging
 import random
 import time
 from aiogram import Bot
-from aiogram.types import Message, InputRichMessage
+from aiogram.types import InputRichMessage
 
 logger = logging.getLogger("thinking_indicator")
 
 DRAFT_REFRESH_SECONDS = 20  # draft 30s'da tugaydi — shundan oldin yangilaymiz
+CHAT_ACTION_REFRESH_SECONDS = 4  # "typing" holati ~5s'da tugaydi — shundan oldin yangilaymiz
 
 FUNNY_THINKING_PHRASES = [
     "Miyamni ishga solyapman...",
@@ -44,14 +51,12 @@ FUNNY_THINKING_PHRASES = [
 
 
 class ThinkingIndicator:
-    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None, label: str | None = None):
+    def __init__(self, bot: Bot, chat_id: int, thread_id: int | None = None):
         self.bot = bot
         self.chat_id = chat_id
         self.thread_id = thread_id
-        self.label = label or random.choice(FUNNY_THINKING_PHRASES)
         self._draft_id = random.randint(1, 2**31 - 1)
         self._mode = "fallback"  # "rich" | "native" | "fallback"
-        self._msg: Message | None = None  # faqat "fallback" rejimida ishlatiladi
         self._task: asyncio.Task | None = None
         self._start = 0.0
         self._phrase_index = 0
@@ -85,11 +90,15 @@ class ThinkingIndicator:
         except Exception as e:
             logger.info("sendMessageDraft ham ishlamadi (%s) — matnli fallback'ga o'tildi", e)
 
-        # C) Eng oxirgi chora — oddiy xabar + qo'lda edit
+        # C) Eng oxirgi chora — hech qanday xabar yubormasdan, native
+        # "<Bot> yozmoqda..." (typing) holatini ko'rsatamiz
         self._mode = "fallback"
-        self._msg = await self.bot.send_message(
-            self.chat_id, f"🌀 {self.label}", message_thread_id=self.thread_id
-        )
+        try:
+            await self.bot.send_chat_action(
+                self.chat_id, action="typing", message_thread_id=self.thread_id
+            )
+        except Exception:
+            pass
         self._task = asyncio.create_task(self._tick_fallback())
         return self
 
@@ -126,17 +135,14 @@ class ThinkingIndicator:
     async def _tick_fallback(self):
         try:
             while True:
-                await asyncio.sleep(1.5)
-                elapsed = int(time.monotonic() - self._start)
-                await self.bot.edit_message_text(
-                    f"🌀 {self.label} ({elapsed}s)",
-                    chat_id=self.chat_id,
-                    message_id=self._msg.message_id,
+                await asyncio.sleep(CHAT_ACTION_REFRESH_SECONDS)
+                await self.bot.send_chat_action(
+                    self.chat_id, action="typing", message_thread_id=self.thread_id
                 )
         except asyncio.CancelledError:
             pass
         except Exception:
-            pass  # "message not modified" kabi xatolar — e'tiborsiz qoldiramiz
+            pass  # tarmoq/limit xatolari — e'tiborsiz qoldiramiz
 
     async def finish(self, final_text: str):
         if self._task:
@@ -155,12 +161,7 @@ class ThinkingIndicator:
             except Exception as e:
                 logger.warning("send_rich_message muvaffaqiyatsiz (%s) — oddiy send_message bilan", e)
 
-        if self._mode in ("rich", "native"):
-            await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
-        else:
-            try:
-                await self.bot.edit_message_text(
-                    final_text, chat_id=self.chat_id, message_id=self._msg.message_id
-                )
-            except Exception:
-                await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
+        # "native" va "fallback" (typing) rejimlarida ko'rinadigan xabar
+        # yaratilmagan — ikkalasida ham yakuniy javobni oddiy yangi xabar
+        # sifatida yuboramiz.
+        await self.bot.send_message(self.chat_id, final_text, message_thread_id=self.thread_id)
