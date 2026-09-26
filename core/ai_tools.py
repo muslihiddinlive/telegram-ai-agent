@@ -163,6 +163,26 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_user",
+            "description": (
+                "Botga yozgan foydalanuvchilar orasidan ism, username yoki ID "
+                "bo'yicha qidiradi (masalan admin 'Azizbek kim edi?' yoki "
+                "'@ali qanday foydalanyapti?' desa). FAQAT admin/superadmin "
+                "uchun ishlaydi — oddiy foydalanuvchi so'rasa, bu tool'dan "
+                "foydalanmang va boshqalar haqida ma'lumot bermang."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Qidiruv so'zi — ism, @username, yoki ID"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
     # TODO: o'zingizning agent-specific tool'laringizni (masalan "post_to_channel",
     # "list_my_channels" — core/channels.py bilan bog'liq) shu yerga qo'shing.
 ]
@@ -224,11 +244,36 @@ async def _get_user_profile(user_id: int, args: dict, ctx: dict) -> dict:
     )
 
 
+async def _lookup_user(user_id: int, args: dict, ctx: dict) -> dict:
+    import core.roles as roles
+    if not (roles.is_superadmin(user_id) or roles.is_admin(user_id)):
+        return {"error": "Bu ma'lumot faqat admin/superadmin uchun mavjud."}
+
+    matches = roles.search_users(args["query"])
+    if not matches:
+        return {"result": "Hech narsa topilmadi."}
+
+    return {
+        "matches": [
+            {
+                "id": uid,
+                "name": rec.get("name"),
+                "username": rec.get("username"),
+                "role": rec.get("role"),
+                "daily_limit": rec.get("daily_limit"),
+                "requests_today": rec.get("requests_today", 0),
+            }
+            for uid, rec in list(matches.items())[:10]
+        ]
+    }
+
+
 DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "remember_note": _remember_note,
     "create_presentation": _create_presentation,
     "create_diagram": _create_diagram,
     "get_user_profile": _get_user_profile,
+    "lookup_user": _lookup_user,
 }
 
 

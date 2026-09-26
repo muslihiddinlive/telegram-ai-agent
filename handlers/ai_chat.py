@@ -63,6 +63,11 @@ async def handle_message(message: Message):
         if not (is_mentioned or is_reply_to_bot):
             return
 
+        # Botga chindan MUROJAAT qilgan (tag/reply) HAR BIR foydalanuvchining
+        # ID+ism+username'i sukut bo'yicha, sezilmasdan yangilanadi — admin
+        # keyinchalik AI orqali "Falonchi kim edi?" deb topa olishi uchun.
+        await roles.touch_user_identity(message.bot, user_id, message.from_user.full_name, message.from_user.username)
+
         # Guruh admini /guruh_ruxsat bilan ro'yxat o'rnatgan bo'lsa, ro'yxatda
         # yo'q foydalanuvchilarga bot BUTUNLAY jim qoladi
         if not group_permissions.is_allowed_in_group(message.chat.id, message.from_user.username):
@@ -77,6 +82,10 @@ async def handle_message(message: Message):
         user_text = _strip_bot_mention(message.text, bot_username)
 
     else:
+        # SHAXSIY chatda yozgan HAR BIR foydalanuvchining ID+ism+username'i
+        # ham sukut bo'yicha yangilanadi (hatto hali tasdiqlanmagan bo'lsa ham)
+        await roles.touch_user_identity(message.bot, user_id, message.from_user.full_name, message.from_user.username)
+
         # SHAXSIY chatda — global tasdiqlash SHART
         if not roles.can_use_bot(user_id):
             await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")

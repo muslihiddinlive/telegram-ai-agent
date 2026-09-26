@@ -27,7 +27,28 @@ def _bucket(user_id: int) -> dict:
         "requests_today": 0,
         "last_reset": today_str(),
         "name": None,
+        "username": None,
     })
+
+
+async def touch_user_identity(bot, user_id: int, name: str | None, username: str | None):
+    """
+    Botga yozgan HAR BIR foydalanuvchining ID'si + ism/username'ini
+    doimiy yangilab boradi (foydalanuvchi buni sezmaydi — sukut bo'yicha
+    ishlaydi). Admin keyinchalik AI orqali "Falonchi kim edi?" desa
+    topa olishi uchun kerak (core/ai_tools.py -> lookup_user tool).
+    Har xabarda chaqirilgani uchun DEBOUNCED save (force=False) ishlatiladi.
+    """
+    rec = _bucket(user_id)
+    changed = False
+    if name and rec.get("name") != name:
+        rec["name"] = name
+        changed = True
+    if username and rec.get("username") != username:
+        rec["username"] = username
+        changed = True
+    if changed:
+        await tgdb.save(bot)
 
 
 def today_str() -> str:
@@ -224,8 +245,10 @@ def search_users(query: str) -> dict:
     if query.isdigit() and query in db["users"]:
         return {query: db["users"][query]}
 
-    query_lower = query.lower()
+    query_lower = query.lstrip("@").lower()
     return {
         uid: rec for uid, rec in db["users"].items()
-        if query_lower in (rec.get("name") or "").lower() or query_lower in uid
+        if query_lower in (rec.get("name") or "").lower()
+        or query_lower in (rec.get("username") or "").lower()
+        or query_lower in uid
     }

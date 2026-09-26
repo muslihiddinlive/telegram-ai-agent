@@ -57,6 +57,21 @@ suhbatlari va saqlangan eslatmalari admin tomonidan ko'rilishi/nazorat
 qilinishi mumkinligini bildirish (masalan `/start` xabarida bir qatorda)
 tavsiya etiladi — bu kod darajasida majburlanmagan, faqat tavsiya.
 
+## Botga yozgan HAR BIR foydalanuvchining ID+ism+username'i doimiy saqlanadi
+`core/roles.touch_user_identity()` — botga chindan murojaat qilgan (shaxsiy
+chatda yozgan, YOKI guruhda tag/reply qilgan) har bir foydalanuvchining
+ID+ism+username'i sukut bo'yicha, **foydalanuvchi buni sezmasdan** yangilanadi
+(`handlers/ai_chat.py`da avtomatik chaqiriladi). Bu, hatto foydalanuvchi
+hali tasdiqlanmagan (pending) bo'lsa ham, ishlaydi.
+
+**Admin uchun qulaylik**: `lookup_user` AI tool'i — admin/superadmin AI bilan
+tabiiy tilda gaplashib, "Azizbek kim edi?", "@ali qanday foydalanyapti?"
+desa, AI ism/username/ID bo'yicha qidirib, ID/rol/limit/bugungi ishlatilgan
+sonini aytib beradi. **Oddiy foydalanuvchi bu tool'dan foydalana olmaydi**
+(admin/superadmin tekshiruvi bilan himoyalangan). Test qilindi: avtomatik
+saqlash, ism/username bo'yicha qidiruv, oddiy user bloklanishi, admin
+ruxsati — barchasi to'g'ri ishladi.
+
 ## Foydalanuvchi profili — username, ID, ism, bio, profil rasmi
 - **Avtomatik (har xabarda, qo'shimcha so'rovsiz)**: username, ID, ism,
   familiya — `core/user_profile.basic_info_line()` orqali AI'ning system
