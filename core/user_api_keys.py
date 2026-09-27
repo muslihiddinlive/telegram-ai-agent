@@ -20,6 +20,40 @@ PROVIDER_LABELS = {
 }
 
 
+DEFAULT_MODELS = {
+    "groq": "llama-3.3-70b-versatile",
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-3-5-haiku-20241022",
+    "deepseek": "deepseek-chat",
+}
+
+
+def pack_value(api_key: str, model: str | None) -> str:
+    """Rasmiy provayderlar (groq/openai/anthropic/deepseek) uchun: agar
+    foydalanuvchi standart model o'rniga BOSHQA model kiritgan bo'lsa
+    (masalan Anthropic uchun "claude-opus-5-5"), api_key+model'ni JSON'ga
+    yig'amiz. Model berilmasa — ORQAGA MOSLIK uchun oddiy api_key STRING
+    qaytariladi (eski saqlangan kalitlar bilan bir xil format)."""
+    api_key = api_key.strip()
+    if model:
+        return json.dumps({"api_key": api_key, "model": model.strip()})
+    return api_key
+
+
+def unpack_value(value: str) -> tuple[str, str | None]:
+    """pack_value() teskarisi: (api_key, model_yoki_None) qaytaradi.
+    Oddiy (JSON bo'lmagan) qator kelsa — u to'g'ridan-to'g'ri api_key
+    hisoblanadi va model=None (standart model ishlatiladi)."""
+    stripped = value.strip()
+    if stripped[:1] == "{":
+        try:
+            data = json.loads(stripped)
+            return data["api_key"], data.get("model")
+        except (ValueError, KeyError, TypeError):
+            pass
+    return value, None
+
+
 def pack_custom(base_url: str, model: str, api_key: str) -> str:
     """"custom" provayder uchun base_url+model+api_key BITTA qatorga (JSON) yig'iladi —
     accounts_store bitta STRING'ni shifrlab saqlaydi, shuning uchun uchalasini
@@ -65,34 +99,38 @@ async def validate_key(provider: str, api_key: str) -> tuple[bool, str]:
     """Kalitni saqlashdan OLDIN haqiqatan ishlashini tekshiradi (kichik test so'rov)."""
     try:
         if provider == "groq":
+            real_key, model = unpack_value(api_key)
             from groq import AsyncGroq
-            client = AsyncGroq(api_key=api_key)
+            client = AsyncGroq(api_key=real_key)
             await client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=model or DEFAULT_MODELS["groq"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )
         elif provider == "openai":
+            real_key, model = unpack_value(api_key)
             from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=api_key)
+            client = AsyncOpenAI(api_key=real_key)
             await client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model or DEFAULT_MODELS["openai"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )
         elif provider == "anthropic":
+            real_key, model = unpack_value(api_key)
             from anthropic import AsyncAnthropic
-            client = AsyncAnthropic(api_key=api_key)
+            client = AsyncAnthropic(api_key=real_key)
             await client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=model or DEFAULT_MODELS["anthropic"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )
         elif provider == "deepseek":
+            real_key, model = unpack_value(api_key)
             from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            client = AsyncOpenAI(api_key=real_key, base_url="https://api.deepseek.com")
             await client.chat.completions.create(
-                model="deepseek-chat",
+                model=model or DEFAULT_MODELS["deepseek"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )
@@ -103,11 +141,17 @@ async def validate_key(provider: str, api_key: str) -> tuple[bool, str]:
             info = unpack_custom(api_key)
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=info["api_key"], base_url=info["base_url"])
-            await client.chat.completions.create(
+            resp = await client.chat.completions.create(
                 model=info["model"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )
+            if not hasattr(resp, "choices") or not resp.choices:
+                return False, (
+                    "Bu API 'choices' maydonini qaytarmadi — to'liq OpenAI-mos emas "
+                    "(masalan, Anthropic'ning RASMIY manzili OpenAI formatida ishlamaydi — "
+                    "buning uchun 'Anthropic (Claude) ulash' tugmasidan foydalaning)."
+                )
         else:
             return False, f"Noma'lum provayder: {provider}"
         return True, ""

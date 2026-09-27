@@ -73,9 +73,16 @@ async def add_key_start(call: CallbackQuery):
             "(masalan: <code>https://api.masalan.com/v1</code>):"
         )
     else:
-        pending_input.set(call.from_user.id, "apikey_wait_value", {"provider": provider})
+        # Rasmiy provayderlar uchun ham MODEL nomini o'zgartirish ixtiyoriy —
+        # standart modelni xohlamasa, masalan Anthropic uchun "claude-opus-5-5"
+        # kabi boshqa model kiritishi mumkin.
+        pending_input.set(call.from_user.id, "apikey_wait_model_optional", {"provider": provider})
         label = user_api_keys.PROVIDER_LABELS[provider]
-        await call.message.answer(f"{label} API kalitingizni shu yerga yuboring:")
+        default_model = user_api_keys.DEFAULT_MODELS.get(provider, "standart")
+        await call.message.answer(
+            f"🧩 {label} uchun MODEL nomini kiriting.\n"
+            f"Standart: <code>{default_model}</code> — buni xohlasangiz shunchaki <code>-</code> yuboring."
+        )
     await call.answer()
 
 

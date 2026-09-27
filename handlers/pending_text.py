@@ -143,6 +143,14 @@ async def handle_pending(message: Message):
         else:
             await message.answer(f"🔍 \"{text}\" bo'yicha natijalar:", reply_markup=kb)
 
+    # ── Rasmiy provayder: model nomini o'zgartirish ixtiyoriy ("-" = standart) ──
+    elif action == "apikey_wait_model_optional":
+        model = text.strip()
+        model = None if model in ("-", "") else model
+        pending_input.set(user_id, "apikey_wait_value", {"provider": data["provider"], "model": model})
+        label = user_api_keys.PROVIDER_LABELS[data["provider"]]
+        await message.answer(f"🔑 Endi {label} API kalitingizni yuboring:")
+
     # ── Norasmiy/OpenAI-mos API: 1-bosqich (base_url) ──
     elif action == "apikey_wait_base_url":
         base_url = text.strip()
@@ -169,8 +177,9 @@ async def handle_pending(message: Message):
             ok, error = await user_api_keys.validate_key("custom", combined)
             value_to_save = combined
         else:
-            ok, error = await user_api_keys.validate_key(provider, text)
-            value_to_save = text
+            model_override = data.get("model")
+            value_to_save = user_api_keys.pack_value(text, model_override)
+            ok, error = await user_api_keys.validate_key(provider, value_to_save)
         if ok:
             await user_api_keys.save_personal_key(message.bot, user_id, provider, value_to_save)
             pending_input.clear(user_id)

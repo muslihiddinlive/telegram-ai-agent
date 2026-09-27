@@ -201,11 +201,23 @@ class MultiProviderAI:
         raise AllKeysExhaustedError(f"Barcha provayderlar ishlamadi: {last_err}")
 
     async def _call(self, provider: str, key: str, messages: list[dict], tools: list[dict] | None):
+        # Ba'zi kalitlar (shaxsiv, core/user_api_keys.py orqali ulangan)
+        # ICHIDA o'zgartirilgan MODEL nomini ham olib yurishi mumkin
+        # (masalan Anthropic uchun "claude-opus-5-5"). unpack_value() buni
+        # ochadi; umumiy (ADMIN) kalitlar oddiy STRING bo'lgani uchun
+        # xavfsiz — o'zgarishsiz qaytadi, model=None (standart ishlatiladi).
+        # "custom" BUNDAN MUSTASNO — u butunlay boshqa (base_url+model+
+        # api_key) formatda, pastda o'zining unpack_custom()'i bilan ochiladi.
+        model_override = None
+        if provider != "custom":
+            import core.user_api_keys as user_api_keys
+            key, model_override = user_api_keys.unpack_value(key)
+
         if provider == "groq":
             from groq import AsyncGroq
             client = AsyncGroq(api_key=key)
             return await client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=model_override or "llama-3.3-70b-versatile",
                 messages=messages,
                 tools=tools,
                 max_tokens=1500,
@@ -215,7 +227,7 @@ class MultiProviderAI:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=key)
             return await client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model_override or "gpt-4o-mini",
                 messages=messages,
                 tools=tools,
                 max_tokens=1500,
@@ -226,7 +238,7 @@ class MultiProviderAI:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=key, base_url="https://api.deepseek.com")
             return await client.chat.completions.create(
-                model="deepseek-chat",
+                model=model_override or "deepseek-chat",
                 messages=messages,
                 tools=tools,
                 max_tokens=1500,
@@ -255,7 +267,7 @@ class MultiProviderAI:
             from anthropic import AsyncAnthropic
             client = AsyncAnthropic(api_key=key)
             resp = await client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=model_override or "claude-3-5-sonnet-20241022",
                 max_tokens=1500,
                 system="\n\n".join(system_texts) if system_texts else None,
                 messages=non_system_messages,
@@ -278,12 +290,24 @@ class MultiProviderAI:
             info = user_api_keys.unpack_custom(key)
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=info["api_key"], base_url=info["base_url"])
-            return await client.chat.completions.create(
+            resp = await client.chat.completions.create(
                 model=info["model"],
                 messages=messages,
                 tools=tools,
                 max_tokens=1500,
             )
+            # Ba'zi "norasmiy" xizmatlar to'liq OpenAI sxemasiga rioya
+            # qilmaydi (masalan Anthropic'ning ASL API'si — u OpenAI-mos
+            # EMAS, boshqa endpoint/format ishlatadi). Shunday holatda tushunarsiz
+            # "'str' object has no attribute 'choices'" o'rniga ANIQ xabar beramiz.
+            if not hasattr(resp, "choices") or not resp.choices:
+                raise RuntimeError(
+                    "Bu API 'choices' maydonini qaytarmadi — ya'ni to'liq OpenAI-mos "
+                    "emas (masalan, Anthropic'ning RASMIY api.anthropic.com manzili "
+                    "OpenAI formatida ISHLAMAYDI — buning uchun 'Anthropic (Claude) ulash' "
+                    f"tugmasidan foydalaning). Xom javob: {str(resp)[:300]}"
+                )
+            return resp
 
         raise ValueError(f"Noma'lum provayder: {provider}")
 
