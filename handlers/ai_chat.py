@@ -136,26 +136,37 @@ async def handle_message(message: Message):
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
     history = topic_sessions.get_history(user_id, thread_id)
-    system_prompt = ai_persona.get_full_system_prompt()
-    system_prompt += f"\n\n{user_profile.basic_info_line(message)}"
-    if is_group:
-        # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
-        # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
-        # (o'sha holatlarda tabiiy ravishda batafsilroq bo'lishi kerak bo'lsa).
-        system_prompt += (
-            "\n\nMUHIM (guruh chati): javobingiz QISQA bo'lsin — odatda 1-4 gap "
-            "yetarli. Faqat foydalanuvchi ANIQ batafsil tushuntirish so'rasa, "
-            "yoki hujjat/fayl/kod yaratish kabi vazifa uzunroq matn talab qilsa, "
-            "shundagina kengroq yozing."
-        )
-    # DOIMIY eslatmalar (remember_note orqali saqlangan) — topic tarixidan farqli
-    # o'laroq, bular HAR DOIM (20-xabar chegarasidan tashqari ham) qo'shiladi.
-    saved_notes = get_user_notes(user_id)
-    if saved_notes:
-        notes_block = "\n".join(f"- {n}" for n in saved_notes)
-        system_prompt += f"\n\nBu foydalanuvchi haqida siz avval eslab qolgan narsalar:\n{notes_block}"
 
-    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_text}]
+    # Foydalanuvchi O'ZINING shaxsiy AI API kalitini ulagan bo'lsa (/apikalit) —
+    # bizning "Paradoks AI" system prompt/personasi ULARGA QO'LLANILMAYDI.
+    # Sabab: bu ularning O'Z hisobi/puli bilan ishlaydigan so'rov — cheklov yoki
+    # majburiy uslub kerak emas, "xom" (system prompt'siz) AI bilan gaplashadi.
+    import core.user_api_keys as user_api_keys
+    uses_personal_key = user_api_keys.get_any_personal_key(user_id) is not None
+
+    if uses_personal_key:
+        messages = history + [{"role": "user", "content": user_text}]
+    else:
+        system_prompt = ai_persona.get_full_system_prompt()
+        system_prompt += f"\n\n{user_profile.basic_info_line(message)}"
+        if is_group:
+            # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
+            # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
+            # (o'sha holatlarda tabiiy ravishda batafsilroq bo'lishi kerak bo'lsa).
+            system_prompt += (
+                "\n\nMUHIM (guruh chati): javobingiz QISQA bo'lsin — odatda 1-4 gap "
+                "yetarli. Faqat foydalanuvchi ANIQ batafsil tushuntirish so'rasa, "
+                "yoki hujjat/fayl/kod yaratish kabi vazifa uzunroq matn talab qilsa, "
+                "shundagina kengroq yozing."
+            )
+        # DOIMIY eslatmalar (remember_note orqali saqlangan) — topic tarixidan farqli
+        # o'laroq, bular HAR DOIM (20-xabar chegarasidan tashqari ham) qo'shiladi.
+        saved_notes = get_user_notes(user_id)
+        if saved_notes:
+            notes_block = "\n".join(f"- {n}" for n in saved_notes)
+            system_prompt += f"\n\nBu foydalanuvchi haqida siz avval eslab qolgan narsalar:\n{notes_block}"
+
+        messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_text}]
 
     indicator = await ThinkingIndicator(
         bot=message.bot, chat_id=message.chat.id, thread_id=thread_id,
