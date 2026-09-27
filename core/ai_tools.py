@@ -380,13 +380,16 @@ async def _search_web(user_id: int, args: dict, ctx: dict) -> dict:
     # Uchalasi ham natija bermadi — ANIQ sabab bilan qaytaramiz (AI buni
     # ko'rib, foydalanuvchiga "qidiruv vaqtincha ishlamayapti" deya oladi,
     # xom "bo'sh javob"ni haqiqat sifatida taqdim etish o'rniga).
+    empty_label = "bo'sh natija"  # ALOHIDA o'zgaruvchi — Python 3.11'da f-string
+    # ICHIDA backslash/apostrof bilan murakkablashtirilgan literal bo'lishi mumkin emas.
+    ddg_reason = result.get("error") or empty_label
+    bing_reason = bing_result.get("error") or empty_label
     return {
         "query": query,
         "result_count": 0,
         "results": [],
         "error": (
-            f"Barcha qidiruv manbalari (DuckDuckGo: {result.get('error') or 'bo\u2019sh natija'}, "
-            f"Bing: {bing_result.get('error') or 'bo\u2019sh natija'}) natija bermadi."
+            f"Barcha qidiruv manbalari (DuckDuckGo: {ddg_reason}, Bing: {bing_reason}) natija bermadi."
         ),
     }
 
