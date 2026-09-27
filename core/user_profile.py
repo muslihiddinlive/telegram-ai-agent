@@ -1,15 +1,22 @@
 """
-Foydalanuvchi profili haqida ma'lumot — username/ID/ism kabi asosiylari HAR
-XABARDA avtomatik AI kontekstiga qo'shiladi (handlers/ai_chat.py), bio va
-profil rasmi esa alohida AI tool orqali (kerak bo'lgandagina so'raladi —
-har xabarda qo'shimcha so'rov yubormaslik uchun).
+Foydalanuvchi profili haqida ma'lumot — username/ID/ism VA bio HAR XABARDA
+avtomatik AI kontekstiga qo'shiladi (handlers/ai_chat.py). Profil RASMI esa
+alohida AI tool orqali (get_user_profile — kerak bo'lgandagina so'raladi,
+chunki rasm yuborish alohida amal, matn kontekstiga yozib bo'lmaydi).
 """
+import time
 from aiogram import Bot
 import core.roles as roles
 
+_bio_cache: dict[int, tuple[float, str | None]] = {}  # user_id -> (vaqt, bio)
+_BIO_CACHE_TTL = 600  # 10 daqiqa — HAR xabarda Telegram API'ga murojaat qilmaslik uchun
 
-def basic_info_line(message) -> str:
-    """Har bir xabarga qo'shiladigan qisqa ma'lumot qatori (qo'shimcha so'rovsiz)."""
+
+async def basic_info_line(bot: Bot, message) -> str:
+    """Har bir xabarga qo'shiladigan qisqa ma'lumot qatori. Endi BIO ham
+    shu yerda avtomatik o'qiladi (avval faqat alohida tool orqali so'ralar
+    edi) — foydalanuvchi buni har safar AI'dan so'ramasdan, kontekstda
+    doim tayyor bo'lishini xohladi."""
     u = message.from_user
     parts = [f"ID={u.id}"]
     if u.username:
@@ -19,6 +26,11 @@ def basic_info_line(message) -> str:
         name += f" {u.last_name}"
     if name:
         parts.append(f"ism=\"{name}\"")
+
+    bio = await get_bio(bot, u.id)
+    if bio:
+        parts.append(f"bio=\"{bio}\"")
+
     return "Xabar yuboruvchi haqida: " + ", ".join(parts)
 
 
@@ -26,12 +38,21 @@ async def get_bio(bot: Bot, user_id: int) -> str | None:
     """
     Bio faqat bot bilan SHAXSIY chatni boshlagan foydalanuvchilar uchun
     olinadi (Telegram API cheklovi — guruh a'zoligi orqali emas).
+
+    10 daqiqalik KESH bilan — chatmode/guruhda HAR xabarda Telegram'ga
+    qo'shimcha so'rov yubormaslik uchun (rate-limit xavfini kamaytiradi).
     """
+    now = time.monotonic()
+    cached = _bio_cache.get(user_id)
+    if cached and now - cached[0] < _BIO_CACHE_TTL:
+        return cached[1]
     try:
         chat = await bot.get_chat(user_id)
-        return getattr(chat, "bio", None)
+        bio = getattr(chat, "bio", None)
     except Exception:
-        return None
+        bio = None
+    _bio_cache[user_id] = (now, bio)
+    return bio
 
 
 async def send_profile_photo(bot: Bot, user_id: int, chat_id: int, thread_id: int | None) -> bool:

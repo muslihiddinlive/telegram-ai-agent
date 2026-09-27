@@ -148,7 +148,7 @@ async def handle_message(message: Message):
         messages = history + [{"role": "user", "content": user_text}]
     else:
         system_prompt = ai_persona.get_full_system_prompt()
-        system_prompt += f"\n\n{user_profile.basic_info_line(message)}"
+        system_prompt += f"\n\n{await user_profile.basic_info_line(message.bot, message)}"
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi

@@ -145,10 +145,10 @@ TOOLS: list[dict] = [
         "function": {
             "name": "get_user_profile",
             "description": (
-                "Foydalanuvchining bio'sini (agar mavjud bo'lsa) va profil rasmini "
-                "oladi (rasmni to'g'ridan-to'g'ri chatga yuboradi). Username/ID/ism "
-                "kabi asosiy ma'lumotlar ALLAQACHON sizga har xabarda berilgan — "
-                "buni FAQAT bio yoki profil rasmi kerak bo'lganda chaqiring. "
+                "Foydalanuvchining profil RASMINI oladi (to'g'ridan-to'g'ri chatga "
+                "yuboradi). Username/ID/ism/BIO kabi ma'lumotlar ALLAQACHON sizga "
+                "har xabarda berilgan — buni FAQAT profil rasmi kerak bo'lganda "
+                "(yoki boshqa birovning bio'sini qayta tekshirish uchun) chaqiring. "
                 "Boshqa birovning (o'zi emas) profilini so'rash FAQAT admin/"
                 "superadmin uchun ruxsat etilgan."
             ),
