@@ -166,6 +166,13 @@ async def handle_message(message: Message):
             notes_block = "\n".join(f"- {n}" for n in saved_notes)
             system_prompt += f"\n\nBu foydalanuvchi haqida siz avval eslab qolgan narsalar:\n{notes_block}"
 
+        # Suhbatning ESKI (endi so'z-ma-so'z tarixda saqlanmaydigan) qismi —
+        # "rolling summary" (core/history_summarizer.py) — shu tufayli suhbat
+        # qancha uzun bo'lmasin, muhim kontekst UMUMAN yo'qolmaydi.
+        conv_summary = topic_sessions.get_summary(user_id, thread_id)
+        if conv_summary:
+            system_prompt += f"\n\nSuhbatning OLDINGI (eski, xulosalangan) qismi:\n{conv_summary}"
+
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_text}]
 
     indicator = await ThinkingIndicator(
