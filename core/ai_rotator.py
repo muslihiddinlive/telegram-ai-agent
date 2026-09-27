@@ -16,11 +16,24 @@ import asyncio
 import itertools
 import json
 import logging
+import re
 import time
 
 import config
 
 logger = logging.getLogger("ai_rotator")
+
+# Ba'zi provayderlar (masalan xKiro kabi tashqi/proxy xizmatlar) AI model
+# tool-chaqiruv argumentini noto'g'ri turda yasasa (masalan massiv o'rniga
+# string, ya'ni "slides": "[...]" emas "slides": [...] kutilgan joyda),
+# XATOLIK (exception) tashlash o'rniga buni oddiy MATN javob (choice.content)
+# sifatida qaytarib yuboradi — foydalanuvchiga tushunarsiz texnik matn
+# ko'rinishida chiqib ketadi. Shu naqshni aniqlab, RATE-LIMIT bilan bir xil
+# yo'l bilan — keyingi provayderga avtomatik o'tib — tuzatamiz.
+_TOOL_FAILURE_PATTERNS = re.compile(
+    r"could not execute tool|expected (array|object|string|number|boolean),?\s*got|not valid json",
+    re.IGNORECASE,
+)
 
 
 class AllKeysExhaustedError(RuntimeError):
@@ -165,6 +178,19 @@ class MultiProviderAI:
             try:
                 key = await rotator.next_key()
                 response = await self._call(provider, key, messages, tools)
+
+                # Yuqoridagi izohga qarang: tool-argument turi xato bo'lib,
+                # provayder buni matn sifatida qaytarsa — keyingi provayderga
+                # o'tamiz (aks holda foydalanuvchi xom texnik xabar ko'radi).
+                msg = response.choices[0].message
+                if tools and not msg.tool_calls and msg.content and _TOOL_FAILURE_PATTERNS.search(msg.content):
+                    logger.warning(
+                        "%s tool-argument xatosi qaytardi, keyingi provayderga o'tildi: %s",
+                        provider, msg.content[:200],
+                    )
+                    last_err = RuntimeError(msg.content)
+                    continue
+
                 return {"provider": provider, "response": response, "personal": False}
             except Exception as e:  # rate-limit/quota/boshqa xato
                 last_err = e

@@ -7,6 +7,7 @@ Yangi tool qo'shish uchun: TOOLS ro'yxatiga yozuv qo'shing va DISPATCH
 lug'atiga funksiyani bog'lang. dispatch() AI tanlagan tool'ni chaqiradi.
 """
 from __future__ import annotations
+import json
 from typing import Any, Callable, Awaitable
 
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
@@ -277,7 +278,40 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
 }
 
 
+def _unstringify_json(value):
+    """
+    Ba'zi AI modellar (ayniqsa ochiq-og'irlikdagi modellar) ichma-ich
+    array/object'larni JSON-STRING sifatida yuboradi — masalan
+    {"slides": "[{...}, {...}]"} to'g'ri {"slides": [{...}, {...}]}
+    o'rniga. Bu — juda keng tarqalgan, hujjatlashtirilgan LLM
+    function-calling xatosi (ko'plab agentic frameworklarda uchraydi,
+    "double-encoded JSON" deb ataladi).
+
+    HAR bir tool chaqiruvida avtomatik tuzatiladi: agar qiymat '[' yoki
+    '{' bilan boshlanadigan STRING bo'lsa va json.loads muvaffaqiyatli
+    bo'lsa — natija ishlatiladi (rekursiv, ichkarida ham tekshiradi).
+    Aks holda qiymat o'zgarishsiz qoldiriladi (xato yashirilmaydi).
+    """
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped[:1] in ("[", "{"):
+            try:
+                parsed = json.loads(stripped)
+            except (ValueError, TypeError):
+                return value
+            return _unstringify_json(parsed)
+        return value
+    if isinstance(value, list):
+        return [_unstringify_json(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _unstringify_json(v) for k, v in value.items()}
+    return value
+
+
 async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
+    # Yuqoridagi izohga qarang — AI ba'zan array/object'ni JSON-string
+    # sifatida yuboradi, buni avtomatik tuzatamiz.
+    args = _unstringify_json(args)
     if is_file_tool(name):
         return await file_dispatch(name, user_id, args)
     fn = DISPATCH.get(name)
