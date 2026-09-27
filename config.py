@@ -18,4 +18,9 @@ OPENAI_API_KEYS = _split_keys("OPENAI_API_KEYS")
 ANTHROPIC_API_KEYS = _split_keys("ANTHROPIC_API_KEYS")
 DEEPSEEK_API_KEYS = _split_keys("DEEPSEEK_API_KEYS")
 
+# Tavily — AI-agentlar uchun maxsus qidiruv API'si (search_web tool uchun,
+# core/ai_tools.py). IXTIYORIY: berilmasa, search_web avtomatik DuckDuckGo/
+# Bing scraping'ga tushadi (kamroq ishonchli, lekin kalitsiz ham ishlaydi).
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+
 ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]  # Fernet.generate_key() bilan yarating

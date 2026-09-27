@@ -17,6 +17,7 @@ from typing import Any, Callable, Awaitable
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
+import config
 
 logger = logging.getLogger("ai_tools")
 
@@ -341,21 +342,27 @@ async def _lookup_user(user_id: int, args: dict, ctx: dict) -> dict:
 
 async def _search_web(user_id: int, args: dict, ctx: dict) -> dict:
     """
-    ms-file-toolkit'ning asl search_web() FAQAT DuckDuckGo HTML-lite'ni
-    scrape qiladi — bitta manba. Muammo: DuckDuckGo ko'pincha datacenter
-    IP'lardan (aynan Render kabi hosting'lar) kelayotgan so'rovlarni
-    bloklaydi yoki BO'SH natija qaytaradi (bot yoki so'rov ko'pligi
-    gumon qilinsa), va HTML tuzilishi ba'zida o'zgarib turadi.
+    Uch bosqichli qidiruv zanjiri (birinchi muvaffaqiyatli natija ishlatiladi):
 
-    Shu sabab: avval DuckDuckGo'ni sinaymiz; natija BO'SH yoki xato
-    bo'lsa — avtomatik BING'ga (alohida, mustaqil manba) o'tamiz. Bu
-    "bitta nuqtadagi nosozlik" muammosini yo'qotadi — ikkalasi baravar
-    bloklanishi ehtimoli ancha kichik.
+    1) TAVILY — agar config.TAVILY_API_KEY o'rnatilgan bo'lsa. Bu — AI-agentlar
+       UCHUN maxsus yaratilgan API (haqiqiy qidiruv indeksi + har natija uchun
+       AVTOMATIK ravishda sahifa mazmunidan tozalangan parcha ham qo'shib
+       beradi — alohida fetch_url_text qadamiga ehtiyoj kamayadi). Bepul reja:
+       1000 so'rov/oy, karta talab qilinmaydi (tavily.com).
+    2) DUCKDUCKGO — Tavily kaliti bo'lmasa yoki Tavily xato bersa (ms-file-
+       toolkit'ning tayyor scraping'i, keysiz).
+    3) BING — DuckDuckGo ham bo'sh/xato natija bersa (yana keysiz scraping).
     """
-    from ms_toolkit.web_tool import search_web as ddg_search_web
-
     query = args.get("query", "")
     max_results = args.get("max_results", 8)
+
+    if config.TAVILY_API_KEY:
+        tavily_result = await asyncio.to_thread(_search_tavily, query, max_results)
+        if not tavily_result.get("error") and tavily_result.get("results"):
+            return tavily_result
+        logger.info("Tavily natija bermadi (%s) — DuckDuckGo'ga o'tildi", tavily_result.get("error"))
+
+    from ms_toolkit.web_tool import search_web as ddg_search_web
 
     result = await asyncio.to_thread(ddg_search_web, query, max_results)
     if not result.get("error") and result.get("results"):
@@ -370,7 +377,7 @@ async def _search_web(user_id: int, args: dict, ctx: dict) -> dict:
     if bing_result.get("results"):
         return bing_result
 
-    # Ikkalasi ham natija bermadi — ANIQ sabab bilan qaytaramiz (AI buni
+    # Uchalasi ham natija bermadi — ANIQ sabab bilan qaytaramiz (AI buni
     # ko'rib, foydalanuvchiga "qidiruv vaqtincha ishlamayapti" deya oladi,
     # xom "bo'sh javob"ni haqiqat sifatida taqdim etish o'rniga).
     return {
@@ -378,9 +385,47 @@ async def _search_web(user_id: int, args: dict, ctx: dict) -> dict:
         "result_count": 0,
         "results": [],
         "error": (
-            f"Ikkala qidiruv manbai (DuckDuckGo: {result.get('error') or 'bo\u2019sh natija'}, "
+            f"Barcha qidiruv manbalari (DuckDuckGo: {result.get('error') or 'bo\u2019sh natija'}, "
             f"Bing: {bing_result.get('error') or 'bo\u2019sh natija'}) natija bermadi."
         ),
+    }
+
+
+def _search_tavily(query: str, max_results: int, timeout: int = 15) -> dict:
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": config.TAVILY_API_KEY,
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+            },
+            timeout=timeout,
+        )
+    except requests.RequestException as e:
+        return {"error": f"Tavily so'rov xatosi: {e}", "results": []}
+
+    if resp.status_code >= 400:
+        return {"error": f"Tavily xatosi: HTTP {resp.status_code} — {resp.text[:200]}", "results": []}
+
+    data = resp.json()
+    results = [
+        {
+            "title": r.get("title", ""),
+            "url": r.get("url", ""),
+            # Tavily "content" maydonida sahifadan AVTOMATIK ajratilgan,
+            # tozalangan parcha beradi — oddiy snippet'dan ancha to'liqroq.
+            "snippet": r.get("content", ""),
+        }
+        for r in data.get("results", [])
+    ]
+    return {
+        "query": query,
+        "result_count": len(results),
+        "results": results,
+        "answer": data.get("answer"),  # Tavily ba'zida to'g'ridan-to'g'ri qisqa javob ham beradi
+        "source": "tavily",
     }
 
 
