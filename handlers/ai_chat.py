@@ -17,7 +17,7 @@ from aiogram import Router, F
 from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
 from core.ai_rotator import ai
-from core.ai_tools import TOOLS, dispatch, get_user_notes
+from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.roles as roles
@@ -195,6 +195,15 @@ async def handle_message(message: Message):
         choice = response.choices[0].message
 
         if choice.tool_calls:
+            # "Miyamni ishga solyapman..." o'rniga ANIQ nima qilinayotganini
+            # ko'rsatamiz (masalan "ParadoksHub" haqida PPTX yaratilmoqda...).
+            first_call = choice.tool_calls[0]
+            try:
+                first_args = json.loads(first_call.function.arguments)
+            except (ValueError, TypeError):
+                first_args = {}
+            await indicator.update_status(describe_tool_call(first_call.function.name, first_args))
+
             for tool_call in choice.tool_calls:
                 args = json.loads(tool_call.function.arguments)
                 tool_result = await dispatch(tool_call.function.name, user_id, args, ctx)

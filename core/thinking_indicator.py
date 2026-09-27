@@ -61,6 +61,7 @@ class ThinkingIndicator:
         self._task: asyncio.Task | None = None
         self._start = 0.0
         self._phrase_index = 0
+        self._status_text: str | None = None  # update_status() bilan o'rnatiladi
 
     async def start(self):
         self._start = time.monotonic()
@@ -117,18 +118,42 @@ class ThinkingIndicator:
         try:
             while True:
                 await asyncio.sleep(DRAFT_REFRESH_SECONDS)
-                self._phrase_index = (self._phrase_index + 1) % len(FUNNY_THINKING_PHRASES)
+                if self._status_text:
+                    # update_status() bilan ANIQ vazifa matni o'rnatilgan bo'lsa —
+                    # tasodifiy kulgili iboralarga o'tmasdan, SHU matnni ushlab turamiz.
+                    text = self._status_text
+                else:
+                    self._phrase_index = (self._phrase_index + 1) % len(FUNNY_THINKING_PHRASES)
+                    text = FUNNY_THINKING_PHRASES[self._phrase_index]
                 await self.bot.send_rich_message_draft(
                     chat_id=self.chat_id, draft_id=self._draft_id,
                     message_thread_id=self.thread_id,
-                    rich_message=InputRichMessage(
-                        html=f"<tg-thinking>{FUNNY_THINKING_PHRASES[self._phrase_index]}</tg-thinking>"
-                    ),
+                    rich_message=InputRichMessage(html=f"<tg-thinking>{text}</tg-thinking>"),
                 )
         except asyncio.CancelledError:
             pass
         except Exception:
             pass
+
+    async def update_status(self, text: str):
+        """Ko'rsatilayotgan matnni ANIQ bajarilayotgan vazifaga mos matnga
+        o'zgartiradi (masalan '\"ParadoksHub\" haqida PPTX yaratilmoqda...') —
+        "Miyamni ishga solyapman..." kabi umumiy iboralar o'rniga.
+
+        Faqat "rich" rejimida ishlaydi — bu yagona rejim, unda O'ZIMIZ matn
+        yoza olamiz. "native"/"fallback" rejimlarida Telegram cheklovi
+        tufayli iloji yo'q — jimgina e'tiborsiz qoldiriladi (xato bermaydi)."""
+        if self._mode != "rich":
+            return
+        self._status_text = text
+        try:
+            await self.bot.send_rich_message_draft(
+                chat_id=self.chat_id, draft_id=self._draft_id,
+                message_thread_id=self.thread_id,
+                rich_message=InputRichMessage(html=f"<tg-thinking>{text}</tg-thinking>"),
+            )
+        except Exception as e:
+            logger.info("update_status uchun draft yangilab bo'lmadi: %s", e)
 
     async def _refresh_native_loop(self):
         try:

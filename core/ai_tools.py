@@ -14,6 +14,71 @@ from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
 
+# ── Tool chaqirilayotganda ThinkingIndicator'da ko'rsatiladigan VAZIYAT
+# matni — "Miyamni ishga solyapman..." kabi umumiy iboralar o'rniga,
+# HAQIQATDA nima qilinayotganini yozadi (Claude'ning o'zi "Internetdan
+# qidirilmoqda..." deb ko'rsatishi bilan bir xil g'oya).
+_TOOL_STATUS_LABELS = {
+    "search_web": "Internetdan qidirilmoqda",
+    "create_presentation": "PPTX taqdimot yaratilmoqda",
+    "create_diagram": "Diagramma chizilmoqda",
+    "get_user_profile": "Profil ma'lumotlari olinmoqda",
+    "lookup_user": "Foydalanuvchi qidirilmoqda",
+    "remember_note": "Eslatma saqlanmoqda",
+    "fetch_url_text": "Sahifa matni o'qilmoqda",
+    "scrape_page_text": "Sahifa o'qilmoqda",
+    "extract_page_links": "Sahifadan havolalar olinmoqda",
+    "extract_page_images": "Sahifadan rasmlar olinmoqda",
+}
+
+_TOOL_STATUS_FORMAT_LABELS = [
+    ("pptx", "PPTX"), ("docx", "Word hujjat"), ("xlsx", "Excel jadval"),
+    ("pdf", "PDF"), ("csv", "CSV fayl"), ("odt", "ODT hujjat"),
+    ("ods", "ODS jadval"), ("odp", "ODP taqdimot"), ("image", "rasm"),
+    ("archive", "arxiv"), ("code", "kod fayli"),
+]
+
+_TOOL_STATUS_VERB_PREFIXES = [
+    ("create_", "yaratilmoqda"), ("generate_", "yaratilmoqda"),
+    ("append_", "qo'shilmoqda"), ("add_", "qo'shilmoqda"), ("insert_", "qo'shilmoqda"),
+    ("replace_", "tahrirlanmoqda"), ("set_", "sozlanmoqda"), ("format_", "formatlanmoqda"),
+    ("freeze_", "sozlanmoqda"), ("merge_", "birlashtirilmoqda"), ("split_", "bo'linmoqda"),
+    ("convert_", "aylantirilmoqda"), ("delete_", "o'chirilmoqda"),
+    ("crop_", "tahrirlanmoqda"), ("resize_", "tahrirlanmoqda"), ("rotate_", "tahrirlanmoqda"),
+    ("download_", "yuklab olinmoqda"), ("fetch_", "o'qilmoqda"), ("scrape_", "o'qilmoqda"),
+    ("list_", "ro'yxati olinmoqda"), ("read_", "o'qilmoqda"), ("get_", "olinmoqda"),
+    ("extract_", "chiqarib olinmoqda"), ("search_", "qidirilmoqda"),
+]
+
+
+def describe_tool_call(name: str, args: dict) -> str:
+    """ThinkingIndicator'ga chiqariladigan qisqa, ANIQ vaziyat matnini
+    qaytaradi — masalan "ParadoksHub" haqida PPTX taqdimot yaratilmoqda...".
+    Noma'lum/kutilmagan tool nomi uchun ham umumiy, tushunarli matn beradi
+    (hech qachon xato tashlamaydi)."""
+    if name in _TOOL_STATUS_LABELS:
+        base = _TOOL_STATUS_LABELS[name]
+    else:
+        verb = "bajarilmoqda"
+        for prefix, v in _TOOL_STATUS_VERB_PREFIXES:
+            if name.startswith(prefix):
+                verb = v
+                break
+        label = next((lbl for key, lbl in _TOOL_STATUS_FORMAT_LABELS if key in name), None)
+        base = f"{label} {verb}" if label else verb
+
+    subject = None
+    for key in ("title", "topic", "query", "filename", "file_path", "url", "name"):
+        val = args.get(key) if isinstance(args, dict) else None
+        if isinstance(val, str) and val.strip():
+            subject = val.strip()
+            break
+
+    if subject and len(subject) < 60:
+        return f"\"{subject}\" haqida {base}..."
+    return f"{base}..."
+
+
 # tools/diagrams.py rang-temasi MODUL DARAJASIDA global (set_theme() orqali
 # almashtiriladi) — shuning uchun bir vaqtning o'zida ikki xil temadagi
 # prezentatsiya qurilishining oldini olish uchun bu lock bilan ketma-ket
