@@ -8,11 +8,17 @@ lug'atiga funksiyani bog'lang. dispatch() AI tanlagan tool'ni chaqiradi.
 """
 from __future__ import annotations
 import json
+import logging
+import asyncio
+import requests
+from bs4 import BeautifulSoup
 from typing import Any, Callable, Awaitable
 
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
+
+logger = logging.getLogger("ai_tools")
 
 # ── Tool chaqirilayotganda ThinkingIndicator'da ko'rsatiladigan VAZIYAT
 # matni — "Miyamni ishga solyapman..." kabi umumiy iboralar o'rniga,
@@ -85,7 +91,6 @@ def describe_tool_call(name: str, args: dict) -> str:
 # (serial) qilib qo'yilgan. Personal/kichik jamoa boti uchun bu yetarli;
 # juda yuqori concurrency kerak bo'lsa, diagrams.py'ni har chaqiruvda
 # explicit theme-parametr qabul qiladigan qilib qayta yozish kerak bo'ladi.
-import asyncio
 _presentation_build_lock = asyncio.Lock()
 
 _PRESENTATION_SLIDE_TYPES_DOC = (
@@ -334,12 +339,99 @@ async def _lookup_user(user_id: int, args: dict, ctx: dict) -> dict:
     }
 
 
+async def _search_web(user_id: int, args: dict, ctx: dict) -> dict:
+    """
+    ms-file-toolkit'ning asl search_web() FAQAT DuckDuckGo HTML-lite'ni
+    scrape qiladi — bitta manba. Muammo: DuckDuckGo ko'pincha datacenter
+    IP'lardan (aynan Render kabi hosting'lar) kelayotgan so'rovlarni
+    bloklaydi yoki BO'SH natija qaytaradi (bot yoki so'rov ko'pligi
+    gumon qilinsa), va HTML tuzilishi ba'zida o'zgarib turadi.
+
+    Shu sabab: avval DuckDuckGo'ni sinaymiz; natija BO'SH yoki xato
+    bo'lsa — avtomatik BING'ga (alohida, mustaqil manba) o'tamiz. Bu
+    "bitta nuqtadagi nosozlik" muammosini yo'qotadi — ikkalasi baravar
+    bloklanishi ehtimoli ancha kichik.
+    """
+    from ms_toolkit.web_tool import search_web as ddg_search_web
+
+    query = args.get("query", "")
+    max_results = args.get("max_results", 8)
+
+    result = await asyncio.to_thread(ddg_search_web, query, max_results)
+    if not result.get("error") and result.get("results"):
+        result["source"] = "duckduckgo"
+        return result
+
+    logger.info(
+        "DuckDuckGo natija bermadi (query=%r, xato=%r) — Bing bilan urinilmoqda",
+        query, result.get("error"),
+    )
+    bing_result = await asyncio.to_thread(_search_bing, query, max_results)
+    if bing_result.get("results"):
+        return bing_result
+
+    # Ikkalasi ham natija bermadi — ANIQ sabab bilan qaytaramiz (AI buni
+    # ko'rib, foydalanuvchiga "qidiruv vaqtincha ishlamayapti" deya oladi,
+    # xom "bo'sh javob"ni haqiqat sifatida taqdim etish o'rniga).
+    return {
+        "query": query,
+        "result_count": 0,
+        "results": [],
+        "error": (
+            f"Ikkala qidiruv manbai (DuckDuckGo: {result.get('error') or 'bo\u2019sh natija'}, "
+            f"Bing: {bing_result.get('error') or 'bo\u2019sh natija'}) natija bermadi."
+        ),
+    }
+
+
+def _search_bing(query: str, max_results: int, timeout: int = 15) -> dict:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        )
+    }
+    try:
+        resp = requests.get(
+            "https://www.bing.com/search",
+            params={"q": query, "count": max_results},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as e:
+        return {"error": f"Bing so'rov xatosi: {e}", "results": []}
+
+    if resp.status_code >= 400:
+        resp.close()
+        return {"error": f"Bing xatosi: HTTP {resp.status_code}", "results": []}
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    resp.close()
+
+    results = []
+    for li in soup.select("li.b_algo")[:max_results]:
+        a_tag = li.select_one("h2 a")
+        if not a_tag or not a_tag.get("href"):
+            continue
+        snippet_tag = li.select_one(".b_caption p") or li.select_one(".b_lineclamp2")
+        results.append({
+            "title": a_tag.get_text(strip=True),
+            "url": a_tag["href"],
+            "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+        })
+
+    return {"query": query, "result_count": len(results), "results": results, "source": "bing_fallback"}
+
+
 DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "remember_note": _remember_note,
     "create_presentation": _create_presentation,
     "create_diagram": _create_diagram,
     "get_user_profile": _get_user_profile,
     "lookup_user": _lookup_user,
+    "search_web": _search_web,  # ms-file-toolkit'ning DDG-only versiyasini
+    # Bing-fallback qo'shilgan versiyamiz bilan ALMASHTIRAMIZ (pastdagi
+    # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).
 }
 
 
@@ -377,9 +469,12 @@ async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     # Yuqoridagi izohga qarang — AI ba'zan array/object'ni JSON-string
     # sifatida yuboradi, buni avtomatik tuzatamiz.
     args = _unstringify_json(args)
+    # DIQQAT: tartib MUHIM — avval O'ZIMIZNING DISPATCH tekshiriladi, shu
+    # bilan "search_web" kabi nomlarni ms-file-toolkit versiyasidan O'ZIMIZ
+    # yozgan (yaxshilangan) versiya bilan ALMASHTIRISH imkoni bo'ladi.
+    fn = DISPATCH.get(name)
+    if fn:
+        return await fn(user_id, args, ctx)
     if is_file_tool(name):
         return await file_dispatch(name, user_id, args)
-    fn = DISPATCH.get(name)
-    if not fn:
-        return {"error": f"Noma'lum tool: {name}"}
-    return await fn(user_id, args, ctx)
+    return {"error": f"Noma'lum tool: {name}"}
