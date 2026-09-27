@@ -14,7 +14,10 @@ thread_id = None bo'lsa — "General" (topic tashqarisidagi asosiy chat).
 from aiogram import Bot
 import core.tgdb as tgdb
 
-MAX_HISTORY = 20  # oxirgi N ta xabar saqlanadi (AI kontekst uchun)
+MAX_HISTORY = 50  # oxirgi N ta xabar saqlanadi (AI kontekst uchun) — avval 20 edi,
+# AI suhbatni "unutib qo'yayotgani" uchun kengaytirildi. Zamonaviy modellarning
+# kontekst oynasi (odatda 32k-200k token) buni bemalol ko'taradi — 50 ta oddiy
+# matn xabar odatda bir necha ming tokendan oshmaydi.
 
 
 def _key(thread_id: int | None) -> str:
