@@ -64,9 +64,18 @@ async def _send_menu(message: Message, user_id: int | None = None):
 @router.callback_query(F.data.startswith("apikey:add:"))
 async def add_key_start(call: CallbackQuery):
     provider = call.data.split(":")[-1]
-    pending_input.set(call.from_user.id, "apikey_wait_value", {"provider": provider})
-    label = user_api_keys.PROVIDER_LABELS[provider]
-    await call.message.answer(f"{label} API kalitingizni shu yerga yuboring:")
+    if provider == "custom":
+        # "Norasmiy"/OpenAI-mos xizmatlar uchun UCH bosqichda so'raladi:
+        # base_url -> model -> api_key (handlers/pending_text.py'da davom etadi).
+        pending_input.set(call.from_user.id, "apikey_wait_base_url", {"provider": provider})
+        await call.message.answer(
+            "🌐 Norasmiy/OpenAI-mos API xizmatining BASE URL manzilini yuboring\n"
+            "(masalan: <code>https://api.masalan.com/v1</code>):"
+        )
+    else:
+        pending_input.set(call.from_user.id, "apikey_wait_value", {"provider": provider})
+        label = user_api_keys.PROVIDER_LABELS[provider]
+        await call.message.answer(f"{label} API kalitingizni shu yerga yuboring:")
     await call.answer()
 
 

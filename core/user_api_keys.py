@@ -8,9 +8,28 @@ o'z hisobidan ishlata oladi, sizning balansingizga tegmaydi.
 """
 from aiogram import Bot
 from core.accounts_store import save_user_secret, get_user_secret, remove_user_secret
+import json
 
-PROVIDERS = ["groq", "openai", "anthropic", "deepseek"]
-PROVIDER_LABELS = {"groq": "Groq", "openai": "OpenAI", "anthropic": "Anthropic (Claude)", "deepseek": "DeepSeek"}
+PROVIDERS = ["groq", "openai", "anthropic", "deepseek", "custom"]
+PROVIDER_LABELS = {
+    "groq": "Groq",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic (Claude)",
+    "deepseek": "DeepSeek",
+    "custom": "Boshqa (norasmiy/OpenAI-mos)",
+}
+
+
+def pack_custom(base_url: str, model: str, api_key: str) -> str:
+    """"custom" provayder uchun base_url+model+api_key BITTA qatorga (JSON) yig'iladi —
+    accounts_store bitta STRING'ni shifrlab saqlaydi, shuning uchun uchalasini
+    birga jamlab yuboramiz."""
+    return json.dumps({"base_url": base_url.strip(), "model": model.strip(), "api_key": api_key.strip()})
+
+
+def unpack_custom(value: str) -> dict:
+    """{"base_url", "model", "api_key"} qaytaradi."""
+    return json.loads(value)
 
 
 def _key_name(provider: str) -> str:
@@ -74,6 +93,18 @@ async def validate_key(provider: str, api_key: str) -> tuple[bool, str]:
             client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
             await client.chat.completions.create(
                 model="deepseek-chat",
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=5,
+            )
+        elif provider == "custom":
+            # Bu yerda `api_key` parametri aslida pack_custom() bilan yig'ilgan
+            # JSON qator (base_url+model+api_key birga) — chunki bu funksiya
+            # bitta STRING qabul qiladi.
+            info = unpack_custom(api_key)
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=info["api_key"], base_url=info["base_url"])
+            await client.chat.completions.create(
+                model=info["model"],
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=5,
             )

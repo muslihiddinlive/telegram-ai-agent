@@ -143,14 +143,36 @@ async def handle_pending(message: Message):
         else:
             await message.answer(f"🔍 \"{text}\" bo'yicha natijalar:", reply_markup=kb)
 
+    # ── Norasmiy/OpenAI-mos API: 1-bosqich (base_url) ──
+    elif action == "apikey_wait_base_url":
+        base_url = text.strip()
+        pending_input.set(user_id, "apikey_wait_model", {"provider": "custom", "base_url": base_url})
+        await message.answer("🧩 Endi MODEL nomini yuboring (masalan: <code>gpt-4o-mini</code>):")
+
+    # ── Norasmiy/OpenAI-mos API: 2-bosqich (model) ──
+    elif action == "apikey_wait_model":
+        model = text.strip()
+        pending_input.set(user_id, "apikey_wait_value", {
+            "provider": "custom", "base_url": data["base_url"], "model": model,
+        })
+        await message.answer("🔑 Endi API kalitingizni yuboring:")
+
     # ── Shaxsiy AI API kalitini ulash (validatsiya bilan) ──
     elif action == "apikey_wait_value":
         provider = data["provider"]
         label = user_api_keys.PROVIDER_LABELS[provider]
         status_msg = await message.answer(f"⏳ {label} kaliti tekshirilmoqda...")
-        ok, error = await user_api_keys.validate_key(provider, text)
+        if provider == "custom":
+            # base_url+model+api_key BITTA JSON qatorga yig'iladi (accounts_store
+            # faqat bitta STRING'ni shifrlab saqlay oladi).
+            combined = user_api_keys.pack_custom(data["base_url"], data["model"], text)
+            ok, error = await user_api_keys.validate_key("custom", combined)
+            value_to_save = combined
+        else:
+            ok, error = await user_api_keys.validate_key(provider, text)
+            value_to_save = text
         if ok:
-            await user_api_keys.save_personal_key(message.bot, user_id, provider, text)
+            await user_api_keys.save_personal_key(message.bot, user_id, provider, value_to_save)
             pending_input.clear(user_id)
             await status_msg.edit_text(f"✅ {label} kaliti muvaffaqiyatli ulandi va tasdiqlandi!")
         else:

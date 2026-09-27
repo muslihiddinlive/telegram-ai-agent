@@ -270,6 +270,21 @@ class MultiProviderAI:
             message = _FakeMessage("\n".join(text_parts), tool_calls or None)
             return _FakeResponse([_FakeChoice(message)])
 
+        elif provider == "custom":
+            # Foydalanuvchi o'zi ulagan norasmiy/OpenAI-mos API (core/user_api_keys.py,
+            # pack_custom() — base_url+model+api_key BITTA JSON qatorga yig'ilgan holda
+            # keladi). Faqat SHAXSIY kalit sifatida ishlatiladi (umumiy rotatorda yo'q).
+            import core.user_api_keys as user_api_keys
+            info = user_api_keys.unpack_custom(key)
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=info["api_key"], base_url=info["base_url"])
+            return await client.chat.completions.create(
+                model=info["model"],
+                messages=messages,
+                tools=tools,
+                max_tokens=1500,
+            )
+
         raise ValueError(f"Noma'lum provayder: {provider}")
 
 
