@@ -138,11 +138,11 @@ async def handle_message(message: Message):
     history = topic_sessions.get_history(user_id, thread_id)
 
     # Foydalanuvchi O'ZINING shaxsiy AI API kalitini ulagan bo'lsa (/apikalit) —
-    # bizning "Paradoks AI" system prompt/personasi ULARGA QO'LLANILMAYDI.
-    # Sabab: bu ularning O'Z hisobi/puli bilan ishlaydigan so'rov — cheklov yoki
-    # majburiy uslub kerak emas, "xom" (system prompt'siz) AI bilan gaplashadi.
+    # bu FAQAT SHAXSIY chatda ishlaydi. GURUHDA — hatto shaxsiy kalit ulagan
+    # bo'lsa ham — har doim UMUMIY (admin) kalit va odatdagi guruh-limiti
+    # ishlatiladi (guruhda hamma bir xil "hovuz"dan foydalanishi kerak).
     import core.user_api_keys as user_api_keys
-    uses_personal_key = user_api_keys.get_any_personal_key(user_id) is not None
+    uses_personal_key = (not is_group) and (user_api_keys.get_any_personal_key(user_id) is not None)
 
     if uses_personal_key:
         messages = history + [{"role": "user", "content": user_text}]
@@ -187,7 +187,10 @@ async def handle_message(message: Message):
     tool_outputs: list[tuple[str, dict]] = []
 
     try:
-        result = await ai.chat(messages, tools=TOOLS, user_id=user_id)
+        # GURUHDA user_id=None yuboriladi — shu bilan ai.chat() shaxsiy kalitni
+        # UMUMAN tekshirmaydi, har doim umumiy/admin kalitidan foydalanadi
+        # (guruhda hamma so'rovi bir xil hisob-kitobga tushishi uchun).
+        result = await ai.chat(messages, tools=TOOLS, user_id=(None if is_group else user_id))
         response = result["response"]
         choice = response.choices[0].message
 
