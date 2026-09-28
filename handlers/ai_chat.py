@@ -28,6 +28,7 @@ import core.ai_persona as ai_persona
 import core.bot_identity as bot_identity
 import core.user_profile as user_profile
 import core.bot_loop_guard as bot_loop_guard
+import core.clock as clock
 import core.chat_mode as chat_mode
 import config
 from core.markdown_format import markdown_to_telegram_html
@@ -150,6 +151,8 @@ async def handle_message(message: Message):
     else:
         system_prompt = ai_persona.get_full_system_prompt()
         system_prompt += f"\n\n{await user_profile.basic_info_line(message.bot, message)}"
+        # AI'ning "soati": hozirgi sana/vaqt (aks holda model bugungi sanani bilmaydi)
+        system_prompt += f"\n\n{clock.time_context_line()}"
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
