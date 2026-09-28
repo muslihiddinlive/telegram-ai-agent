@@ -98,8 +98,9 @@ class _FakeFn:
 
 
 class _FakeToolCall:
-    def __init__(self, name, arguments):
+    def __init__(self, name, arguments, call_id):
         self.function = _FakeFn(name, arguments)
+        self.id = call_id
 
 
 class _FakeMessage:
@@ -123,6 +124,64 @@ def _to_anthropic_tools(tools: list[dict] | None) -> list[dict]:
     for t in tools or []:
         fn = t["function"]
         result.append({"name": fn["name"], "description": fn.get("description", ""), "input_schema": fn["parameters"]})
+    return result
+
+
+def _openai_messages_to_anthropic(messages: list[dict]) -> list[dict]:
+    """
+    Bizning ichki xabar formatimiz OpenAI uslubida (assistant.tool_calls,
+    role="tool" + tool_call_id) — bu Anthropic Messages API'da UMUMAN yo'q
+    tushunchalar. Tool natijalarini AI'ga QAYTA yuborish (handlers/ai_chat.py'dagi
+    agentic-loop) endi Anthropic uchun ham ishlashi kerak, shuning uchun bu
+    yerda mos ravishda konvertatsiya qilinadi:
+
+    - assistant + tool_calls  -> assistant xabari, content'da {"type":"tool_use", ...} bloklari
+    - role="tool"             -> user xabari, content'da {"type":"tool_result", ...} bloki
+      (ketma-ket kelgan bir nechta "tool" xabari BITTA user xabariga yig'iladi —
+      Anthropic bir AI-navbatiga tegishli barcha tool_result'larni shunday kutadi)
+    - oddiy matn xabarlar     -> o'zgarishsiz (Anthropic ularni ham qabul qiladi)
+    """
+    result = []
+    i = 0
+    while i < len(messages):
+        m = messages[i]
+        role = m.get("role")
+
+        if role == "assistant" and m.get("tool_calls"):
+            content = []
+            if m.get("content"):
+                content.append({"type": "text", "text": m["content"]})
+            for tc in m["tool_calls"]:
+                try:
+                    tool_input = json.loads(tc["function"]["arguments"])
+                except (ValueError, TypeError):
+                    tool_input = {}
+                content.append({
+                    "type": "tool_use",
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "input": tool_input,
+                })
+            result.append({"role": "assistant", "content": content})
+            i += 1
+            continue
+
+        if role == "tool":
+            content = []
+            while i < len(messages) and messages[i].get("role") == "tool":
+                tm = messages[i]
+                content.append({
+                    "type": "tool_result",
+                    "tool_use_id": tm.get("tool_call_id"),
+                    "content": tm.get("content") or "",
+                })
+                i += 1
+            result.append({"role": "user", "content": content})
+            continue
+
+        result.append(m)
+        i += 1
+
     return result
 
 
@@ -270,7 +329,7 @@ class MultiProviderAI:
                 model=model_override or "claude-3-5-sonnet-20241022",
                 max_tokens=1500,
                 system="\n\n".join(system_texts) if system_texts else None,
-                messages=non_system_messages,
+                messages=_openai_messages_to_anthropic(non_system_messages),
                 tools=_to_anthropic_tools(tools) or None,
             )
             text_parts, tool_calls = [], []
@@ -278,7 +337,7 @@ class MultiProviderAI:
                 if block.type == "text":
                     text_parts.append(block.text)
                 elif block.type == "tool_use":
-                    tool_calls.append(_FakeToolCall(block.name, json.dumps(block.input)))
+                    tool_calls.append(_FakeToolCall(block.name, json.dumps(block.input), block.id))
             message = _FakeMessage("\n".join(text_parts), tool_calls or None)
             return _FakeResponse([_FakeChoice(message)])
 

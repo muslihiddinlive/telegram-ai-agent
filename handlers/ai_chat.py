@@ -33,6 +33,7 @@ import config
 from core.markdown_format import markdown_to_telegram_html
 
 GROUP_CHAT_TYPES = ("group", "supergroup")
+MAX_TOOL_ROUNDS = 4  # bitta so'rovda AI ketma-ket eng ko'pi bilan shuncha marta tool chaqira oladi
 
 router = Router()
 logger = logging.getLogger("ai_chat")
@@ -190,11 +191,20 @@ async def handle_message(message: Message):
         # GURUHDA user_id=None yuboriladi — shu bilan ai.chat() shaxsiy kalitni
         # UMUMAN tekshirmaydi, har doim umumiy/admin kalitidan foydalanadi
         # (guruhda hamma so'rovi bir xil hisob-kitobga tushishi uchun).
-        result = await ai.chat(messages, tools=TOOLS, user_id=(None if is_group else user_id))
-        response = result["response"]
-        choice = response.choices[0].message
+        chat_user_id = None if is_group else user_id
+        convo = list(messages)  # tool round-trip xabarlari shu yerga qo'shib boriladi
+        result = await ai.chat(convo, tools=TOOLS, user_id=chat_user_id)
+        choice = result["response"].choices[0].message
 
-        if choice.tool_calls:
+        # AGENTIC TSIKL: AI tool chaqirsa — natijani unga QAYTARIB beramiz, u esa
+        # tabiiy javob yozadi (yoki kerak bo'lsa keyingi tool'ni chaqiradi).
+        # Avval tool natijasi xom dict ko'rinishida to'g'ridan-to'g'ri foydalanuvchiga
+        # ko'rsatilardi ("[search_web]: {'query': ...}") — endi bunday bo'lmaydi.
+        # MAX_TOOL_ROUNDS — cheksiz tsikldan himoya.
+        file_done = False
+        rounds = 0
+        while choice.tool_calls and rounds < MAX_TOOL_ROUNDS:
+            rounds += 1
             # "Miyamni ishga solyapman..." o'rniga ANIQ nima qilinayotganini
             # ko'rsatamiz (masalan "ParadoksHub" haqida PPTX yaratilmoqda...).
             first_call = choice.tool_calls[0]
@@ -204,22 +214,59 @@ async def handle_message(message: Message):
                 first_args = {}
             await indicator.update_status(describe_tool_call(first_call.function.name, first_args))
 
+            assistant_msg = {
+                "role": "assistant",
+                "content": choice.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in choice.tool_calls
+                ],
+            }
+            tool_result_msgs = []
             for tool_call in choice.tool_calls:
-                args = json.loads(tool_call.function.arguments)
+                try:
+                    args = json.loads(tool_call.function.arguments)
+                except (ValueError, TypeError):
+                    args = {}
                 tool_result = await dispatch(tool_call.function.name, user_id, args, ctx)
                 tool_outputs.append((tool_call.function.name, tool_result))
+                tool_result_msgs.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(tool_result, ensure_ascii=False, default=str)[:8000],
+                })
 
             has_file = any(
                 isinstance(r, dict) and (r.get("file_path") or r.get("output_path"))
                 for _, r in tool_outputs
             )
-            final_text = "Tayyor ✅" if has_file else "\n".join(
-                f"[{n}]: {r}" for n, r in tool_outputs
-            )
-            raw_text_for_history = final_text
-        else:
-            raw_text_for_history = choice.content or "..."
-            final_text = markdown_to_telegram_html(choice.content) if choice.content else "..."
+            if has_file:
+                # Fayl yaratilgan — u pastda alohida yuboriladi; qayta AI so'rovi
+                # (qo'shimcha xarajat) shart emas.
+                file_done = True
+                final_text = "Tayyor ✅"
+                raw_text_for_history = final_text
+                break
+
+            convo = convo + [assistant_msg] + tool_result_msgs
+            result = await ai.chat(convo, tools=TOOLS, user_id=chat_user_id)
+            choice = result["response"].choices[0].message
+
+        if not file_done:
+            if choice.tool_calls:
+                # Tsikl chegarasiga yetildi, lekin AI hali ham tool chaqirmoqchi —
+                # xavfsizlik uchun to'xtatamiz va bor natijani ko'rsatamiz.
+                final_text = "⚠️ Juda ko'p bosqichli so'rov — natijalar:\n" + "\n".join(
+                    f"[{n}]: {str(r)[:500]}" for n, r in tool_outputs
+                )
+                raw_text_for_history = final_text
+            else:
+                raw_text_for_history = choice.content or "..."
+                final_text = markdown_to_telegram_html(choice.content) if choice.content else "..."
 
     except Exception as e:
         final_text = f"⚠️ Xatolik yuz berdi: {e}"
