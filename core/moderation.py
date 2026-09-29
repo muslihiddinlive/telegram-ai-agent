@@ -131,7 +131,12 @@ async def get_access(bot, chat_id: int, user_id: int) -> ModAccess | None:
 
 
 async def _fetch_access(bot, chat_id: int, user_id: int) -> ModAccess | None:
-    if user_id == config.SUPERADMIN_ID:
+    import core.roles as roles
+
+    # Botning O'Z admin/superadmin ro'yxati (/admin panel orqali tayinlangan) —
+    # ular istalgan guruhda TO'LIQ moderatsiya huquqiga ega, o'sha guruhda
+    # Telegram admin bo'lishi shart emas (bot egasi ularga ishongan).
+    if user_id == config.SUPERADMIN_ID or roles.is_superadmin(user_id) or roles.is_admin(user_id):
         return ModAccess(user_id, is_owner=True)
     try:
         member = await bot.get_chat_member(chat_id, user_id)
