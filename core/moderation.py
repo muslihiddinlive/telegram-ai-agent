@@ -221,19 +221,36 @@ async def dispatch(bot, name: str, args: dict, ctx: dict) -> dict:
     return result.as_dict()
 
 
-def context_line(message) -> str:
+async def context_line(bot, message) -> str:
     """AI maqsadli foydalanuvchi/xabar ID'sini TAXMIN qilmasligi uchun aniq ma'lumot
-    (reply qilingan xabar va text_mention'lar). Xabar MATNI kiritilmaydi — boshqa
-    odam yozgan matn ichidagi yashirin buyruqlar AI'ga o'tmasligi uchun."""
+    (reply qilingan xabar, text_mention'lar, va oddiy "@username" yozilgan bo'lsa —
+    Telegram'dan ID'sini so'rab ko'ramiz). Xabar MATNI o'zi AI'ga baribir normal
+    ravishda yuboriladi (bu — oddiy suhbat matni), lekin bu yerda faqat ANIQLANGAN
+    ID'lar beriladi — AI hech qachon o'zi ID o'ylab topmasligi kerak."""
     parts = []
     reply = message.reply_to_message
     if reply is not None:
         u = reply.from_user
         who = f"ID={u.id}, ism=\"{u.full_name}\"" + (f", @{u.username}" if u.username else "") if u else "noma'lum"
         parts.append(f"Reply qilingan xabar: message_id={reply.message_id}, muallif: {who}")
+
+    text = message.text or message.caption or ""
     for ent in (message.entities or message.caption_entities or []):
         if ent.type == "text_mention" and ent.user:
             parts.append(f"Eslatilgan foydalanuvchi: ID={ent.user.id}, ism=\"{ent.user.full_name}\"")
+        elif ent.type == "mention":
+            # Oddiy "@username" — Telegram bu holatda user_id'ni entity'ning o'zida
+            # bermaydi, shuning uchun Bot API'dan so'rab ko'ramiz. Faqat bot avval
+            # shu odamni "ko'rgan" bo'lsa (bilan yozishgan yoki shu guruhda faol
+            # bo'lgan) ishlaydi — aks holda Telegram "chat not found" qaytaradi,
+            # bu holatda shunchaki o'tkazib yuboramiz (AI keyin reply so'raydi).
+            username = ent.extract_from(text).lstrip("@")
+            try:
+                chat = await bot.get_chat(f"@{username}")
+                parts.append(f"Eslatilgan foydalanuvchi: ID={chat.id}, username=@{username}")
+            except Exception:  # noqa: BLE001 — topilmasa jim o'tkazib yuboriladi
+                parts.append(f"Eslatilgan '@{username}' — ID'sini aniqlab bo'lmadi (bot uni hali ko'rmagan)")
+
     return "; ".join(parts) if parts else "Reply/eslatma yo'q — maqsadli ID noma'lum, so'rang."
 
 

@@ -236,7 +236,7 @@ async def handle_message(message: Message):
         # AI'ning "soati": hozirgi sana/vaqt (aks holda model bugungi sanani bilmaydi)
         system_prompt += f"\n\n{clock.time_context_line()}"
         if mod_access is not None:
-            system_prompt += f"\n\n{moderation.SYSTEM_HINT}{moderation.context_line(message)}"
+            system_prompt += f"\n\n{moderation.SYSTEM_HINT}{await moderation.context_line(message.bot, message)}"
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
