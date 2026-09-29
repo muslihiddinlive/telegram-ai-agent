@@ -12,11 +12,12 @@ import logging
 import asyncio
 import requests
 from bs4 import BeautifulSoup
-from typing import Any, Callable, Awaitable
+from typing import Callable, Awaitable
 
 from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
+import core.moderation as moderation
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -36,6 +37,17 @@ _TOOL_STATUS_LABELS = {
     "scrape_page_text": "Sahifa o'qilmoqda",
     "extract_page_links": "Sahifadan havolalar olinmoqda",
     "extract_page_images": "Sahifadan rasmlar olinmoqda",
+    "create_pdf_from_images": "Rasmlardan PDF yaratilmoqda",
+    "extract_pdf_images": "PDF ichidagi rasmlar chiqarilmoqda",
+    "merge_pdfs": "PDF fayllar birlashtirilmoqda",
+    "create_qr_code": "QR kod yaratilmoqda",
+    "read_qr_code": "QR kod o'qilmoqda",
+    # Guruh moderatsiyasi (core/moderation.py)
+    "ban_user": "Foydalanuvchi bloklanmoqda", "unban_user": "Blok olib tashlanmoqda",
+    "kick_user": "Foydalanuvchi guruhdan chiqarilmoqda", "mute_user": "Foydalanuvchi ovozsiz qilinmoqda",
+    "unmute_user": "Cheklov olib tashlanmoqda", "warn_user": "Ogohlantirish berilmoqda",
+    "delete_message": "Xabar o'chirilmoqda", "pin_message": "Xabar mahkamlanmoqda",
+    "lockdown_chat": "Guruh yopilmoqda", "unlock_chat": "Guruh ochilmoqda",
 }
 
 _TOOL_STATUS_FORMAT_LABELS = [
@@ -523,6 +535,8 @@ async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     fn = DISPATCH.get(name)
     if fn:
         return await fn(user_id, args, ctx)
+    if moderation.is_mod_tool(name):
+        return await moderation.dispatch(ctx["bot"], name, args, ctx)
     if is_file_tool(name):
         return await file_dispatch(name, user_id, args)
     return {"error": f"Noma'lum tool: {name}"}

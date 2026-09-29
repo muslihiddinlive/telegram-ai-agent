@@ -40,14 +40,17 @@ def is_file_tool(name: str) -> bool:
     return name in _FILE_TOOL_NAMES
 
 
-def _user_dir(user_id: int) -> str:
+def user_dir(user_id: int) -> str:
     path = os.path.join(USER_FILES_ROOT, str(user_id))
     os.makedirs(path, exist_ok=True)
     return path
 
 
-_PATH_KEYS = ("file_path", "image_path", "output_path", "dir_path")
-_PATH_LIST_KEYS = ("file_paths",)
+# ms-file-toolkit'ning barcha yo'l parametrlari (uning registry._PATH_PARAMS bilan bir xil bo'lishi kerak).
+# Oldin "save_as", "output_dir" va "image_paths" yo'q edi — AI oddiy nom bersa (masalan "rasmlar"),
+# u foydalanuvchi papkasiga joylanmasdi va toolkit xavfsizlik xatosi qaytarardi.
+_PATH_KEYS = ("file_path", "image_path", "save_as", "output_path", "output_dir", "dir_path")
+_PATH_LIST_KEYS = ("file_paths", "image_paths")
 
 
 def _resolve_into(path: str, base_dir: str) -> str:
@@ -79,7 +82,7 @@ def _normalize_args(args: dict, base_dir: str) -> dict:
 
 
 async def file_dispatch(name: str, user_id: int, args: dict) -> dict:
-    base_dir = _user_dir(user_id)
+    base_dir = user_dir(user_id)
     safe_args = _normalize_args(args, base_dir)
     return await asyncio.to_thread(ms_toolkit.dispatch, name, safe_args, base_dir)
 

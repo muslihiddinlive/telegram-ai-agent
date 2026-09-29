@@ -6,7 +6,10 @@ anthropic>=0.34
 openai>=1.30
 python-dotenv>=1.0
 telethon>=1.36
-ms-file-toolkit>=0.6.0
+# ms-file-toolkit 0.8.0 (QR, PDF<->rasm) hali PyPI'ga chiqarilmagan — vaqtincha aniq commit'dan.
+# PyPI'da 0.8.0 paydo bo'lgach, shu qatorni `ms-file-toolkit>=0.8.0` ga almashtiring.
+ms-file-toolkit @ https://github.com/muslihiddinlive/ms-file-toolkit/archive/8580492aeb0154ac8a7c5be19b1c48f34195898a.zip
+tg-mod-functions>=0.4.0  # Moderator-AI-Bot: guruh moderatsiyasi tool'lari (core/moderation.py)
 requests>=2.31
 beautifulsoup4>=4.12
 python-pptx>=0.6.23

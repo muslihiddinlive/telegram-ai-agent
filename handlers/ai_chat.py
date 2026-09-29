@@ -29,6 +29,9 @@ import core.bot_identity as bot_identity
 import core.user_profile as user_profile
 import core.bot_loop_guard as bot_loop_guard
 import core.clock as clock
+import core.moderation as moderation
+from core.output_files import output_files
+from tools.file_tools import user_dir
 import core.chat_mode as chat_mode
 import config
 from core.markdown_format import markdown_to_telegram_html
@@ -47,16 +50,73 @@ def _strip_bot_mention(text: str, bot_username: str | None) -> str:
     return re.sub(rf"@{re.escape(bot_username)}\b", "", text, flags=re.IGNORECASE).strip() or text
 
 
-@router.message(F.text)
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024   # Bot API orqali yuklab olish chegarasi
+UPLOAD_RETENTION_SECONDS = 3600       # yuklangan/yaratilgan fayllar 1 soat saqlanadi (ko'p bosqichli ish uchun)
+
+
+def _safe_filename(name: str) -> str:
+    name = os.path.basename(name or "").strip()
+    name = re.sub(r"[^\w.\- ()]", "_", name, flags=re.UNICODE)[:100].strip(" .")
+    return name or "fayl"
+
+
+def _unique_path(directory: str, filename: str) -> str:
+    base, ext = os.path.splitext(filename)
+    path, n = os.path.join(directory, filename), 2
+    while os.path.exists(path):
+        path = os.path.join(directory, f"{base}_{n}{ext}")
+        n += 1
+    return path
+
+
+async def _save_upload(message: Message, user_id: int) -> tuple[str | None, str | None]:
+    """Yuborilgan rasm/hujjatni foydalanuvchining shaxsiy papkasiga saqlaydi.
+    (saqlangan_nom, None) yoki (None, xato_matni) qaytaradi."""
+    if message.photo:
+        media = message.photo[-1]
+        filename = f"foto_{message.message_id}.jpg"
+    else:
+        media = message.document
+        filename = _safe_filename(media.file_name or f"fayl_{message.message_id}")
+    if media.file_size and media.file_size > MAX_UPLOAD_BYTES:
+        return None, f"Fayl juda katta ({media.file_size // (1024 * 1024)} MB). Ruxsat: {MAX_UPLOAD_BYTES // (1024 * 1024)} MB gacha."
+    dest = _unique_path(user_dir(user_id), filename)
+    try:
+        await message.bot.download(media, destination=dest)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Faylni yuklab olib bo'lmadi: %s", e)
+        return None, "Faylni yuklab olib bo'lmadi. Qayta yuboring."
+    file_cleanup.schedule_file_delete(dest, delay_seconds=UPLOAD_RETENTION_SECONDS)
+    return os.path.basename(dest), None
+
+
+def _user_files_line(user_id: int) -> str:
+    """AI foydalanuvchining hozirgi fayllarini bilishi uchun (albom/ko'p bosqichli ish)."""
+    try:
+        names = sorted(n for n in os.listdir(user_dir(user_id)) if os.path.isfile(os.path.join(user_dir(user_id), n)))
+    except OSError:
+        return ""
+    if not names:
+        return ""
+    shown = ", ".join(f"'{n}'" for n in names[:30]) + (f" ...(+{len(names) - 30})" if len(names) > 30 else "")
+    return (
+        f"Foydalanuvchining hozir mavjud fayllari (1 soat saqlanadi): {shown}. Tool'larda file_path/image_paths "
+        "sifatida AYNAN shu nomlarni ishlating; fayl kerak bo'lsa va ro'yxatda yo'q bo'lsa, uni yuborishni so'rang."
+    )
+
+
+@router.message(F.text | F.photo | F.document)
 async def handle_message(message: Message):
     user_id = message.from_user.id
     is_group = message.chat.type in GROUP_CHAT_TYPES
-    user_text = message.text
+    raw_text = message.text or message.caption or ""
+    has_media = bool(message.photo or message.document)
+    user_text = raw_text
     requester_id_for_limit = user_id  # chatmode YOQILGAN bo'lsa, pastda owner_id'ga almashtiriladi
 
     if is_group:
         bot_username = bot_identity.get_username()
-        is_mentioned = bool(bot_username) and f"@{bot_username.lower()}" in (message.text or "").lower()
+        is_mentioned = bool(bot_username) and f"@{bot_username.lower()}" in raw_text.lower()
         is_reply_to_bot = (
             message.reply_to_message is not None
             and message.reply_to_message.from_user is not None
@@ -68,7 +128,13 @@ async def handle_message(message: Message):
         # murojaat qilinadi: (1) botni tag qilish, (2) botning O'Z xabariga
         # reply qilish — boshqa har qanday xabar E'TIBORSIZ qoldiriladi.
         chat_mode_rec = chat_mode.get(message.chat.id)
-        if chat_mode_rec is None and not (is_mentioned or is_reply_to_bot):
+        if has_media:
+            # Rasm/hujjat guruhda FAQAT bot tag/reply qilinganda qabul qilinadi — chatmode
+            # ham bunga taalluqli emas (aks holda guruhdagi HAR bir rasm diskka tushardi).
+            if not (is_mentioned or is_reply_to_bot):
+                return
+            chat_mode_rec = None
+        elif chat_mode_rec is None and not (is_mentioned or is_reply_to_bot):
             return
 
         if chat_mode_rec is None:
@@ -118,7 +184,7 @@ async def handle_message(message: Message):
                 await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
                 return
 
-        user_text = _strip_bot_mention(message.text, bot_username)
+        user_text = _strip_bot_mention(raw_text, bot_username)
 
     else:
         # SHAXSIY chatda yozgan HAR BIR foydalanuvchining ID+ism+username'i
@@ -133,8 +199,24 @@ async def handle_message(message: Message):
             await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
             return
 
-    ctx = {"bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id}
+    mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
+    ctx = {
+        "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
+        "is_group": is_group, "mod": mod_access,
+    }
     thread_id = message.message_thread_id  # shaxsiy chatdagi topic bo'lsa to'ldiriladi
+
+    if has_media:
+        saved_name, upload_error = await _save_upload(message, user_id)
+        if upload_error:
+            await message.reply(f"⚠️ {upload_error}")
+            return
+        note = f"[Foydalanuvchi fayl yubordi, saqlangan nomi: '{saved_name}']"
+        user_text = f"{note} {user_text}".strip() if user_text else f"{note} Shu fayl bilan nima qila olasiz?"
+
+    extra_files_line = _user_files_line(user_id)
+    if extra_files_line:
+        user_text = f"{user_text}\n\n({extra_files_line})"
 
     # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
     history = topic_sessions.get_history(user_id, thread_id)
@@ -153,6 +235,8 @@ async def handle_message(message: Message):
         system_prompt += f"\n\n{await user_profile.basic_info_line(message.bot, message)}"
         # AI'ning "soati": hozirgi sana/vaqt (aks holda model bugungi sanani bilmaydi)
         system_prompt += f"\n\n{clock.time_context_line()}"
+        if mod_access is not None:
+            system_prompt += f"\n\n{moderation.SYSTEM_HINT}{moderation.context_line(message)}"
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
@@ -190,13 +274,21 @@ async def handle_message(message: Message):
                                     # o'sha teglarni o'zi ham qaytara boshlashi mumkin edi
     tool_outputs: list[tuple[str, dict]] = []
 
+    # Moderatsiya tool'lari faqat GURUHDA, yozuvchi admin BO'LSA va xabar shu mavzuda
+    # bo'lsagina qo'shiladi — har xabarga behuda ~20 ta schema token yemasin.
+    active_tools = TOOLS
+    if mod_access is not None and moderation.looks_like_mod_request(user_text):
+        mod_schemas = moderation.tool_schemas(message.bot, mod_access)
+        if mod_schemas:
+            active_tools = TOOLS + mod_schemas
+
     try:
         # GURUHDA user_id=None yuboriladi — shu bilan ai.chat() shaxsiy kalitni
         # UMUMAN tekshirmaydi, har doim umumiy/admin kalitidan foydalanadi
         # (guruhda hamma so'rovi bir xil hisob-kitobga tushishi uchun).
         chat_user_id = None if is_group else user_id
         convo = list(messages)  # tool round-trip xabarlari shu yerga qo'shib boriladi
-        result = await ai.chat(convo, tools=TOOLS, user_id=chat_user_id)
+        result = await ai.chat(convo, tools=active_tools, user_id=chat_user_id)
         choice = result["response"].choices[0].message
 
         # AGENTIC TSIKL: AI tool chaqirsa — natijani unga QAYTARIB beramiz, u esa
@@ -243,10 +335,7 @@ async def handle_message(message: Message):
                     "content": json.dumps(tool_result, ensure_ascii=False, default=str)[:8000],
                 })
 
-            has_file = any(
-                isinstance(r, dict) and (r.get("file_path") or r.get("output_path"))
-                for _, r in tool_outputs
-            )
+            has_file = any(output_files(r) for _, r in tool_outputs)
             if has_file:
                 # Fayl yaratilgan — u pastda alohida yuboriladi; qayta AI so'rovi
                 # (qo'shimcha xarajat) shart emas.
@@ -256,7 +345,7 @@ async def handle_message(message: Message):
                 break
 
             convo = convo + [assistant_msg] + tool_result_msgs
-            result = await ai.chat(convo, tools=TOOLS, user_id=chat_user_id)
+            result = await ai.chat(convo, tools=active_tools, user_id=chat_user_id)
             choice = result["response"].choices[0].message
 
         if not file_done:
@@ -279,59 +368,47 @@ async def handle_message(message: Message):
 
     # Fayl/prezentatsiya/diagramma yaratish — 3x qimmatroq (guruhda ham,
     # shaxsiy chatda ham bir xil qoida)
-    has_file_result = any(
-        isinstance(r, dict) and (r.get("file_path") or r.get("output_path"))
-        for _, r in tool_outputs
-    )
+    has_file_result = any(output_files(r) for _, r in tool_outputs)
     weight = roles.FILE_GENERATION_WEIGHT if has_file_result else 1
     await roles.register_request(message.bot, requester_id_for_limit, weight=weight)
 
-    # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy faylларni yuboramiz
+    # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy fayllarni yuboramiz
+    # (bitta tool bir nechta fayl qaytarishi mumkin — masalan extract_pdf_images, split_pdf)
     for tool_name, tool_result in tool_outputs:
-        if not isinstance(tool_result, dict):
-            continue
-        file_path = tool_result.get("file_path") or tool_result.get("output_path")
-        if not file_path:
-            continue
+        for file_path in output_files(tool_result):
+            try:
+                kb = None
+                if file_path.lower().endswith(".pptx"):
+                    token = preview_tokens.store(file_path)
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🖼 Slaydlarni ko'rish", callback_data=f"preview:{token}")]
+                    ])
+                # message_thread_id BERILMAYDI — aiogram buni message.is_topic_message
+                # orqali o'zi avtomatik to'g'ri biriktiradi; qo'lda ham berilsa,
+                # "got multiple values for keyword argument" xatosi chiqadi.
+                # reply_document — foydalanuvchi/botning ASL xabariga REPLY qilib
+                # yuboradi (kim so'ragani aniq bo'lishi uchun, guruhda bir nechta
+                # AI-bot bir-biriga javob berayotganda ham aralashib ketmasin).
+                await message.reply_document(
+                    FSInputFile(file_path),
+                    caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
+                    reply_markup=kb,
+                    allow_sending_without_reply=True,
+                )
+            except Exception as e:
+                # ENG MUHIMI: avval bu yerda xatolik jimgina yutilib ketardi (foydalanuvchi
+                # "Tayyor" degan xabardan keyin hech narsa ko'rmasdi). Endi xato ko'rinadi.
+                logger.exception("Faylni yuborishda xatolik: %s", file_path)
+                await message.reply(f"⚠️ Faylni yuborishda xatolik: {e}")
+                continue
 
-        if not os.path.isfile(file_path):
-            logger.warning("Tool '%s' file_path qaytardi, lekin fayl diskda topilmadi: %s", tool_name, file_path)
-            await message.reply(f"⚠️ Fayl yaratildi deb ko'rsatildi, lekin topilmadi: {os.path.basename(file_path)}")
-            continue
-
-        try:
-            kb = None
-            if file_path.lower().endswith(".pptx"):
-                token = preview_tokens.store(file_path)
-                kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🖼 Slaydlarni ko'rish", callback_data=f"preview:{token}")]
-                ])
-            # message_thread_id BERILMAYDI — aiogram buni message.is_topic_message
-            # orqali o'zi avtomatik to'g'ri biriktiradi; qo'lda ham berilsa,
-            # "got multiple values for keyword argument" xatosi chiqadi.
-            # reply_document — foydalanuvchi/botning ASL xabariga REPLY qilib
-            # yuboradi (kim so'ragani aniq bo'lishi uchun, guruhda bir nechta
-            # AI-bot bir-biriga javob berayotganda ham aralashib ketmasin).
-            await message.reply_document(
-                FSInputFile(file_path),
-                caption=f"📄 {os.path.basename(file_path)} ({tool_name})",
-                reply_markup=kb,
-                allow_sending_without_reply=True,
-            )
-        except Exception as e:
-            # ENG MUHIMI: avval bu yerda xatolik jimgina yutilib ketardi (foydalanuvchi
-            # "Tayyor" degan xabardan keyin hech narsa ko'rmasdi). Endi xato ko'rinadi.
-            logger.exception("Faylni yuborishda xatolik: %s", file_path)
-            await message.reply(f"⚠️ Faylni yuborishda xatolik: {e}")
-            continue
-
-        # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
-        # .pptx uchun "🖼 Ko'rish" tugmasi bosilishi mumkinligi uchun 15 daqiqa
-        # kutamiz, qolganlarini (docx/xlsx/pdf) DARHOL o'chiramiz.
-        if kb is not None:
-            file_cleanup.schedule_file_delete(file_path, delay_seconds=900)
-        else:
-            file_cleanup.delete_file_now(file_path)
+            # Telegram faylni allaqachon qabul qildi — diskda saqlashning hojati yo'q.
+            # .pptx uchun "🖼 Ko'rish" tugmasi bosilishi mumkinligi uchun 15 daqiqa
+            # kutamiz, qolganlarini (docx/xlsx/pdf) DARHOL o'chiramiz.
+            if kb is not None:
+                file_cleanup.schedule_file_delete(file_path, delay_seconds=900)
+            else:
+                file_cleanup.delete_file_now(file_path)
 
     # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
     await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", user_text)

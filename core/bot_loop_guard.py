@@ -18,7 +18,6 @@ qayta ishga tushirilganda tozalanadi, bu tabiiy va yetarli (maqsad — faqat
 bitta suhbat sessiyasi ichidagi runaway tsiklni to'xtatish).
 """
 import logging
-import time
 
 logger = logging.getLogger("bot_loop_guard")
 
