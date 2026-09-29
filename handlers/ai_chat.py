@@ -276,11 +276,16 @@ async def handle_message(message: Message):
 
     # Moderatsiya tool'lari faqat GURUHDA, yozuvchi admin BO'LSA va xabar shu mavzuda
     # bo'lsagina qo'shiladi — har xabarga behuda ~20 ta schema token yemasin.
+    # DIQQAT: faqat JORIY xabarni emas, so'nggi tarixni ham tekshiramiz — aks holda
+    # bot "kimning ID'sini bilmoqchisiz?" deb so'ragach, foydalanuvchi shunchaki
+    # ID'ni yuborsa (o'zida "mute"/"ban" so'zi bo'lmaydi), tool yana yo'qolib qolardi.
     active_tools = TOOLS
-    if mod_access is not None and moderation.looks_like_mod_request(user_text):
-        mod_schemas = moderation.tool_schemas(message.bot, mod_access)
-        if mod_schemas:
-            active_tools = TOOLS + mod_schemas
+    if mod_access is not None:
+        recent_context = " ".join((m.get("content") or "") for m in history[-6:]) + " " + user_text
+        if moderation.looks_like_mod_request(recent_context):
+            mod_schemas = moderation.tool_schemas(message.bot, mod_access)
+            if mod_schemas:
+                active_tools = TOOLS + mod_schemas
 
     try:
         # GURUHDA user_id=None yuboriladi — shu bilan ai.chat() shaxsiy kalitni
