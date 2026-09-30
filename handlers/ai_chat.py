@@ -73,11 +73,14 @@ def _unique_path(directory: str, filename: str) -> str:
 
 
 async def _save_upload(message: Message, user_id: int) -> tuple[str | None, str | None]:
-    """Yuborilgan rasm/hujjatni foydalanuvchining shaxsiy papkasiga saqlaydi.
+    """Yuborilgan rasm/video/hujjatni foydalanuvchining shaxsiy papkasiga saqlaydi.
     (saqlangan_nom, None) yoki (None, xato_matni) qaytaradi."""
     if message.photo:
         media = message.photo[-1]
         filename = f"foto_{message.message_id}.jpg"
+    elif message.video or message.animation:
+        media = message.video or message.animation
+        filename = _safe_filename(media.file_name or f"video_{message.message_id}.mp4")
     else:
         media = message.document
         filename = _safe_filename(media.file_name or f"fayl_{message.message_id}")
@@ -108,12 +111,12 @@ def _user_files_line(user_id: int) -> str:
     )
 
 
-@router.message(F.text | F.photo | F.document)
+@router.message(F.text | F.photo | F.document | F.video | F.animation)
 async def handle_message(message: Message):
     user_id = message.from_user.id
     is_group = message.chat.type in GROUP_CHAT_TYPES
     raw_text = message.text or message.caption or ""
-    has_media = bool(message.photo or message.document)
+    has_media = bool(message.photo or message.document or message.video or message.animation)
     user_text = raw_text
     requester_id_for_limit = user_id  # chatmode'da pastda owner yoki yozuvchiga aniqlanadi
     charge_mode = "user"  # "user" — oddiy hisob | "owner" — chatmode owner'i (force) | "none" — VIP guruh, hisoblanmaydi
