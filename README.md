@@ -341,3 +341,10 @@ pip install -r requirements.txt
 cp .env.example .env   # to'ldiring
 python main.py
 ```
+
+## Guruh chat rejimi va limitlar
+- `/chatmode on|off` — **kim qila oladi:** guruh egasi/adminlari (Telegram), botning adminlari, superadmin. Boshqalarga ruxsat yo'q.
+  Yoqilgan guruhda bot HAR BIR xabarga javob beradi. **Hisob tartibi:** 1) rejimni yoqqan odamning kunlik limiti → 2) u tugasa, xabar yozgan odamning o'z limiti → 3) ikkalasi ham tugasa javob yo'q.
+  (Rejimni yoqqan odam superadmin/admin bo'lsa ham, chatmode so'rovlari uning kunlik hisobidan ketadi.)
+- `/vipchatmode on|off` — **faqat superadmin.** Shu guruhda CHEKSIZ: hech kimning limiti tekshirilmaydi ham, hisoblanmaydi ham. VIP rejimni faqat superadmin o'zgartira/o'chira oladi.
+- Fayl/prezentatsiya/diagramma yaratish har doim 3x hisoblanadi.

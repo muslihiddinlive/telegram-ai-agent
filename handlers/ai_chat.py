@@ -112,7 +112,8 @@ async def handle_message(message: Message):
     raw_text = message.text or message.caption or ""
     has_media = bool(message.photo or message.document)
     user_text = raw_text
-    requester_id_for_limit = user_id  # chatmode YOQILGAN bo'lsa, pastda owner_id'ga almashtiriladi
+    requester_id_for_limit = user_id  # chatmode'da pastda owner yoki yozuvchiga aniqlanadi
+    charge_mode = "user"  # "user" — oddiy hisob | "owner" — chatmode owner'i (force) | "none" — VIP guruh, hisoblanmaydi
 
     if is_group:
         bot_username = bot_identity.get_username()
@@ -173,10 +174,23 @@ async def handle_message(message: Message):
             return
 
         if chat_mode_rec is not None:
-            # Chatmode YOQILGAN — kunlik limit UMUMAN tekshirilmaydi (guruh
-            # egasi "cheksiz davom etsin" deb ongli tanlagan). So'rov FAQAT
-            # hisob-kitob uchun shu rejimni YOQQAN odamning nomidan yoziladi.
-            requester_id_for_limit = chat_mode_rec["owner_id"]
+            if chat_mode_rec.get("vip"):
+                # /vipchatmode (faqat superadmin yoqadi) — CHEKSIZ: hech kimning
+                # limiti tekshirilmaydi va hisoblanmaydi.
+                charge_mode = "none"
+            else:
+                # /chatmode on — avval yoqqan odamning limiti, u tugasa xabar
+                # YOZGAN odamning o'z limiti, ikkalasi ham tugasa — javob yo'q.
+                owner_id = chat_mode_rec["owner_id"]
+                payer = roles.resolve_chatmode_payer(owner_id, user_id)
+                if payer is None:
+                    await message.reply(
+                        "🚫 Bugungi limit tugadi (guruh chat rejimi egasining ham, sizning ham). "
+                        "Ertaga qayta urinib ko'ring."
+                    )
+                    return
+                requester_id_for_limit = payer
+                charge_mode = "owner" if payer == owner_id else "user"
         else:
             # Standart guruh: global tasdiqlash (role="approved") SHART EMAS —
             # faqat kunlik limit tekshiriladi (avtomatik 20/kun bilan boshlanadi)
@@ -375,7 +389,11 @@ async def handle_message(message: Message):
     # shaxsiy chatda ham bir xil qoida)
     has_file_result = any(output_files(r) for _, r in tool_outputs)
     weight = roles.FILE_GENERATION_WEIGHT if has_file_result else 1
-    await roles.register_request(message.bot, requester_id_for_limit, weight=weight)
+    if charge_mode == "owner":
+        await roles.register_request(message.bot, requester_id_for_limit, weight=weight, force=True)
+    elif charge_mode == "user":
+        await roles.register_request(message.bot, requester_id_for_limit, weight=weight)
+    # charge_mode == "none" (VIP chatmode) — hisoblanmaydi
 
     # Fayl yaratgan tool'lar bo'lsa — statusdan keyin haqiqiy fayllarni yuboramiz
     # (bitta tool bir nechta fayl qaytarishi mumkin — masalan extract_pdf_images, split_pdf)

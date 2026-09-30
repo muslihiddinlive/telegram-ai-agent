@@ -1,14 +1,18 @@
 """
-Guruh ichida bot javobini cheklash komandalari — bularni FAQAT o'sha
-GURUHNING Telegram-admini/egasi ishlatishi mumkin (bizning superadmin/admin
-tizimimizdan mustaqil — bu guruhga xos, Telegram darajasidagi tekshiruv).
+Guruh ichida bot javobini boshqarish komandalari.
+/guruh_ruxsat* — FAQAT o'sha GURUHNING Telegram-admini/egasi.
+/chatmode — guruh egasi/adminlari + bot adminlari + superadmin.
+/vipchatmode — FAQAT superadmin (cheksiz rejim).
 """
+import re
+
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message
 
 import core.group_permissions as group_permissions
 import core.chat_mode as chat_mode
+import core.roles as roles
 
 router = Router()
 
@@ -20,34 +24,92 @@ async def _is_group_admin(message: Message) -> bool:
     return member.status in ("creator", "administrator")
 
 
-@router.message(F.text.regexp(r"(?i)^/chatmode\b"), F.chat.type.in_({"group", "supergroup"}))
+_CHATMODE_RE = re.compile(r"(?is)^/(vip)?chatmode(?:@\w+)?\s*:?\s*(\w*)")
+
+
+async def _can_manage_chatmode(message: Message) -> bool:
+    """
+    /chatmode on|off kim qila oladi: guruh egasi/adminlari (Telegram darajasida),
+    botning adminlari va superadmin.
+    """
+    uid = message.from_user.id
+    if roles.is_superadmin(uid) or roles.is_admin(uid):
+        return True
+    return await _is_group_admin(message)
+
+
+@router.message(F.text.regexp(r"(?i)^/(vip)?chatmode\b"), F.chat.type.in_({"group", "supergroup"}))
 async def toggle_chat_mode(message: Message):
     """
-    /chatmode on  — bot HAR BIR xabarga (tag/reply shart emas) javob beradi;
-                    so'rovlar shu komandani yozgan admin hisobidan ketadi.
-    /chatmode off — standart holatga qaytadi (faqat tag/reply'ga javob beradi).
-    /chatmode     — joriy holatni ko'rsatadi.
+    /chatmode on|off|(holat)    — guruh egasi/adminlari, bot adminlari, superadmin.
+        Hisob: avval yoqqan odamning limiti -> tugasa yozuvchining o'z limiti.
+    /vipchatmode on|off|(holat) — FAQAT superadmin. Shu guruhda CHEKSIZ (hisoblanmaydi).
     """
-    if not await _is_group_admin(message):
-        await message.reply("⚠️ Bu komandani faqat guruh admin/egasi ishlata oladi.")
+    m = _CHATMODE_RE.match(message.text or "")
+    is_vip_cmd = bool(m and m.group(1))
+    arg = (m.group(2) if m else "").lower()
+    uid = message.from_user.id
+    chat_id = message.chat.id
+
+    # Anonim admin (guruh nomidan yozish) — kim ekani noma'lum, hisob-kitob bo'lmaydi
+    if message.sender_chat is not None or message.from_user.is_bot:
+        await message.reply("⚠️ Anonim admin rejimida bu komandani ishlatib bo'lmaydi — o'z akkauntingizdan yozing.")
         return
 
-    parts = message.text.split(None, 1)
-    arg = parts[1].strip().lower().lstrip(":").strip() if len(parts) > 1 else ""
+    current = chat_mode.get(chat_id)
+
+    if is_vip_cmd:
+        if not roles.is_superadmin(uid):
+            return  # jim — bu komanda mavjudligi oddiy userlarga ko'rinmaydi
+        if arg == "on":
+            await chat_mode.enable(message.bot, chat_id, owner_id=uid, vip=True)
+            await message.reply(
+                "👑 VIP chat rejimi YOQILDI — bot HAR BIR xabarga javob beradi va bu guruhda "
+                "CHEKSIZ: hech kimning limiti tekshirilmaydi va hisoblanmaydi.\n\n"
+                "O'chirish: <code>/vipchatmode off</code>"
+            )
+        elif arg == "off":
+            if current and current.get("vip"):
+                await chat_mode.disable(message.bot, chat_id)
+                await message.reply("✅ VIP chat rejimi O'CHIRILDI.")
+            else:
+                await message.reply("VIP chat rejimi bu guruhda yoqilmagan.")
+        else:
+            status = "YOQILGAN 👑" if current and current.get("vip") else "O'CHIRILGAN ⛔"
+            await message.reply(
+                f"VIP holat: {status}\n\n"
+                f"Yoqish: <code>/vipchatmode on</code>\nO'chirish: <code>/vipchatmode off</code>"
+            )
+        return
+
+    # ── /chatmode (oddiy) ──
+    if not await _can_manage_chatmode(message):
+        await message.reply("⚠️ Bu komandani faqat guruh egasi/adminlari, bot adminlari yoki superadmin ishlata oladi.")
+        return
+
+    # VIP rejimni faqat superadmin o'zgartira oladi
+    if current and current.get("vip") and not roles.is_superadmin(uid) and arg in ("on", "off"):
+        await message.reply("👑 Bu guruhda VIP chat rejimi yoqilgan — uni faqat superadmin o'zgartira oladi.")
+        return
 
     if arg == "on":
-        await chat_mode.enable(message.bot, message.chat.id, owner_id=message.from_user.id)
+        await chat_mode.enable(message.bot, chat_id, owner_id=uid, vip=False)
         await message.reply(
             "✅ Chat rejimi YOQILDI — bot endi HAR BIR xabarga (tag/reply shart emas) javob beradi.\n"
-            "So'rovlar sizning (shu komandani yozgan) hisobingizdan hisoblanadi.\n\n"
+            "So'rovlar avval sizning (shu komandani yozgan) limitingizdan ketadi; "
+            "u tugagach — har bir xabar yozgan odamning o'z limitidan.\n\n"
             "O'chirish: <code>/chatmode off</code>"
         )
     elif arg == "off":
-        await chat_mode.disable(message.bot, message.chat.id)
+        await chat_mode.disable(message.bot, chat_id)
         await message.reply("✅ Chat rejimi O'CHIRILDI — bot endi yana faqat tag/reply qilinganda javob beradi.")
     else:
-        current = chat_mode.get(message.chat.id)
-        status = "YOQILGAN ✅" if current else "O'CHIRILGAN ⛔"
+        if current and current.get("vip"):
+            status = "YOQILGAN (VIP 👑)"
+        elif current:
+            status = "YOQILGAN ✅"
+        else:
+            status = "O'CHIRILGAN ⛔"
         await message.reply(
             f"Joriy holat: {status}\n\n"
             f"Yoqish: <code>/chatmode on</code>\nO'chirish: <code>/chatmode off</code>"
