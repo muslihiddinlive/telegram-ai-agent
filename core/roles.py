@@ -16,6 +16,7 @@ import config
 import core.tgdb as tgdb
 
 DEFAULT_DAILY_LIMIT = 20
+ADMIN_DAILY_LIMIT = getattr(config, "ADMIN_DAILY_LIMIT", 100)  # bot adminlari + superadmin (chatmode hisobi)
 
 
 def _bucket(user_id: int) -> dict:
@@ -181,11 +182,18 @@ def can_use_in_group(user_id: int) -> bool:
     return rec["requests_today"] < rec["daily_limit"]
 
 
+def effective_daily_limit(user_id: int) -> int:
+    """Superadmin/bot admini uchun ADMIN_DAILY_LIMIT (100), qolganlar uchun o'z limiti."""
+    if get_role(user_id) in ("superadmin", "admin"):
+        return ADMIN_DAILY_LIMIT
+    return _bucket(user_id)["daily_limit"]
+
+
 def _quota_left(user_id: int) -> bool:
     """Roldan qat'iy nazar, foydalanuvchining KUNLIK hisobida joy bormi?"""
     rec = _bucket(user_id)
     _reset_if_new_day(rec)
-    return rec["requests_today"] < rec["daily_limit"]
+    return rec["requests_today"] < effective_daily_limit(user_id)
 
 
 def resolve_chatmode_payer(owner_id: int, writer_id: int) -> int | None:
@@ -193,7 +201,7 @@ def resolve_chatmode_payer(owner_id: int, writer_id: int) -> int | None:
     /chatmode on (VIP EMAS) guruhida bu xabar kimning hisobidan ketishini aniqlaydi:
       1) rejimni yoqqan odamning (owner) limiti bor  -> owner
          (owner superadmin/admin bo'lsa ham u yoqqan rejim UNING kunlik hisobidan
-          ketadi — cheksiz rejim uchun /vipchatmode bor)
+          ketadi, limiti ADMIN_DAILY_LIMIT=100/kun — cheksiz rejim uchun /vipchatmode bor)
       2) owner'niki tugagan -> xabarni YOZGAN odamning o'z limiti
          (superadmin/admin yozuvchi o'z rolida limitsiz)
       3) ikkalasi ham tugagan -> None (javob berilmaydi)
