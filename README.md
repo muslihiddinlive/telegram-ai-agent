@@ -348,3 +348,11 @@ python main.py
   (Rejimni yoqqan odam superadmin/bot admini bo'lsa ham, chatmode so'rovlari uning kunlik hisobidan ketadi — ularning limiti `ADMIN_DAILY_LIMIT` (standart **100/kun**, `.env` orqali o'zgartiriladi).)
 - `/vipchatmode on|off` — **faqat superadmin.** Shu guruhda CHEKSIZ: hech kimning limiti tekshirilmaydi ham, hisoblanmaydi ham. VIP rejimni faqat superadmin o'zgartira/o'chira oladi.
 - Fayl/prezentatsiya/diagramma yaratish har doim 3x hisoblanadi.
+
+## Profilga AI sifatida ulash va Story qo'yish (Telegram Business)
+Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `postStory` orqali) uning nomidan **story** qo'yadi.
+- **Ulash (foydalanuvchi tomonida):** Telegram Premium kerak → Sozlamalar → Telegram Business → Chatbotlar → botni qo'shish → ruxsatlardan **story'larni boshqarish**ni yoqish. Bot `business_connection` update'ini olib, ulanishni saqlaydi (`core/stories.py`).
+- **Menyu:** `/start` (yoki `/profil`) → 👤 Profil boshqaruvi → 📸 Story qo'yish → rasm/video yuboriladi (izoh = story matni) → muddat (6/12/24/48 soat) → joylanadi; keyin «🗑 O'chirish» tugmasi chiqadi.
+- **AI orqali:** rasm/video yuborib «buni storyimga qo'y» deyish mumkin (`post_story` tool). Story ommaviy amal bo'lgani uchun AI uni faqat foydalanuvchi aniq so'raganda chaqiradi.
+- **Formatlash:** rasm → 1080×1920 (xiralashtirilgan fon bilan), video → 720×1280 H.265/AAC, har soniyada key frame, ≤30 MB, ≤60 soniya (serverda **ffmpeg** kerak — Dockerfile'ga qo'shilgan).
+- **Cheklovlar:** bot faqat ≤20 MB fayllarni yuklab ola oladi (Bot API chegarasi); video qayta ishlash serverning CPU'siga bog'liq (sekin bo'lishi mumkin).

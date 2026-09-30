@@ -5,12 +5,14 @@ FROM python:3.11-slim
 # funksiyalari uchun. Faqat "impress" bilan cheklansak, docx/xlsx konvertatsiyasi
 # ishlamas edi (test qilib aniqlandi) — shuning uchun barcha uchtasi kerak.
 # tesseract-ocr — ms-file-toolkit'ning read_image_text (OCR) funksiyasi uchun.
+# ffmpeg — Story uchun videoni H.265/720x1280 formatiga o'tkazish (core/stories.py).
 # Katta (~700MB+), lekin bu funksiyalar uchun shart. Kerak bo'lmasa olib tashlang.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
     tesseract-ocr \
+    ffmpeg \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
