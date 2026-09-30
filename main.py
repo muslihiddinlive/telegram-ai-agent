@@ -25,6 +25,7 @@ from handlers.admin_terminal import router as admin_terminal_router
 from handlers.ai_chat import router as ai_chat_router
 from handlers.slide_preview import router as slide_preview_router
 from core.userbot_runtime import start_userbot_for_owner
+from core.group_observer import GroupObserver
 from core.accounts_store import get_user_secret
 import core.file_cleanup as file_cleanup
 import core.bot_identity as bot_identity
@@ -34,6 +35,7 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
+dp.message.outer_middleware(GroupObserver())  # guruhdagi HAR BIR xabarni kuzatadi (xotira + a'zolar indeksi)
 
 dp.include_router(panel_router)
 dp.include_router(start_router)
