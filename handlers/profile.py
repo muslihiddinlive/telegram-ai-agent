@@ -21,11 +21,13 @@ from aiogram.types import BusinessConnection, CallbackQuery, InlineKeyboardButto
 import core.bot_identity as bot_identity
 import core.roles as roles
 import core.stories as stories
+import core.story_caption as story_caption
 
 logger = logging.getLogger("profile")
 router = Router()
 
 WAIT_TTL = 15 * 60  # soniya — story jarayoni shundan keyin bekor bo'ladi
+MAX_REGEN = 3  # «Boshqacha yozish» ko'pi bilan shuncha marta (har biri AI so'rovi hisoblanadi)
 # user_id -> {"step": "media"|"period", "t": vaqt, "path", "kind", "caption", "entities", "duration", "anim", "src"}
 _waiting: dict[int, dict] = {}
 
@@ -139,8 +141,8 @@ async def story_start(call: CallbackQuery):
     await _edit(
         call,
         "📸 Story uchun <b>rasm yoki video</b> yuboring.\n\n"
-        "• Izoh (caption) yozsangiz, u <b>aynan shunday, so'zma-so'z</b> story matni bo'ladi "
-        "(«buni story qil» kabi buyruq yozmang — buyruq uchun menyudan chiqib, rasmni oddiy yuboring).\n"
+        "• Izoh (caption) yozsangiz: oddiy matn bo'lsa — <b>aynan shunday</b> story matni bo'ladi; "
+        "AI'ga buyruq bo'lsa (masalan «shunga jiddiy izoh yoz») — AI uni bajarib matnni <b>o'zi yozadi</b>.\n"
         "• Fayl 20 MB dan oshmasin (videoni bot o'zi Story formatiga o'tkazadi, eng ko'pi 60 soniya).\n"
         "• «Fayl sifatida» yuborsangiz ham bo'ladi.",
         _kb([("❌ Bekor qilish", "profile:menu")]),
@@ -213,22 +215,70 @@ async def story_media(message: Message, bot: Bot):
     _waiting[uid] = {
         "step": "period", "t": time.time(), "path": prepared, "src": src, "kind": kind,
         "duration": duration, "anim": is_anim,
-        "caption": message.caption, "entities": message.caption_entities,
+        "orig_caption": message.caption, "orig_entities": message.caption_entities, "regen": 0,
     }
-    caption = (message.caption or "").strip()
-    caption_line = (
-        f"\n\n📝 Story matni (so'zma-so'z shunday chiqadi):\n«{html.escape(caption[:300])}{'…' if len(caption) > 300 else ''}»"
-        if caption else "\n\n📝 Story matnsiz chiqadi (izoh yozilmagan)."
+    if (message.caption or "").strip():
+        await status_msg.edit_text("✍️ Izoh tekshirilmoqda…")
+    await _apply_caption(bot, uid)
+    text, kb = _period_view(_waiting[uid])
+    await status_msg.edit_text(text, reply_markup=kb)
+
+
+async def _apply_caption(bot: Bot, uid: int):
+    """Izohni AI bilan hal qiladi (oddiy matn -> aynan shunday; buyruq -> AI yozadi) va holatga yozadi."""
+    st = _waiting[uid]
+    caption, mode = await story_caption.resolve(bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"])
+    st["caption"], st["mode"] = caption, mode
+    # AI yozgan matnda asl izohning entity'lari (offsetlari) mos kelmaydi
+    st["entities"] = None if mode == story_caption.AI else st["orig_entities"]
+    st["t"] = time.time()
+
+
+def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
+    cap = st.get("caption") or ""
+    shown = f"«{html.escape(cap[:400])}{'…' if len(cap) > 400 else ''}»"
+    mode = st.get("mode")
+    if mode == story_caption.AI:
+        caption_line = f"✍️ Izohingizdagi buyruqni bajardim. Story matni:\n{shown}"
+    elif mode == story_caption.LITERAL:
+        caption_line = f"📝 Story matni (aynan shunday chiqadi):\n{shown}"
+    elif mode == story_caption.FALLBACK:
+        caption_line = (
+            "⚠️ Izohni AI bilan tekshirib bo'lmadi (limit yoki xato), shuning uchun u <b>so'zma-so'z</b> qo'yiladi:\n"
+            f"{shown}\nBuyruq yozgan bo'lsangiz — «Bekor qilish»ni bosib, keyinroq qayta urinib ko'ring."
+        )
+    else:
+        caption_line = "📝 Story matnsiz chiqadi (izoh yozilmagan)."
+    rows = [
+        [("⚡ 24 soat (tavsiya)", "profile:post:24")],
+        [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12"), ("48 soat", "profile:post:48")],
+    ]
+    if mode == story_caption.AI and st.get("regen", 0) < MAX_REGEN:
+        rows.append([("🔁 Boshqacha yozish", "profile:regen")])
+    rows.append([("❌ Bekor qilish", "profile:menu")])
+    text = (
+        "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?\n\n"
+        f"{caption_line}\n\n<i>Muddati tugagach ham profilingizda saqlanib qoladi (o'zingiz o'chirmaguningizcha).</i>"
     )
-    await status_msg.edit_text(
-        "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?"
-        f"{caption_line}\n\n<i>Muddati tugagach ham profilingizda saqlanib qoladi (o'zingiz o'chirmaguningizcha).</i>",
-        reply_markup=_kb(
-            [("⚡ 24 soat (tavsiya)", "profile:post:24")],
-            [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12"), ("48 soat", "profile:post:48")],
-            [("❌ Bekor qilish", "profile:menu")],
-        ),
-    )
+    return text, _kb(*rows)
+
+
+@router.callback_query(F.data == "profile:regen")
+async def story_regen(call: CallbackQuery, bot: Bot):
+    uid = call.from_user.id
+    st = _state(uid)
+    if not st or st["step"] != "period" or st.get("mode") != story_caption.AI:
+        await call.answer("Sessiya tugagan — qaytadan boshlang.", show_alert=True)
+        return
+    if st.get("regen", 0) >= MAX_REGEN:
+        await call.answer("Qayta yozish limiti tugadi.", show_alert=True)
+        return
+    st["regen"] = st.get("regen", 0) + 1
+    await call.answer("Qayta yozilmoqda…")
+    await _edit(call, "✍️ Boshqacha yozilmoqda…", None)
+    await _apply_caption(bot, uid)
+    text, kb = _period_view(_waiting[uid])
+    await _edit(call, text, kb)
 
 
 @router.callback_query(F.data.startswith("profile:post:"))

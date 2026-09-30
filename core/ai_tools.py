@@ -283,7 +283,7 @@ TOOLS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "file_name": {"type": "string", "description": "Foydalanuvchining mavjud fayllaridan AYNAN bittasining nomi (rasm yoki video)"},
-                    "caption": {"type": "string", "description": "Story matni (ixtiyoriy) — foydalanuvchi aytgan matn, o'zingizdan to'qimang"},
+                    "caption": {"type": "string", "description": "Story matni (ixtiyoriy). Foydalanuvchi matnni o'zi aytgan bo'lsa — AYNAN shuni bering. 'Izohini o'zing yoz' desa — foydalanuvchi so'roviga mos qisqa matnni o'zingiz yozib bering (buyruqning o'zini matnga kiritmang). Media mazmunini ko'rmagan bo'lsangiz, o'ylab topmang."},
                     "hours": {"type": "integer", "enum": [6, 12, 24, 48], "description": "Story necha soat turadi (standart 24)"},
                 },
                 "required": ["file_name"],
