@@ -227,8 +227,8 @@ async def story_media(message: Message, bot: Bot):
 async def _apply_caption(bot: Bot, uid: int):
     """Izohni AI bilan hal qiladi (oddiy matn -> aynan shunday; buyruq -> AI yozadi) va holatga yozadi."""
     st = _waiting[uid]
-    caption, mode = await story_caption.resolve(bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"])
-    st["caption"], st["mode"] = caption, mode
+    caption, mode, reason = await story_caption.resolve(bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"])
+    st["caption"], st["mode"], st["reason"] = caption, mode, reason
     # AI yozgan matnda asl izohning entity'lari (offsetlari) mos kelmaydi
     st["entities"] = None if mode == story_caption.AI else st["orig_entities"]
     st["t"] = time.time()
@@ -243,9 +243,14 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     elif mode == story_caption.LITERAL:
         caption_line = f"📝 Story matni (aynan shunday chiqadi):\n{shown}"
     elif mode == story_caption.FALLBACK:
+        why = {
+            story_caption.R_LIMIT: "kunlik so'rov limitingiz tugagan",
+            story_caption.R_ERROR: "AI xizmati hozir javob bermadi",
+            story_caption.R_FORMAT: "AI javobi tushunarsiz bo'ldi",
+        }.get(st.get("reason"), "noma'lum sabab")
         caption_line = (
-            "⚠️ Izohni AI bilan tekshirib bo'lmadi (limit yoki xato), shuning uchun u <b>so'zma-so'z</b> qo'yiladi:\n"
-            f"{shown}\nBuyruq yozgan bo'lsangiz — «Bekor qilish»ni bosib, keyinroq qayta urinib ko'ring."
+            f"⚠️ Izohni AI bilan tekshirib bo'lmadi ({why}), shuning uchun u <b>so'zma-so'z</b> qo'yiladi:\n"
+            f"{shown}\nBuyruq yozgan bo'lsangiz — «AI bilan qayta tekshirish»ni bosing yoki bekor qiling."
         )
     else:
         caption_line = "📝 Story matnsiz chiqadi (izoh yozilmagan)."
@@ -253,8 +258,11 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         [("⚡ 24 soat (tavsiya)", "profile:post:24")],
         [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12"), ("48 soat", "profile:post:48")],
     ]
-    if mode == story_caption.AI and st.get("regen", 0) < MAX_REGEN:
-        rows.append([("🔁 Boshqacha yozish", "profile:regen")])
+    if st.get("regen", 0) < MAX_REGEN:
+        if mode == story_caption.AI:
+            rows.append([("🔁 Boshqacha yozish", "profile:regen")])
+        elif mode == story_caption.FALLBACK and st.get("reason") != story_caption.R_LIMIT:
+            rows.append([("🔁 AI bilan qayta tekshirish", "profile:regen")])
     rows.append([("❌ Bekor qilish", "profile:menu")])
     text = (
         "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?\n\n"
@@ -267,7 +275,7 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def story_regen(call: CallbackQuery, bot: Bot):
     uid = call.from_user.id
     st = _state(uid)
-    if not st or st["step"] != "period" or st.get("mode") != story_caption.AI:
+    if not st or st["step"] != "period" or st.get("mode") not in (story_caption.AI, story_caption.FALLBACK):
         await call.answer("Sessiya tugagan — qaytadan boshlang.", show_alert=True)
         return
     if st.get("regen", 0) >= MAX_REGEN:

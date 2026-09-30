@@ -72,15 +72,33 @@ async def _ocr(path: str) -> str:
         return ""
 
 
-async def resolve(bot, user_id: int, caption: str | None, kind: str, photo_path: str | None = None) -> tuple[str | None, str]:
-    """(yakuniy_izoh, rejim) qaytaradi. Rejim: NONE | LITERAL | AI | FALLBACK."""
+# FALLBACK sabablari (foydalanuvchiga tushunarli ko'rsatiladi; texnik tafsilot faqat logga yoziladi)
+R_LIMIT, R_ERROR, R_FORMAT = "limit", "error", "format"
+
+
+def _as_bool(v):
+    """True/False, "true"/"false"/"ha"/"yo'q" kabi qiymatlarni ham qabul qiladi; aks holda None."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        low = v.strip().lower()
+        if low in ("true", "ha", "yes", "1"):
+            return True
+        if low in ("false", "yo'q", "yoq", "no", "0"):
+            return False
+    return None
+
+
+async def resolve(bot, user_id: int, caption: str | None, kind: str,
+                  photo_path: str | None = None) -> tuple[str | None, str, str | None]:
+    """(yakuniy_izoh, rejim, fallback_sababi) qaytaradi. Rejim: NONE | LITERAL | AI | FALLBACK."""
     caption = (caption or "").strip()
     if not caption:
-        return None, NONE
+        return None, NONE, None
 
     # AI chaqiruvi foydalanuvchining oddiy so'rovi kabi hisoblanadi (limit / shaxsiy kalit)
     if not roles.can_make_request(user_id):
-        return caption, FALLBACK
+        return caption, FALLBACK, R_LIMIT
 
     ocr = await _ocr(photo_path) if (kind == "photo" and photo_path) else ""
     user_msg = (
@@ -96,18 +114,20 @@ async def resolve(bot, user_id: int, caption: str | None, kind: str, photo_path:
         await roles.register_request(bot, user_id)
         raw = result["response"].choices[0].message.content
     except Exception as e:  # noqa: BLE001
-        logger.warning("Story izohini tahlil qilib bo'lmadi: %s", e)
-        return caption, FALLBACK
+        logger.warning("Story izohini tahlil qilib bo'lmadi (%s): %s", type(e).__name__, e)
+        return caption, FALLBACK, R_ERROR
 
     data = _extract_json(raw)
-    if data is None or not isinstance(data.get("is_instruction"), bool):
-        logger.warning("Story izohi: AI javobi tushunarsiz: %r", (raw or "")[:120])
-        return caption, FALLBACK
+    flag = _as_bool(data.get("is_instruction")) if data else None
+    if flag is None:
+        logger.warning("Story izohi: AI javobi tushunarsiz: %r", (raw or "")[:160])
+        return caption, FALLBACK, R_FORMAT
 
-    if not data["is_instruction"]:
-        return caption, LITERAL  # oddiy matn — AI qayta yozgan bo'lsa ham ASL matn saqlanadi
+    if not flag:
+        return caption, LITERAL, None  # oddiy matn — AI qayta yozgan bo'lsa ham ASL matn saqlanadi
 
     written = str(data.get("story_caption") or "").strip()
     if not written:
-        return caption, FALLBACK
-    return written[:MAX_CAPTION], AI
+        logger.warning("Story izohi: buyruq deb topildi, lekin matn bo'sh")
+        return caption, FALLBACK, R_FORMAT
+    return written[:MAX_CAPTION], AI, None
