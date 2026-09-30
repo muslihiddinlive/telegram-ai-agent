@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 data/db.json
+
+# Foydalanuvchi yuklagan vaqtinchalik fayllar
+data/user_files/
