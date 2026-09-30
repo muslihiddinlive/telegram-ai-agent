@@ -9,6 +9,7 @@ from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeAllGro
 GROUP_COMMANDS = [
     BotCommand(command="guruh_ruxsat", description="🔒 Bot javobini tanlangan userlarga cheklash"),
     BotCommand(command="guruh_ruxsat_ochirish", description="🔓 Cheklovni bekor qilish"),
+    BotCommand(command="chatmode", description="💬 Chat rejimi: on / off (guruh admini)"),
 ]
 
 GENERAL_COMMANDS = [

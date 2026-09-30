@@ -17,6 +17,7 @@ import config
 import core.tgdb as tgdb
 
 DEFAULT_DAILY_LIMIT = 20
+ADMIN_DAILY_LIMIT = getattr(config, "ADMIN_DAILY_LIMIT", 100)  # bot adminlari + superadmin (chatmode hisobi)
 
 
 def _bucket(user_id: int) -> dict:
@@ -187,15 +188,47 @@ def can_use_in_group(user_id: int) -> bool:
     return rec["requests_today"] < rec["daily_limit"]
 
 
-async def register_request(bot, user_id: int, weight: int = 1):
+def effective_daily_limit(user_id: int) -> int:
+    """Superadmin/bot admini uchun ADMIN_DAILY_LIMIT (100), qolganlar uchun o'z limiti."""
+    if get_role(user_id) in ("superadmin", "admin"):
+        return ADMIN_DAILY_LIMIT
+    return _bucket(user_id)["daily_limit"]
+
+
+def _quota_left(user_id: int) -> bool:
+    """Roldan qat'iy nazar, foydalanuvchining KUNLIK hisobida joy bormi?"""
+    rec = _bucket(user_id)
+    _reset_if_new_day(rec)
+    return rec["requests_today"] < effective_daily_limit(user_id)
+
+
+def resolve_chatmode_payer(owner_id: int, writer_id: int) -> int | None:
+    """
+    /chatmode on (VIP EMAS) guruhida bu xabar kimning hisobidan ketishini aniqlaydi:
+      1) rejimni yoqqan odamning (owner) limiti bor  -> owner
+         (owner superadmin/admin bo'lsa ham u yoqqan rejim UNING kunlik hisobidan
+          ketadi, limiti ADMIN_DAILY_LIMIT=100/kun — cheksiz rejim uchun /vipchatmode bor)
+      2) owner'niki tugagan -> xabarni YOZGAN odamning o'z limiti
+         (superadmin/admin yozuvchi o'z rolida limitsiz)
+      3) ikkalasi ham tugagan -> None (javob berilmaydi)
+    """
+    if _quota_left(owner_id):
+        return owner_id
+    if can_use_in_group(writer_id):
+        return writer_id
+    return None
+
+
+async def register_request(bot, user_id: int, weight: int = 1, force: bool = False):
     """
     weight — nechta so'rov sifatida hisoblansin (oddiy suhbat=1,
     fayl/prezentatsiya/diagramma generatsiyasi=FILE_GENERATION_WEIGHT).
     Ishlaydi role'idan qat'iy nazar (pending guruh-userlari uchun ham) —
     faqat superadmin/admin uchun sanalmaydi (ular limitsiz).
+    force=True — rolidan qat'iy nazar sanaydi (chatmode owner'i hisobidan ketganda).
     """
     role = get_role(user_id)
-    if role in ("superadmin", "admin"):
+    if role in ("superadmin", "admin") and not force:
         return  # limitsiz — sanamaymiz
     rec = _bucket(user_id)
     _reset_if_new_day(rec)

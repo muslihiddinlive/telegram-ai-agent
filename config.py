@@ -9,6 +9,10 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 DB_GROUP_ID = int(os.environ["DB_GROUP_ID"])
 PORT = int(os.environ.get("PORT", 8080))
 
+# Bot adminlari + superadmin uchun kunlik limit (faqat /chatmode on guruhlarida ularning
+# hisobidan ketadigan so'rovlarga tegishli; shaxsiy chatda ular baribir limitsiz).
+ADMIN_DAILY_LIMIT = int(os.environ.get("ADMIN_DAILY_LIMIT", 100))
+
 def _split_keys(env_name: str) -> list[str]:
     raw = os.environ.get(env_name, "")
     return [k.strip() for k in raw.split(",") if k.strip()]
