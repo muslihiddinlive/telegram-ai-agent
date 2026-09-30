@@ -185,8 +185,8 @@ shaxsiy kalit ulangan/ulanmagan userlar bir-biriga ta'sir qilmaydi).
 ## Ruxsat ierarxiyasi
 - **superadmin** (`.env`dagi `SUPERADMIN_ID`, bitta) — adminlarni va barcha userlarni boshqaradi, istalgan vaqt ruxsatni bekor qila oladi
 - **admin** (superadmin tayinlaydi) — FAQAT tasdiqlangan userlarni boshqaradi; boshqa adminlar yoki superadmin haqida hech narsa ko'rmaydi (panelda "Adminlar" bo'limi umuman chiqmaydi)
-- **tasdiqlangan user** — admin yoki superadmin tasdiqlagan, kunlik so'rov limiti bilan (standart 50/kun, `/panel` orqali o'zgartiriladi)
-- **pending** (yangi /start bosgan) — botdan foydalana olmaydi, so'rovi superadmin+barcha adminlarga tugma bilan yuboriladi
+- **oddiy user** — /start bosgan har kim AVTOMATIK (admin tasdig'i kerak emas), kunlik so'rov limiti bilan (standart 50/kun, `/panel` orqali o'zgartiriladi)
+- **blocked** — superadmin `/panel` orqali bloklagan user, shaxsiy chatda botdan foydalana olmaydi (qayta ochish mumkin)
 
 ## Yangilanish: debounced DB yozish (StokerDownloader patterni)
 `core/tgdb.py` endi har `save()` chaqiruvida darhol Telegram'ga yozmaydi —

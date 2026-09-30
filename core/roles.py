@@ -3,9 +3,10 @@
   - superadmin: config.SUPERADMIN_ID (bitta, .env orqali) — hammasini ko'radi/boshqaradi
   - admin: superadmin tomonidan tayinlangan — FAQAT tasdiqlangan userlarni boshqaradi,
     boshqa adminlarni yoki superadminni "bilmaydi" (panelda ko'rinmaydi)
-  - approved (tasdiqlangan user): admin YOKI superadmin tomonidan tasdiqlangan,
-    kunlik so'rov limiti bilan cheklangan. Superadmin istalgan vaqt bekor qila oladi.
-  - pending: hali hech kim tasdiqlamagan, botdan foydalana olmaydi
+  - approved (oddiy user): /start bosgan HAR KIM avtomatik shu holatga tushadi —
+    admin tasdig'i KUTILMAYDI. Kunlik so'rov limiti bilan cheklangan.
+  - blocked: superadmin qo'lda bloklagan user, botdan (shaxsiy chatda) foydalana olmaydi.
+    (Eski "pending" yozuvlari ham approved sifatida qabul qilinadi.)
 
 StokerDownloader'dagi referral/stars-wallet/premium-sotib-olish qismlari
 QASDDAN OLIB TASHLANDI — bu yopiq (faqat taklif qilingan userlar) tizim,
@@ -21,8 +22,8 @@ DEFAULT_DAILY_LIMIT = 20
 def _bucket(user_id: int) -> dict:
     db = tgdb.get()
     return db["users"].setdefault(str(user_id), {
-        "role": "pending",       # pending | approved
-        "approved_by": None,
+        "role": "approved",      # approved | blocked  (avto-tasdiq: admin kutilmaydi)
+        "approved_by": "auto",
         "daily_limit": DEFAULT_DAILY_LIMIT,
         "requests_today": 0,
         "last_reset": today_str(),
@@ -65,10 +66,15 @@ def is_admin(user_id: int) -> bool:
     return str(user_id) in db.get("admins", {})
 
 
-def is_approved(user_id: int) -> bool:
+def is_blocked(user_id: int) -> bool:
     db = tgdb.get()
     rec = db["users"].get(str(user_id))
-    return bool(rec and rec.get("role") == "approved")
+    return bool(rec and rec.get("role") == "blocked")
+
+
+def is_approved(user_id: int) -> bool:
+    """Bloklanmagan har bir user (superadmin/admin'dan tashqari) avtomatik 'approved'."""
+    return not is_blocked(user_id)
 
 
 def get_role(user_id: int) -> str:
@@ -76,9 +82,9 @@ def get_role(user_id: int) -> str:
         return "superadmin"
     if is_admin(user_id):
         return "admin"
-    if is_approved(user_id):
-        return "approved"
-    return "pending"
+    if is_blocked(user_id):
+        return "blocked"
+    return "approved"
 
 
 def can_use_bot(user_id: int) -> bool:
@@ -115,9 +121,9 @@ async def approve_user(bot, user_id: int, approved_by: int, daily_limit: int = D
 
 
 async def revoke_user(bot, user_id: int):
-    """Superadmin ISTALGAN vaqt, kim tasdiqlaganidan qat'iy nazar, bekor qila oladi."""
+    """Superadmin istalgan userni bloklay oladi (qayta ochish: approve_user)."""
     rec = _bucket(user_id)
-    rec["role"] = "pending"
+    rec["role"] = "blocked"
     rec["approved_by"] = None
     await tgdb.save(bot, force=True)
 
@@ -130,17 +136,17 @@ async def set_user_limit(bot, user_id: int, daily_limit: int):
 
 def list_approved_users() -> dict:
     db = tgdb.get()
-    return {uid: rec for uid, rec in db["users"].items() if rec.get("role") == "approved"}
+    return {uid: rec for uid, rec in db["users"].items() if rec.get("role") != "blocked"}
 
 
-def list_pending_users() -> dict:
+def list_blocked_users() -> dict:
     db = tgdb.get()
-    return {uid: rec for uid, rec in db["users"].items() if rec.get("role") == "pending"}
+    return {uid: rec for uid, rec in db["users"].items() if rec.get("role") == "blocked"}
 
 
 # ── Kunlik limit tekshiruvi ──
-# MUHIM: shaxsiy chatda foydalanish uchun global tasdiqlash (role="approved")
-# SHART, lekin GURUHDA bot bilan gaplashish uchun bu shart emas — faqat
+# MUHIM: shaxsiy chatda bloklanmagan bo'lish kerak (admin tasdig'i KERAK EMAS),
+# GURUHDA esa bloklash ham tekshirilmaydi — faqat
 # kunlik limit tekshiriladi (can_use_in_group). Ikkalasi ham BIR XIL
 # hisoblagichni (requests_today/daily_limit) ishlatadi — ya'ni bitta odam
 # shaxsiy chatda va guruhlarda ishlatgani BIRGALIKDA bitta kunlik limitdan
@@ -156,7 +162,7 @@ def _reset_if_new_day(rec: dict):
 
 
 def can_make_request(user_id: int) -> bool:
-    """Shaxsiy chat uchun — global tasdiqlash (approved) SHART."""
+    """Shaxsiy chat uchun — bloklanmagan bo'lish + kunlik limit."""
     role = get_role(user_id)
     if role in ("superadmin", "admin"):
         return True
@@ -176,7 +182,7 @@ def can_use_in_group(user_id: int) -> bool:
     role = get_role(user_id)
     if role in ("superadmin", "admin"):
         return True
-    rec = _bucket(user_id)  # avtomatik yaratadi (role="pending" bo'lib qoladi)
+    rec = _bucket(user_id)  # avtomatik yaratadi (role="approved")
     _reset_if_new_day(rec)
     return rec["requests_today"] < rec["daily_limit"]
 
@@ -224,7 +230,7 @@ def build_users_csv() -> str:
         writer.writerow([
             uid,
             rec.get("name") or "",
-            rec.get("role", "pending"),
+            rec.get("role", "approved"),
             rec.get("daily_limit", ""),
             rec.get("requests_today", 0),
             rec.get("last_reset", ""),
