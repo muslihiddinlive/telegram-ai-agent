@@ -20,6 +20,8 @@ from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
+import core.group_memory as group_memory
+from core.group_observer import mem_thread as _mem_thread
 import core.roles as roles
 import core.group_permissions as group_permissions
 import core.preview_tokens as preview_tokens
@@ -232,8 +234,18 @@ async def handle_message(message: Message):
     if extra_files_line:
         user_text = f"{user_text}\n\n({extra_files_line})"
 
-    # Shu TOPIC'ga tegishli suhbat tarixini olamiz — boshqa topic'lar bilan aralashmaydi
-    history = topic_sessions.get_history(user_id, thread_id)
+    # Tarix manbai:
+    #  - GURUHDA: guruhning BITTA umumiy logi (hamma yozganlar + bot javoblari; core/group_memory.py) —
+    #    aks holda har odamning alohida tarixi bo'lib, boshqalar bilan gaplashilgan mavzu esdan chiqardi.
+    #  - SHAXSIY chatda: shu topic'ga tegishli tarix (boshqa topic'lar bilan aralashmaydi).
+    group_mem_thread = _mem_thread(message) if is_group else None
+    group_summary = ""
+    if is_group:
+        group_summary, history = group_memory.build(message.chat.id, group_mem_thread, exclude_mid=message.message_id)
+        # Joriy xabar "Ism (@user): [reply → ...] matn" ko'rinishida — kim nima degani aniq bo'lsin
+        user_text = group_memory.tag_current(message, user_text, bot_identity.get_id())
+    else:
+        history = topic_sessions.get_history(user_id, thread_id)
 
     # Foydalanuvchi O'ZINING shaxsiy AI API kalitini ulagan bo'lsa (/apikalit) —
     # bu FAQAT SHAXSIY chatda ishlaydi. GURUHDA — hatto shaxsiy kalit ulagan
@@ -256,7 +268,11 @@ async def handle_message(message: Message):
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
             # (o'sha holatlarda tabiiy ravishda batafsilroq bo'lishi kerak bo'lsa).
             system_prompt += (
-                "\n\nMUHIM (guruh chati): javobingiz QISQA bo'lsin — odatda 1-4 gap "
+                "\n\nGURUH SUHBATI: guruhda bir nechta odam yozadi. Xabarlar 'Ism (@username): matn' "
+                "ko'rinishida keladi — kim nima degani shundan bilinadi; sizga murojaat qilinmagan xabarlar "
+                "ham kontekst uchun berilgan. Javobingizni shu prefikssiz, oddiy matn qilib yozing va "
+                "suhbat mavzusini (oldingi xabarlardan) yodda tuting.\n\n"
+                "MUHIM (guruh chati): javobingiz QISQA bo'lsin — odatda 1-4 gap "
                 "yetarli. Faqat foydalanuvchi ANIQ batafsil tushuntirish so'rasa, "
                 "yoki hujjat/fayl/kod yaratish kabi vazifa uzunroq matn talab qilsa, "
                 "shundagina kengroq yozing."
@@ -271,7 +287,7 @@ async def handle_message(message: Message):
         # Suhbatning ESKI (endi so'z-ma-so'z tarixda saqlanmaydigan) qismi —
         # "rolling summary" (core/history_summarizer.py) — shu tufayli suhbat
         # qancha uzun bo'lmasin, muhim kontekst UMUMAN yo'qolmaydi.
-        conv_summary = topic_sessions.get_summary(user_id, thread_id)
+        conv_summary = group_summary if is_group else topic_sessions.get_summary(user_id, thread_id)
         if conv_summary:
             system_prompt += f"\n\nSuhbatning OLDINGI (eski, xulosalangan) qismi:\n{conv_summary}"
 
@@ -433,8 +449,13 @@ async def handle_message(message: Message):
             else:
                 file_cleanup.delete_file_now(file_path)
 
-    # Shu topic'ning tarixiga user xabari + AI javobini yozib qo'yamiz
-    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", user_text)
-    await topic_sessions.append_and_save(message.bot, user_id, thread_id, "assistant", raw_text_for_history)
+    # Tarixga yozamiz
+    if is_group:
+        # odam xabari allaqachon group_observer tomonidan yozilgan — faqat bot javobi qo'shiladi
+        await group_memory.record_bot(message.bot, message.chat.id, group_mem_thread, raw_text_for_history)
+        await group_memory.maybe_fold(message.bot, message.chat.id, group_mem_thread)
+    else:
+        await topic_sessions.append_and_save(message.bot, user_id, thread_id, "user", user_text)
+        await topic_sessions.append_and_save(message.bot, user_id, thread_id, "assistant", raw_text_for_history)
 
 

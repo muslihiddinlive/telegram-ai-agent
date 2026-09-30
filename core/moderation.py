@@ -25,6 +25,7 @@ from tg_mod_functions import ModerationToolkit, WarnStorage
 import config
 import core.bot_identity as bot_identity
 import core.tgdb as tgdb
+import core.group_memory as group_memory
 
 logger = logging.getLogger("moderation")
 
@@ -250,11 +251,36 @@ async def context_line(bot, message) -> str:
             # bo'lgan) ishlaydi — aks holda Telegram "chat not found" qaytaradi,
             # bu holatda shunchaki o'tkazib yuboramiz (AI keyin reply so'raydi).
             username = ent.extract_from(text).lstrip("@")
+            if username.lower() == (bot_identity.get_username() or "").lower():
+                continue  # botning o'zini tag qilish — nishon emas
+            # 1) Botning O'Z indeksi — guruhda yozgan/qo'shilgan/admin har bir odam shu yerda bor.
+            #    (Bot API oddiy userni @username bo'yicha o'zi topa OLMAYDI.)
+            found = group_memory.find_user_id(message.chat.id, username)
+            if found:
+                parts.append(f"Eslatilgan foydalanuvchi: ID={found[0]}, ism=\"{found[1]}\", username=@{username}")
+                continue
+            # 2) Zaxira: Telegram'dan so'rab ko'ramiz (faqat ochiq kanal/guruh/bot uchun ishlaydi)
             try:
                 chat = await bot.get_chat(f"@{username}")
-                parts.append(f"Eslatilgan foydalanuvchi: ID={chat.id}, username=@{username}")
-            except Exception:  # noqa: BLE001 — topilmasa jim o'tkazib yuboriladi
-                parts.append(f"Eslatilgan '@{username}' — ID'sini aniqlab bo'lmadi (bot uni hali ko'rmagan)")
+                if chat.type == "private":
+                    parts.append(f"Eslatilgan foydalanuvchi: ID={chat.id}, username=@{username}")
+                else:
+                    parts.append(f"Eslatilgan '@{username}' — bu foydalanuvchi emas ({chat.type}), amal bajarilmasin")
+            except Exception:  # noqa: BLE001
+                parts.append(
+                    f"Eslatilgan '@{username}' — ID'sini aniqlab bo'lmadi: bu odam guruhda hali hech narsa yozmagan/"
+                    f"botga ko'rinmagan. Admin uning xabariga REPLY qilib so'rasin yoki odam bitta xabar yozsin."
+                )
+
+    # Ism bilan aytilgan bo'lsa ("Jasurga mute ber") — guruh a'zolari orasidan mosini beramiz
+    if not any(p.startswith("Eslatilgan foydalanuvchi") or p.startswith("Reply qilingan") for p in parts) \
+            and looks_like_mod_request(text):
+        cands = group_memory.candidates_by_text(message.chat.id, text)
+        if cands:
+            cand_txt = "; ".join(
+                f"ID={uid}, ism=\"{n}\"" + (f", @{u}" if u else "") for uid, n, u in cands
+            )
+            parts.append(f"Ismi/username'i matnda uchragan guruh a'zolari (aniq bo'lmasa, admindan so'rang): {cand_txt}")
 
     return "; ".join(parts) if parts else "Reply/eslatma yo'q — maqsadli ID noma'lum, so'rang."
 
