@@ -36,6 +36,7 @@ async def start(message: Message):
         return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👤 Profil boshqaruvi", callback_data="profile:menu")],
         [InlineKeyboardButton(text="🔑 AI API integratsiya", callback_data="apikey:menu")],
     ])
     await message.answer(

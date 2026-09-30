@@ -20,6 +20,7 @@ from handlers.topics import router as topics_router
 from handlers.group_settings import router as group_settings_router
 from handlers.userbot_commands import router as userbot_commands_router
 from handlers.api_integration import router as api_integration_router
+from handlers.profile import router as profile_router
 from handlers.pending_text import router as pending_text_router
 from handlers.admin_terminal import router as admin_terminal_router
 from handlers.ai_chat import router as ai_chat_router
@@ -43,6 +44,7 @@ dp.include_router(topics_router)
 dp.include_router(group_settings_router)
 dp.include_router(userbot_commands_router)
 dp.include_router(api_integration_router)
+dp.include_router(profile_router)  # ai_chat'dan OLDIN — story uchun yuborilgan rasm/video AI-suhbatga ketib qolmasin
 dp.include_router(admin_terminal_router)  # ai_chat'dan OLDIN — "exec:" AI'ga ketmasin
 dp.include_router(slide_preview_router)
 dp.include_router(pending_text_router)  # MUHIM: ai_chat'dan OLDIN — aks holda pending matnlar AI'ga ketadi
@@ -61,7 +63,8 @@ async def on_startup(bot: Bot):
     await _register_commands(bot)
 
     if config.WEBHOOK_URL:
-        await bot.set_webhook(f"{config.WEBHOOK_URL}/webhook")
+        # business_connection update'i kelishi uchun allaqachon ro'yxatdan o'tgan handler turlari so'raladi
+        await bot.set_webhook(f"{config.WEBHOOK_URL}/webhook", allowed_updates=dp.resolve_used_update_types())
 
     # Oldin ulangan barcha userbot'larni qayta ishga tushiramiz
     for user_id_str, secrets in db.get("ai_sessions", {}).items():
