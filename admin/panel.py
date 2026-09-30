@@ -51,7 +51,7 @@ async def show_users(call: CallbackQuery):
 
     def label(uid: str) -> str:
         rec = db["users"][uid]
-        icon = "✅" if rec.get("role") == "approved" else "⏳"
+        icon = "🚫" if rec.get("role") == "blocked" else "✅"
         return f"{icon} {rec.get('name') or uid}"
 
     buttons = [
@@ -85,7 +85,7 @@ async def user_detail(call: CallbackQuery):
     uid = call.data.split(":")[-1]
     db = tgdb.get()
     rec = db["users"].get(uid, {})
-    role = "✅ Tasdiqlangan" if rec.get("role") == "approved" else "⏳ Kutilmoqda"
+    role = "🚫 Bloklangan" if rec.get("role") == "blocked" else "✅ Faol"
     notes_count = len(rec.get("notes", []))
     text = (
         f"👤 {rec.get('name') or uid} (ID: <code>{uid}</code>)\n"
@@ -96,15 +96,15 @@ async def user_detail(call: CallbackQuery):
     )
 
     kb_rows = []
-    if rec.get("role") == "approved":
+    if rec.get("role") != "blocked":
         kb_rows.append([InlineKeyboardButton(text="✏️ Limitni o'zgartirish", callback_data=f"panel:setlimit:{uid}")])
-        # Faqat superadmin ISTALGAN vaqt bekor qila oladi (kim tasdiqlaganidan qat'iy nazar)
+        # Faqat superadmin bloklay oladi
         if roles.is_superadmin(caller):
-            kb_rows.append([InlineKeyboardButton(text="🚫 Ruxsatni bekor qilish", callback_data=f"panel:revoke:{uid}")])
+            kb_rows.append([InlineKeyboardButton(text="🚫 Bloklash", callback_data=f"panel:revoke:{uid}")])
     else:
-        kb_rows.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"panel:approve:{uid}")])
+        kb_rows.append([InlineKeyboardButton(text="✅ Blokdan chiqarish", callback_data=f"panel:approve:{uid}")])
     # Xotira/maxfiylik nazorati — superadmin va admin ikkalasi ham ko'ra oladi
-    # (chunki ular allaqachon foydalanuvchini tasdiqlash huquqiga ega)
+    # (admin va superadmin uchun)
     if notes_count:
         kb_rows.append([InlineKeyboardButton(text="🧠 Xotirani ko'rish", callback_data=f"panel:notes:{uid}")])
     kb_rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:users:0")])
@@ -154,9 +154,9 @@ async def approve_user_cb(call: CallbackQuery, bot: Bot):
         return
     uid = int(call.data.split(":")[-1])
     await roles.approve_user(bot, uid, approved_by=caller)
-    await call.answer("Tasdiqlandi ✅")
+    await call.answer("Blokdan chiqarildi ✅")
     try:
-        await bot.send_message(uid, "✅ So'rovingiz tasdiqlandi! Endi botdan foydalanishingiz mumkin.")
+        await bot.send_message(uid, "✅ Botdan foydalanish qayta ochildi.")
     except Exception:
         pass
 
@@ -164,11 +164,11 @@ async def approve_user_cb(call: CallbackQuery, bot: Bot):
 @router.callback_query(F.data.startswith("panel:revoke:"))
 async def revoke_user_cb(call: CallbackQuery, bot: Bot):
     if not roles.is_superadmin(call.from_user.id):
-        await call.answer("Faqat superadmin bekor qila oladi", show_alert=True)
+        await call.answer("Faqat superadmin bloklay oladi", show_alert=True)
         return
     uid = int(call.data.split(":")[-1])
     await roles.revoke_user(bot, uid)
-    await call.answer("Ruxsat bekor qilindi 🚫")
+    await call.answer("Bloklandi 🚫")
 
 
 @router.callback_query(F.data.startswith("panel:setlimit:"))
@@ -188,7 +188,7 @@ def render_search_results(matches: dict) -> InlineKeyboardMarkup:
         return None
     buttons = [
         [InlineKeyboardButton(
-            text=f"{'✅' if rec.get('role') == 'approved' else '⏳'} {rec.get('name') or uid} (ID: {uid})",
+            text=f"{'🚫' if rec.get('role') == 'blocked' else '✅'} {rec.get('name') or uid} (ID: {uid})",
             callback_data=f"panel:user_detail:{uid}",
         )]
         for uid, rec in list(matches.items())[:15]  # ko'p mos kelsa — birinchi 15 tasi

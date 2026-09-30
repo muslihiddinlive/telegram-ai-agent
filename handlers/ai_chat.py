@@ -178,7 +178,7 @@ async def handle_message(message: Message):
             # hisob-kitob uchun shu rejimni YOQQAN odamning nomidan yoziladi.
             requester_id_for_limit = chat_mode_rec["owner_id"]
         else:
-            # Standart guruh: global tasdiqlash (role="approved") SHART EMAS —
+            # Standart guruh: bloklash/tasdiqlash tekshirilmaydi —
             # faqat kunlik limit tekshiriladi (avtomatik 20/kun bilan boshlanadi)
             if not roles.can_use_in_group(user_id):
                 await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
@@ -188,12 +188,12 @@ async def handle_message(message: Message):
 
     else:
         # SHAXSIY chatda yozgan HAR BIR foydalanuvchining ID+ism+username'i
-        # ham sukut bo'yicha yangilanadi (hatto hali tasdiqlanmagan bo'lsa ham)
+        # ham sukut bo'yicha yangilanadi (hatto /start bosmasdan yozgan bo'lsa ham)
         await roles.touch_user_identity(message.bot, user_id, message.from_user.full_name, message.from_user.username)
 
-        # SHAXSIY chatda — global tasdiqlash SHART
+        # SHAXSIY chatda — admin tasdig'i kerak emas, faqat bloklanmagan bo'lish shart
         if not roles.can_use_bot(user_id):
-            await message.answer("⏳ Sizning so'rovingiz hali tasdiqlanmagan. Admin tasdiqlashini kuting.")
+            await message.answer("🚫 Sizga botdan foydalanish cheklangan.")
             return
         if not roles.can_make_request(user_id):
             await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
