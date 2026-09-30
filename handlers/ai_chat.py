@@ -21,6 +21,7 @@ from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
+import core.duration as duration
 from core.group_observer import mem_thread as _mem_thread
 import core.roles as roles
 import core.group_permissions as group_permissions
@@ -219,6 +220,8 @@ async def handle_message(message: Message):
     ctx = {
         "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
         "is_group": is_group, "mod": mod_access,
+        # xabarda AYNAN BITTA muddat bo'lsa (masalan "14 daqiqaga") — moderatsiya tool'lariga majburan beriladi
+        "mod_minutes": duration.single_minutes(user_text) if mod_access is not None else None,
     }
     thread_id = message.message_thread_id  # shaxsiy chatdagi topic bo'lsa to'ldiriladi
 
