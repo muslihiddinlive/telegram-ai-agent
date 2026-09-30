@@ -119,6 +119,14 @@ class _FakeResponse:
         self.choices = choices
 
 
+def _tools_kw(tools: list[dict] | None) -> dict:
+    """tools bo'sh/None bo'lsa 'tools' parametrini UMUMAN yubormaymiz.
+    Aks holda OpenAI/Groq SDK so'rovga `"tools": null` yozadi va ko'p OpenAI-mos xizmatlar
+    (xKiro, Groq, DeepSeek...) buni 400 xato bilan rad etadi — tool'siz chaqiruvlar
+    (suhbat xulosasi, story izohi) shu sabab yiqilardi."""
+    return {"tools": tools} if tools else {}
+
+
 def _to_anthropic_tools(tools: list[dict] | None) -> list[dict]:
     result = []
     for t in tools or []:
@@ -278,7 +286,7 @@ class MultiProviderAI:
             return await client.chat.completions.create(
                 model=model_override or "llama-3.3-70b-versatile",
                 messages=messages,
-                tools=tools,
+                **_tools_kw(tools),
                 max_tokens=1500,
             )
 
@@ -288,7 +296,7 @@ class MultiProviderAI:
             return await client.chat.completions.create(
                 model=model_override or "gpt-4o-mini",
                 messages=messages,
-                tools=tools,
+                **_tools_kw(tools),
                 max_tokens=1500,
             )
 
@@ -299,7 +307,7 @@ class MultiProviderAI:
             return await client.chat.completions.create(
                 model=model_override or "deepseek-chat",
                 messages=messages,
-                tools=tools,
+                **_tools_kw(tools),
                 max_tokens=1500,
             )
 
@@ -312,7 +320,7 @@ class MultiProviderAI:
             return await client.chat.completions.create(
                 model=shared_keys.get_xkiro_model(),
                 messages=messages,
-                tools=tools,
+                **_tools_kw(tools),
                 max_tokens=1500,
             )
 
@@ -352,7 +360,7 @@ class MultiProviderAI:
             resp = await client.chat.completions.create(
                 model=info["model"],
                 messages=messages,
-                tools=tools,
+                **_tools_kw(tools),
                 max_tokens=1500,
             )
             # Ba'zi "norasmiy" xizmatlar to'liq OpenAI sxemasiga rioya
