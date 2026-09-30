@@ -139,7 +139,8 @@ async def story_start(call: CallbackQuery):
     await _edit(
         call,
         "📸 Story uchun <b>rasm yoki video</b> yuboring.\n\n"
-        "• Izoh (caption) yozib yuborsangiz — story matni bo'ladi.\n"
+        "• Izoh (caption) yozsangiz, u <b>aynan shunday, so'zma-so'z</b> story matni bo'ladi "
+        "(«buni story qil» kabi buyruq yozmang — buyruq uchun menyudan chiqib, rasmni oddiy yuboring).\n"
         "• Fayl 20 MB dan oshmasin (videoni bot o'zi Story formatiga o'tkazadi, eng ko'pi 60 soniya).\n"
         "• «Fayl sifatida» yuborsangiz ham bo'ladi.",
         _kb([("❌ Bekor qilish", "profile:menu")]),
@@ -214,11 +215,17 @@ async def story_media(message: Message, bot: Bot):
         "duration": duration, "anim": is_anim,
         "caption": message.caption, "entities": message.caption_entities,
     }
+    caption = (message.caption or "").strip()
+    caption_line = (
+        f"\n\n📝 Story matni (so'zma-so'z shunday chiqadi):\n«{html.escape(caption[:300])}{'…' if len(caption) > 300 else ''}»"
+        if caption else "\n\n📝 Story matnsiz chiqadi (izoh yozilmagan)."
+    )
     await status_msg.edit_text(
-        "✅ Tayyor. Story qancha vaqt turadi?\n<i>Muddati tugagach ham profilingizda saqlanib qoladi.</i>",
+        "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?"
+        f"{caption_line}\n\n<i>Muddati tugagach ham profilingizda saqlanib qoladi (o'zingiz o'chirmaguningizcha).</i>",
         reply_markup=_kb(
-            [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12")],
-            [("24 soat", "profile:post:24"), ("48 soat", "profile:post:48")],
+            [("⚡ 24 soat (tavsiya)", "profile:post:24")],
+            [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12"), ("48 soat", "profile:post:48")],
             [("❌ Bekor qilish", "profile:menu")],
         ),
     )
@@ -246,7 +253,8 @@ async def story_post(call: CallbackQuery, bot: Bot):
     _drop(uid)
     await _edit(
         call,
-        f"✅ Story profilingizga qo'yildi ({hours} soat).",
+        f"✅ Story profilingizga qo'yildi.\n• {hours} soat hammaga ko'rinib turadi.\n"
+        "• Undan keyin ham profilingizdagi story'lar bo'limida qoladi (o'zingiz o'chirmaguningizcha).",
         _kb([("🗑 O'chirish", f"profile:del:{story.id}")], [("📸 Yana story", "profile:story")], [("🔙 Profil boshqaruvi", "profile:menu")]),
     )
 
