@@ -227,7 +227,9 @@ async def story_media(message: Message, bot: Bot):
 async def _apply_caption(bot: Bot, uid: int):
     """Izohni AI bilan hal qiladi (oddiy matn -> aynan shunday; buyruq -> AI yozadi) va holatga yozadi."""
     st = _waiting[uid]
-    caption, mode, reason = await story_caption.resolve(bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"])
+    caption, mode, reason = await story_caption.resolve(
+        bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"], cache=st.setdefault("media_cache", {}),
+    )
     st["caption"], st["mode"], st["reason"] = caption, mode, reason
     # AI yozgan matnda asl izohning entity'lari (offsetlari) mos kelmaydi
     st["entities"] = None if mode == story_caption.AI else st["orig_entities"]

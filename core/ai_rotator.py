@@ -50,8 +50,10 @@ class KeyRotator:
     .env'dagi *_API_KEYS ham fallback sifatida qo'shiladi (ixtiyoriy, legacy).
     """
 
-    def __init__(self, provider: str, env_fallback_keys: list[str] | None = None, cooldown_seconds: int = 60):
+    def __init__(self, provider: str, env_fallback_keys: list[str] | None = None,
+                 cooldown_seconds: int = 60, purpose: str = "chat"):
         self.provider = provider
+        self.purpose = purpose  # "chat" | "vision" — qaysi kalit to'plamidan o'qiladi
         self._env_fallback = env_fallback_keys or []
         self._cursor = 0
         self._cooldown_until: dict[str, float] = {}
@@ -61,7 +63,7 @@ class KeyRotator:
     def _current_keys(self) -> list[str]:
         import core.shared_keys as shared_keys
         try:
-            db_keys = shared_keys.list_keys(self.provider)
+            db_keys = shared_keys.list_keys(self.provider, self.purpose)
         except RuntimeError:
             db_keys = []  # DB hali yuklanmagan (masalan validatsiya paytida)
         return db_keys + [k for k in self._env_fallback if k not in db_keys]

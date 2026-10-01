@@ -12,6 +12,7 @@ ms-file-toolkit @ https://github.com/muslihiddinlive/ms-file-toolkit/archive/858
 tg-mod-functions>=0.4.0  # Moderator-AI-Bot: guruh moderatsiyasi tool'lari (core/moderation.py)
 requests>=2.31
 pillow>=10.0  # Story uchun rasmni 1080x1920 ga moslash (core/stories.py)
+httpx>=0.27  # core/vision.py (Gemini REST)
 beautifulsoup4>=4.12
 python-pptx>=0.6.23
 pymupdf>=1.24.14

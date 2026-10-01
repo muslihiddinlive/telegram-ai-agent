@@ -225,6 +225,28 @@ async def export_csv(call: CallbackQuery, bot: Bot):
 # ── AI kalitlar (FAQAT superadmin) — .env O'RNIGA panel orqali boshqariladi ──
 
 @router.callback_query(F.data == "panel:keys")
+async def show_key_sections(call: CallbackQuery):
+    """AI kalitlar: ikki alohida to'plam — suhbat uchun va rasm o'qish uchun."""
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    chat_total = sum(shared_keys.key_count(p) for p in shared_keys.PROVIDERS)
+    vis_total = sum(shared_keys.key_count(p, "vision") for p in shared_keys.VISION_PROVIDERS)
+    await call.message.edit_text(
+        "🔑 <b>AI API kalitlari</b>\n\n"
+        "• <b>💬 Chat</b> — oddiy suhbat uchun (avval kiritilgan barcha kalitlar shu yerda).\n"
+        "• <b>👁 Rasm o'qish</b> — rasm/videoni «ko'rish» uchun alohida kalitlar. "
+        "Ular doim rasm qabul qiladigan modelga yo'naltiriladi (masalan Groq kaliti → Llama 4 vision).\n\n"
+        "Ikkala to'plam bir-biriga ta'sir qilmaydi.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"💬 Chat kalitlari ({chat_total})", callback_data="panel:keys_chat")],
+            [InlineKeyboardButton(text=f"👁 Rasm o'qish kalitlari ({vis_total})", callback_data="panel:vkeys")],
+            [InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")],
+        ]),
+    )
+
+
+@router.callback_query(F.data == "panel:keys_chat")
 async def show_key_providers(call: CallbackQuery):
     if not roles.is_superadmin(call.from_user.id):
         await call.answer("Ruxsat yo'q", show_alert=True)
@@ -234,9 +256,9 @@ async def show_key_providers(call: CallbackQuery):
         label = shared_keys.PROVIDER_LABELS[provider]
         count = shared_keys.key_count(provider)
         rows.append([InlineKeyboardButton(text=f"{label} ({count} ta kalit)", callback_data=f"panel:keys_p:{provider}")])
-    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:keys")])
     await call.message.edit_text(
-        "🔑 AI API kalitlari — provayderni tanlang:\n"
+        "💬 Chat kalitlari — provayderni tanlang:\n"
         "(Har biriga 1 dan 10 tagacha kalit qo'shish mumkin, Round-Robin ishlaydi)",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
@@ -259,7 +281,7 @@ async def show_provider_keys(call: CallbackQuery):
         rows.append([InlineKeyboardButton(text="➕ Kalit qo'shish", callback_data=f"panel:keys_add:{provider}")])
     if provider == "xkiro":
         rows.append([InlineKeyboardButton(text="🧠 Modelni o'zgartirish", callback_data="panel:keys_model")])
-    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:keys")])
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:keys_chat")])
 
     extra = f"\nJoriy model: <code>{shared_keys.get_xkiro_model()}</code>" if provider == "xkiro" else ""
     text = f"🔑 {label} — {len(keys)}/{shared_keys.MAX_KEYS_PER_PROVIDER} ta kalit{extra}"
@@ -301,6 +323,103 @@ async def set_model_start(call: CallbackQuery):
     await call.message.answer(
         f"Joriy model: <code>{shared_keys.get_xkiro_model()}</code>\n\n"
         "Yangi model ID'sini yuboring (masalan: <code>qwen/qwen3.8-max:free</code>):"
+    )
+    await call.answer()
+
+
+# ── 👁 Rasm o'qish (vision) kalitlari (FAQAT superadmin) ──
+
+def _vision_model_line(provider: str) -> str:
+    model = shared_keys.get_vision_model(provider)
+    if provider == "groq":
+        return (f"Groq kaliti rasm uchun avtomatik <b>vision modeliga</b> yo'naltiriladi: <code>{model}</code>\n"
+                "(model eskirsa, zaxira nomzodlarga o'tadi va Groq ro'yxatidan o'zi topadi)")
+    if not model:
+        return "⚠️ Rasm o'qiy oladigan <b>model tanlanmagan</b> — «🧠 Modelni o'zgartirish»ni bosing."
+    return f"Vision modeli: <code>{model}</code>"
+
+
+@router.callback_query(F.data == "panel:vkeys")
+async def show_vision_providers(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    rows = [
+        [InlineKeyboardButton(
+            text=f"{shared_keys.PROVIDER_LABELS[p]} ({shared_keys.key_count(p, 'vision')} ta kalit)",
+            callback_data=f"panel:vkeys_p:{p}",
+        )]
+        for p in shared_keys.VISION_PROVIDERS
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:keys")])
+    await call.message.edit_text(
+        "👁 <b>Rasm o'qish kalitlari</b> — provayderni tanlang.\n"
+        "Bu kalitlar FAQAT rasm/videoni tushunish uchun ishlatiladi (suhbat kalitlaridan alohida). "
+        "DeepSeek'ning rasm API'si yo'q, shuning uchun ro'yxatda yo'q.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data.startswith("panel:vkeys_p:"))
+async def show_vision_provider_keys(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    provider = call.data.split(":")[-1]
+    if provider not in shared_keys.VISION_PROVIDERS:
+        await call.answer("Noma'lum provayder", show_alert=True)
+        return
+    label = shared_keys.PROVIDER_LABELS[provider]
+    keys = shared_keys.list_keys(provider, "vision")
+    rows = [
+        [InlineKeyboardButton(text=f"❌ {shared_keys.masked(k)}", callback_data=f"panel:vkeys_rm:{provider}:{i}")]
+        for i, k in enumerate(keys)
+    ]
+    if len(keys) < shared_keys.MAX_KEYS_PER_PROVIDER:
+        rows.append([InlineKeyboardButton(text="➕ Kalit qo'shish", callback_data=f"panel:vkeys_add:{provider}")])
+    rows.append([InlineKeyboardButton(text="🧠 Modelni o'zgartirish", callback_data=f"panel:vkeys_model:{provider}")])
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="panel:vkeys")])
+    text = f"👁 {label} — {len(keys)}/{shared_keys.MAX_KEYS_PER_PROVIDER} ta rasm kaliti\n\n{_vision_model_line(provider)}"
+    if not keys:
+        text += "\n\nHali kalit qo'shilmagan."
+    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("panel:vkeys_add:"))
+async def add_vision_key_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    provider = call.data.split(":")[-1]
+    pending_input.set(call.from_user.id, "add_vision_key", {"provider": provider})
+    label = shared_keys.PROVIDER_LABELS[provider]
+    await call.message.answer(f"👁 {label} uchun <b>rasm o'qish</b> API kalitini yuboring (kichik test rasm bilan tekshiriladi):")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:vkeys_rm:"))
+async def remove_vision_key_cb(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    _, _, provider, index = call.data.split(":")
+    await shared_keys.remove_key(bot, provider, int(index), purpose="vision")
+    await call.answer("O'chirildi 🗑")
+    await show_vision_provider_keys(call)
+
+
+@router.callback_query(F.data.startswith("panel:vkeys_model:"))
+async def set_vision_model_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    provider = call.data.split(":")[-1]
+    pending_input.set(call.from_user.id, "set_vision_model", {"provider": provider})
+    cur = shared_keys.get_vision_model(provider) or "(tanlanmagan)"
+    await call.message.answer(
+        f"Joriy vision modeli: <code>{cur}</code>\n\n"
+        f"{shared_keys.PROVIDER_LABELS[provider]} uchun <b>rasm qabul qiladigan</b> model ID'sini yuboring "
+        "(masalan Groq: <code>meta-llama/llama-4-scout-17b-16e-instruct</code>):"
     )
     await call.answer()
 
