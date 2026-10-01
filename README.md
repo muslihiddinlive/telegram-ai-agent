@@ -19,10 +19,6 @@ mafia_host_bot):
 | `core/topic_sessions.py`      | (yangi)              | Shaxsiy chat Topics (Bot API 9.4, 2026) — har bir topic mustaqil suhbat konteksti bilan |
 | `handlers/topics.py`          | (yangi)              | `/yangi_mavzu`, `/mavzular` komandalari |
 | `core/pending_input.py`       | StokerDownloader      | Matn-kiritish orqali bosqichma-bosqich oqimlar (FSM, xotirada) |
-| `core/userbot_login.py`       | StokerDownloader      | Telethon: telefon → SMS kod → 2FA parol → session olish |
-| `core/userbot_runtime.py`     | (yangi)               | Saqlangan session orqali userbot'ni ishga tushirish, xabar tinglash |
-| `core/auto_reply.py`          | StokerDownloader      | Kalit-so'z auto-reply + "away" (band) tizimi |
-| `handlers/userbot_commands.py`| (yangi)               | `/userbot`, `/kalitsoz_qoshish`, `/kalitsozlar`, `/away` |
 | `handlers/pending_text.py`    | (yangi)               | pending_input holatidagi matnlarni yo'naltiradi (ai_chat'dan OLDIN ishlaydi) |
 | `core/roles.py`               | StokerDownloader (soddalashtirilgan) | 3-bosqichli ruxsat: superadmin/admin/tasdiqlangan-user + kunlik limit. **Referral/stars-wallet/premium OLIB TASHLANDI** — yopiq (faqat taklif qilingan) tizim uchun keraksiz |
 | `tools/diagrams.py`           | groq-pptx-bot         | To'liq ko'chirilgan — pptx slaydlar: bullet, chart, flowchart, orgchart, venn, timeline, section, stat, quote, comparison |
@@ -313,15 +309,12 @@ Faqat **superadmin** (config.SUPERADMIN_ID) xabar sifatida `exec: <kod>`
 yuborsa, kod serverda TO'G'RIDAN-TO'G'RI bajariladi (cheklanmagan RCE).
 Bu — production'da debugging uchun kuchli, lekin xavfli vosita. Agar kerak
 bo'lmasa, `main.py`da `admin_terminal_router`ni ro'yxatdan olib tashlang.
-## Userbot avtomatik qayta ulanishi
-Bot qayta ishga tushganda (`on_startup`), oldin ulangan barcha userbot
-sessiyalari DB'dan o'qilib, avtomatik qayta ulanadi — foydalanuvchi
-qayta `/userbot` qilishi shart emas.
-1. Foydalanuvchi `/userbot` yozadi
-2. Bot API ID, API HASH (https://my.telegram.org dan), telefon so'raydi
-3. Telegram SMS/ilova orqali kod yuboradi — foydalanuvchi shu yerga yozadi
-4. Agar 2FA yoqilgan bo'lsa — parol so'raladi
-5. Session shifrlab saqlanadi, keyin `/kalitsoz_qoshish` bilan avto-javob qoidalari sozlanadi
+## Userbot olib tashlangan
+Telethon asosidagi userbot (`/userbot`, `/kalitsoz_qoshish`, `/kalitsozlar`, `/away`) **butunlay olib tashlandi** —
+Telegram session string hisobga to'liq kirish huquqi beradi, bu xavfli. Profilga ulash endi FAQAT Telegram'ning
+rasmiy yo'li bilan: **Sozlamalar → Hisob → Chatlarni avtomatlashtirish** (Business chatbot), qarang «Profilga AI sifatida ulash».
+Ishga tushganda `core/legacy_cleanup.py` eski sessiya ma'lumotlarini (`telegram_session`, `api_id`, `api_hash`) DB'dan o'chiradi
+(shaxsiy AI API kalitlariga tegmaydi).
 
 ## ⚠️ Muhim: Private Chat Topics yoqish
 Bu funksiya ishlashi uchun: **@BotFather → /mybots → botingiz → Bot Settings**
@@ -351,7 +344,7 @@ python main.py
 
 ## Profilga AI sifatida ulash va Story qo'yish (Telegram Business)
 Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `postStory` orqali) uning nomidan **story** qo'yadi.
-- **Ulash (foydalanuvchi tomonida):** Telegram Premium kerak → Sozlamalar → Telegram Business → Chatbotlar → botni qo'shish → ruxsatlardan **story'larni boshqarish**ni yoqish. Bot `business_connection` update'ini olib, ulanishni saqlaydi (`core/stories.py`).
+- **Ulash (foydalanuvchi tomonida):** Telegram Premium kerak → Sozlamalar → Hisob → Chatlarni avtomatlashtirish → botni qo'shish → ruxsatlardan **story'larni boshqarish**ni yoqish. Bot `business_connection` update'ini olib, ulanishni saqlaydi (`core/stories.py`).
 - **Menyu:** `/start` (yoki `/profil`) → 👤 Profil boshqaruvi → 📸 Story qo'yish → rasm/video yuboriladi (izoh = story matni) → muddat (6/12/24/48 soat) → joylanadi; keyin «🗑 O'chirish» tugmasi chiqadi.
 - **AI orqali:** rasm/video yuborib «buni storyimga qo'y» deyish mumkin (`post_story` tool). Story ommaviy amal bo'lgani uchun AI uni faqat foydalanuvchi aniq so'raganda chaqiradi.
 - **Formatlash:** rasm → 1080×1920 (xiralashtirilgan fon bilan), video → 720×1280 H.265/AAC, har soniyada key frame, ≤30 MB, ≤60 soniya (serverda **ffmpeg** kerak — Dockerfile'ga qo'shilgan).
