@@ -21,6 +21,7 @@ from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
+import core.mod_commands as mod_commands
 import core.duration as duration
 from core.group_observer import mem_thread as _mem_thread
 import core.roles as roles
@@ -178,6 +179,14 @@ async def handle_message(message: Message):
         # yo'q foydalanuvchilarga bot BUTUNLAY jim qoladi
         if not group_permissions.is_allowed_in_group(message.chat.id, message.from_user.username):
             return
+
+        # Aniq moderatsiya buyrug'i ("@user ga 14 daqiqaga mute ber", reply + "ban qil") — AI'SIZ, kodda aniqlanib,
+        # Telegram'da tekshirib bajariladi (core/mod_commands.py). Limitdan OLDIN: AI chaqirilmagani uchun hisoblanmaydi
+        # va limiti tugagan admin ham moderatsiya qila oladi. Buyruq bo'lmasa — xabar odatdagidek AI'ga ketadi.
+        if not has_media:
+            _mod = await moderation.get_access(message.bot, message.chat.id, user_id)
+            if _mod is not None and await mod_commands.try_handle(message, _mod, bot_username):
+                return
 
         if chat_mode_rec is not None:
             if chat_mode_rec.get("vip"):
@@ -403,6 +412,17 @@ async def handle_message(message: Message):
 
     except Exception as e:
         final_text = f"⚠️ Xatolik yuz berdi: {e}"
+        raw_text_for_history = final_text
+
+    # QO'RIQCHI: AI moderatsiya amali "bajarildi" deb da'vo qilsa-yu, lekin hech bir moderatsiya tool'i muvaffaqiyatli
+    # (ok=true) bajarilmagan bo'lsa — yolg'on javobni foydalanuvchiga yubormaymiz.
+    if (is_group and mod_access is not None and moderation.looks_like_mod_request(user_text)
+            and moderation.claims_success(raw_text_for_history)
+            and not any(moderation.is_mod_tool(n) and isinstance(r, dict) and r.get("ok") for n, r in tool_outputs)):
+        logger.warning("MOD qo'riqchi: AI amal bajarildi deb yozdi, lekin tool muvaffaqiyatli bajarilmagan: %r", raw_text_for_history[:120])
+        final_text = ("⚠️ Amal <b>bajarilmadi</b> — hech qanday moderatsiya tool'i muvaffaqiyatli ishlamadi. "
+                      "Uning xabariga <b>reply</b> qilib (yoki @username bilan) aniq yozing, masalan: "
+                      "<code>14 daqiqaga mute ber</code>.")
         raw_text_for_history = final_text
 
     await indicator.finish(final_text)
