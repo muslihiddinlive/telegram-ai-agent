@@ -358,3 +358,9 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - Kalit qo'shishda u kichik test rasm bilan HAQIQIY so'rovda tekshiriladi.
 - **xKiro:** qaysi modellar rasm qabul qilishi noma'lum — avval `🧠 Modelni o'zgartirish` bilan vision modelini kiriting.
 - Ishlatilishi: (1) story izohi — AI media tavsifini ko'rib yozadi; (2) suhbatda AI `look_at_image` tool orqali foydalanuvchi yuborgan rasm/videoni ko'radi (video uchun 3 ta kadr, ffmpeg).
+
+## Moderatsiya: aniq buyruqlar va tekshiruv
+- **AI'siz yo'l** (`core/mod_commands.py`): `mute ber`, `14 daqiqaga mute`, `ban qil`, `kick`/`hayda`, `unmute`, `unban` kabi aniq buyruqlar kodda aniqlanadi — nishon (text_mention → `@username` → reply → ismi aytilgan yagona a'zo), muddat (`core/duration.py`) va amal — AI'siz, limit sarflamasdan, limiti tugagan admin ham ishlata oladi. Savol, inkor ("mute qilma") va o'tgan zamon ("qildim") buyruq hisoblanmaydi — ular AI'ga ketadi. Faqat guruh admini (yoki bot admini/superadmin) uchun.
+- **Har bir amal tekshiriladi** (`core/moderation.py`): bajarishdan oldin botning o'z huquqi («A'zolarni cheklash») va nishon (admin/egasi/guruhda yo'q); bajarilgandan keyin natija `get_chat_member` bilan qayta o'qib TASDIQLANADI. Telegram "ok" desa-yu amal qo'llanmasa, bot buni ochiq aytadi.
+- **Qo'riqchi:** AI "mute qildim" deb yozsa-yu, hech bir moderatsiya tool'i muvaffaqiyatli bajarilmagan bo'lsa, yolg'on javob o'rniga ogohlantirish yuboriladi.
+- Cheklash faqat **supergroup**'da ishlaydi; bot admin bo'lishi va «Restrict members» huquqiga ega bo'lishi shart.
