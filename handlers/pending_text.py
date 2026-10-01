@@ -210,6 +210,49 @@ async def handle_pending(message: Message):
                 f"yoki /panel bilan bekor qiling."
             )
 
+    # ── Superadmin: RASM O'QISH (vision) kaliti qo'shish — chat kalitlaridan alohida to'plam ──
+    elif action == "add_vision_key":
+        provider = data["provider"]
+        label = shared_keys.PROVIDER_LABELS[provider]
+        status_msg = await message.answer(f"⏳ {label} kaliti rasm bilan tekshirilmoqda...")
+        ok, error, used_model = await shared_keys.validate_vision_key(provider, text)
+        if not ok:
+            await status_msg.edit_text(
+                f"❌ Kalit rasm o'qishda ishlamadi: {error}\n\nQaytadan {label} kalitini yuboring, "
+                f"yoki /panel bilan bekor qiling."
+            )
+            return
+        added, err2 = await shared_keys.add_key(message.bot, provider, text, purpose="vision")
+        pending_input.clear(user_id)
+        if not added:
+            await status_msg.edit_text(f"⚠️ {err2}")
+            return
+        # Groq: haqiqatan ishlagan vision modelini saqlab qo'yamiz (standart nomi eskirgan bo'lsa ham)
+        if provider == "groq" and used_model and used_model != shared_keys.get_vision_model("groq"):
+            await shared_keys.set_vision_model(message.bot, "groq", used_model)
+        count = shared_keys.key_count(provider, "vision")
+        await status_msg.edit_text(
+            f"✅ {label} rasm kaliti qo'shildi! ({count}/{shared_keys.MAX_KEYS_PER_PROVIDER})\n"
+            f"Vision modeli: <code>{used_model or shared_keys.get_vision_model(provider)}</code>"
+        )
+
+    # ── Superadmin: vision modelini o'zgartirish (mavjud kalit bo'lsa, darrov sinab ko'riladi) ──
+    elif action == "set_vision_model":
+        provider = data["provider"]
+        await shared_keys.set_vision_model(message.bot, provider, text)
+        pending_input.clear(user_id)
+        keys = shared_keys.list_keys(provider, "vision")
+        if not keys:
+            await message.answer(f"✅ Vision modeli o'zgartirildi: <code>{text}</code>\n(Sinash uchun avval kalit qo'shing.)")
+            return
+        import core.vision as vision
+        status_msg = await message.answer("⏳ Yangi model mavjud kalit bilan sinalmoqda...")
+        ok, error, _ = await vision.test_key(provider, keys[0])
+        await status_msg.edit_text(
+            f"✅ Model o'zgartirildi va ishlayapti: <code>{text}</code>" if ok
+            else f"⚠️ Model saqlandi (<code>{text}</code>), lekin sinovda xato: {error}"
+        )
+
     # ── Superadmin: xKiro faol modelini o'zgartirish ──
     elif action == "set_xkiro_model":
         await shared_keys.set_xkiro_model(message.bot, text)

@@ -356,3 +356,12 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - **AI orqali:** rasm/video yuborib «buni storyimga qo'y» deyish mumkin (`post_story` tool). Story ommaviy amal bo'lgani uchun AI uni faqat foydalanuvchi aniq so'raganda chaqiradi.
 - **Formatlash:** rasm → 1080×1920 (xiralashtirilgan fon bilan), video → 720×1280 H.265/AAC, har soniyada key frame, ≤30 MB, ≤60 soniya (serverda **ffmpeg** kerak — Dockerfile'ga qo'shilgan).
 - **Cheklovlar:** bot faqat ≤20 MB fayllarni yuklab ola oladi (Bot API chegarasi); video qayta ishlash serverning CPU'siga bog'liq (sekin bo'lishi mumkin).
+
+## 👁 Rasm o'qish (vision) kalitlari — chatdan alohida
+`/panel → 🔑 AI kalitlar` endi ikki bo'limga ega:
+- **💬 Chat kalitlari** — oddiy suhbat uchun. Avval kiritilgan barcha kalitlar shu yerda qoladi (o'zgarmagan).
+- **👁 Rasm o'qish kalitlari** — rasm/videoni «ko'rish» uchun alohida to'plam (DB'da `vision_keys`). Provayderlar: Groq, Gemini, xKiro, OpenAI, Anthropic (DeepSeek'da rasm API'si yo'q).
+- **Groq kaliti rasm uchun avtomatik vision modeliga yo'naltiriladi** (chat modeli `llama-3.3-70b` rasm qabul qilmaydi): standart `meta-llama/llama-4-scout-17b-16e-instruct`; model eskirsa zaxira nomzodlarga o'tadi va Groq model ro'yxatidan o'zi topadi. Model nomini panelda o'zgartirish mumkin (🧠), o'zgartirgach mavjud kalit bilan darrov sinaladi.
+- Kalit qo'shishda u kichik test rasm bilan HAQIQIY so'rovda tekshiriladi.
+- **xKiro:** qaysi modellar rasm qabul qilishi noma'lum — avval `🧠 Modelni o'zgartirish` bilan vision modelini kiriting.
+- Ishlatilishi: (1) story izohi — AI media tavsifini ko'rib yozadi; (2) suhbatda AI `look_at_image` tool orqali foydalanuvchi yuborgan rasm/videoni ko'radi (video uchun 3 ta kadr, ffmpeg).
