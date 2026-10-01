@@ -5,7 +5,6 @@ groq>=0.9
 anthropic>=0.34
 openai>=1.30
 python-dotenv>=1.0
-telethon>=1.36
 # ms-file-toolkit 0.8.0 (QR, PDF<->rasm) hali PyPI'ga chiqarilmagan — vaqtincha aniq commit'dan.
 # PyPI'da 0.8.0 paydo bo'lgach, shu qatorni `ms-file-toolkit>=0.8.0` ga almashtiring.
 ms-file-toolkit @ https://github.com/muslihiddinlive/ms-file-toolkit/archive/8580492aeb0154ac8a7c5be19b1c48f34195898a.zip

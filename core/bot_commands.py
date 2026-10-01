@@ -18,10 +18,6 @@ GENERAL_COMMANDS = [
     BotCommand(command="mavzular", description="🗂 Mavzularim ro'yxati"),
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
-    BotCommand(command="userbot", description="👤 Userbot ulash (auto-reply uchun)"),
-    BotCommand(command="kalitsoz_qoshish", description="🔑 Auto-reply kalit-so'z qo'shish"),
-    BotCommand(command="kalitsozlar", description="🔑 Kalit-so'zlarim ro'yxati"),
-    BotCommand(command="away", description="⏱ 'Band' vaqtini sozlash"),
 ]
 
 ADMIN_COMMANDS = GENERAL_COMMANDS + [

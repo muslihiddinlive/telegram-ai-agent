@@ -18,16 +18,14 @@ from admin.panel import router as panel_router
 from handlers.start import router as start_router
 from handlers.topics import router as topics_router
 from handlers.group_settings import router as group_settings_router
-from handlers.userbot_commands import router as userbot_commands_router
 from handlers.api_integration import router as api_integration_router
 from handlers.profile import router as profile_router
 from handlers.pending_text import router as pending_text_router
 from handlers.admin_terminal import router as admin_terminal_router
 from handlers.ai_chat import router as ai_chat_router
 from handlers.slide_preview import router as slide_preview_router
-from core.userbot_runtime import start_userbot_for_owner
+from core.legacy_cleanup import purge_userbot_data
 from core.group_observer import GroupObserver
-from core.accounts_store import get_user_secret
 import core.file_cleanup as file_cleanup
 import core.bot_identity as bot_identity
 from tools.file_tools import USER_FILES_ROOT
@@ -42,7 +40,6 @@ dp.include_router(panel_router)
 dp.include_router(start_router)
 dp.include_router(topics_router)
 dp.include_router(group_settings_router)
-dp.include_router(userbot_commands_router)
 dp.include_router(api_integration_router)
 dp.include_router(profile_router)  # ai_chat'dan OLDIN — story uchun yuborilgan rasm/video AI-suhbatga ketib qolmasin
 dp.include_router(admin_terminal_router)  # ai_chat'dan OLDIN — "exec:" AI'ga ketmasin
@@ -66,19 +63,8 @@ async def on_startup(bot: Bot):
         # business_connection update'i kelishi uchun allaqachon ro'yxatdan o'tgan handler turlari so'raladi
         await bot.set_webhook(f"{config.WEBHOOK_URL}/webhook", allowed_updates=dp.resolve_used_update_types())
 
-    # Oldin ulangan barcha userbot'larni qayta ishga tushiramiz
-    for user_id_str, secrets in db.get("ai_sessions", {}).items():
-        if "telegram_session" in secrets and "api_id" in secrets and "api_hash" in secrets:
-            try:
-                await start_userbot_for_owner(
-                    bot,
-                    int(user_id_str),
-                    int(get_user_secret(int(user_id_str), "api_id")),
-                    get_user_secret(int(user_id_str), "api_hash"),
-                )
-                logging.info("Userbot qayta ulandi: %s", user_id_str)
-            except Exception as e:
-                logging.warning("Userbot ulanmadi (%s): %s", user_id_str, e)
+    # Userbot olib tashlangan: eski sessiya (hisobga kirish huquqi) ma'lumotlarini DB'dan o'chiramiz
+    await purge_userbot_data(bot)
 
 
 async def _register_commands(bot: Bot):

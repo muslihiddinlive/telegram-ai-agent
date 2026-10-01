@@ -57,7 +57,8 @@ def _connect_help() -> str:
     return (
         "Botni profilingizga ulash:\n"
         "1️⃣ Hisobingizda <b>Telegram Premium</b> bo'lishi kerak (Business funksiyalari uchun).\n"
-        "2️⃣ Telegram → <b>Sozlamalar → Telegram Business → Chatbotlar</b> (menyu nomi versiyaga qarab biroz farq qilishi mumkin).\n"
+        "2️⃣ Telegram → <b>Sozlamalar → Hisob → Chatlarni avtomatlashtirish</b> (Chat Automation). "
+        "Ba'zi versiyalarda: Sozlamalar → Telegram Business → Chatbotlar.\n"
         f"3️⃣ <code>@{html.escape(uname)}</code> ni tanlab qo'shing.\n"
         "4️⃣ Bot ruxsatlarida <b>story'larni boshqarish</b> ruxsatini yoqing. "
         "Faqat story kerak bo'lsa, botning chatlarga kirishini minimal qilib qo'ying.\n\n"
@@ -77,7 +78,7 @@ def _menu(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if st == "no_rights":
         return (
             "👤 <b>Profil boshqaruvi</b>\n⚠️ Bot ulangan, lekin <b>story'larni boshqarish</b> ruxsati berilmagan.\n\n"
-            "Sozlamalar → Telegram Business → Chatbotlar → botingiz → ruxsatlardan story'ni yoqing.",
+            "Sozlamalar → Hisob → Chatlarni avtomatlashtirish → botingiz → ruxsatlardan story'ni yoqing.",
             _kb([refresh], [back]),
         )
     if st == "disabled":
@@ -344,7 +345,7 @@ async def on_business_connection(bc: BusinessConnection, bot: Bot):
         text = "✅ Bot profilingizga ulandi va story qo'yish ruxsati bor.\nStory qo'yish: /profil → «📸 Story qo'yish»."
     else:
         text = ("✅ Bot profilingizga ulandi, lekin <b>story'larni boshqarish</b> ruxsati berilmagan.\n"
-                "Sozlamalar → Telegram Business → Chatbotlar → botingiz → ruxsatlardan story'ni yoqing.")
+                "Sozlamalar → Hisob → Chatlarni avtomatlashtirish → botingiz → ruxsatlardan story'ni yoqing.")
     try:
         await bot.send_message(bc.user_chat_id, text)
     except Exception:  # noqa: BLE001 — foydalanuvchi botni bloklagan bo'lishi mumkin

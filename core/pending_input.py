@@ -6,10 +6,10 @@ Xotira ichida (in-memory) saqlanadi — restart bo'lsa tozalanadi, bu normal
 (login/parol kabi vaqtinchalik oqimlar restart'dan keyin qayta boshlanishi kerak).
 
 Ishlatilishi:
-  pending_input.set(user_id, "userbot_wait_code", {"phone": "+998..."})
+  pending_input.set(user_id, "apikey_wait_value", {"provider": "groq"})
   ...
   state = pending_input.get(user_id)
-  if state and state["action"] == "userbot_wait_code":
+  if state and state["action"] == "apikey_wait_value":
       code = message.text
       ...
       pending_input.clear(user_id)
