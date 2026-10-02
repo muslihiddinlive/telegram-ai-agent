@@ -10,6 +10,11 @@ GROUP_COMMANDS = [
     BotCommand(command="guruh_ruxsat", description="🔒 Bot javobini tanlangan userlarga cheklash"),
     BotCommand(command="guruh_ruxsat_ochirish", description="🔓 Cheklovni bekor qilish"),
     BotCommand(command="chatmode", description="💬 Chat rejimi: on / off (guruh admini)"),
+    BotCommand(command="qoida_qoshish", description="📋 AI uchun doimiy qoida qo'shish (admin)"),
+    BotCommand(command="qoidalar", description="📋 Guruh qoidalarini ko'rish"),
+    BotCommand(command="taqiqlar", description="🚫 Taqiqlangan so'zlar (admin)"),
+    BotCommand(command="statistika", description="📊 Guruh statistikasi"),
+    BotCommand(command="top_faollar", description="🏆 Eng faol a'zolarni belgilash (admin)"),
 ]
 
 GENERAL_COMMANDS = [
@@ -18,6 +23,7 @@ GENERAL_COMMANDS = [
     BotCommand(command="mavzular", description="🗂 Mavzularim ro'yxati"),
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
+    BotCommand(command="laqab", description="🏷 Guruhda ishlatiladigan taxallusingiz"),
 ]
 
 ADMIN_COMMANDS = GENERAL_COMMANDS + [

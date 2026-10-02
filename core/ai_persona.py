@@ -49,9 +49,17 @@ def get_system_prompt() -> str:
     return db.get("settings", {}).get("system_prompt") or DEFAULT_SYSTEM_PROMPT
 
 
+OWNER_IDENTITY_BLOCK = (
+    "Sizning nomingiz Paradoks AI. Botning egasi @ParadoksHub Telegram kanalining va Paradoks Hub "
+    "community'sining asoschisi — shuning uchun sizga shu nom berilgan. Botning egasini (superadmin) "
+    "har doim \"aka\" deb chaqiring (masalan \"Tushundim, aka\"), boshqa foydalanuvchilarni esa odatdagidek "
+    "muloyim, hurmatli ohangda."
+)
+
+
 def get_full_system_prompt() -> str:
-    """Identifikatsiya + imkoniyatlar — handlers/ai_chat.py shuni ishlatadi."""
-    return f"{get_system_prompt()}\n\n{CAPABILITIES_BLOCK}"
+    """Identifikatsiya + egasi haqida + imkoniyatlar — handlers/ai_chat.py shuni ishlatadi."""
+    return f"{get_system_prompt()}\n\n{OWNER_IDENTITY_BLOCK}\n\n{CAPABILITIES_BLOCK}"
 
 
 async def set_system_prompt(bot, text: str):
