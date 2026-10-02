@@ -364,3 +364,12 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - **Har bir amal tekshiriladi** (`core/moderation.py`): bajarishdan oldin botning o'z huquqi («A'zolarni cheklash») va nishon (admin/egasi/guruhda yo'q); bajarilgandan keyin natija `get_chat_member` bilan qayta o'qib TASDIQLANADI. Telegram "ok" desa-yu amal qo'llanmasa, bot buni ochiq aytadi.
 - **Qo'riqchi:** AI "mute qildim" deb yozsa-yu, hech bir moderatsiya tool'i muvaffaqiyatli bajarilmagan bo'lsa, yolg'on javob o'rniga ogohlantirish yuboriladi.
 - Cheklash faqat **supergroup**'da ishlaydi; bot admin bo'lishi va «Restrict members» huquqiga ega bo'lishi shart.
+
+## Yangi guruh imkoniyatlari
+- **Shaxsiyat:** AI endi "Paradoks AI" sifatida tanishadi, botning egasini doim "aka" deb chaqiradi (`core/ai_persona.py`).
+- **Taxalluslar (`/laqab`):** har bir foydalanuvchi o'z taxallusini o'rnatadi/o'chiradi; guruh xabarlarida va AI kontekstida ism o'rniga shu ishlatiladi (`core/nicknames.py`). ID 8054272729 standart holatda "Omirbayev aka" bilan boshlanadi (o'zi o'zgartira oladi).
+- **Taqiqlangan so'zlar:** `/taqiq_qoshish`, `/taqiq_ochir`, `/taqiqlar` (admin). So'z uchrasa, xabar avtomatik o'chiriladi (guruh/bot adminlari TEKSHIRILMAYDI). Standart ro'yxatda "dnx" bor (`core/banned_words.py`).
+- **Guruh qoidalari ("algoritm prompt"):** `/qoida_qoshish`, `/qoidalar`, `/qoida_ochir` (admin) — erkin matnli ko'rsatmalar AI'ning shu guruhdagi system prompt'iga doimiy qo'shiladi (`core/group_rules.py`).
+- **Statistika:** `/statistika` — bot kuzatgan xabarlar soni va eng faol 5 a'zo (hammaga ochiq).
+- **`/top_faollar`** (admin): bot **o'zi kuzatgan** (tag/reply/chatmode orqali ko'rgan) eng faol a'zolarni BITTA xabarda (20 tadan ko'p bo'lsa, bir nechta xabarda) tag qiladi. Bu guruhning BARCHA a'zosini emas, faqat faol/kuzatilganlarni qamraydi — session/userbot kerak emas.
+- **Foydalanuvchi ma'lumoti va reaksiya:** `get_user_profile`/`lookup_user` tool'lari (username/ism/bio, admin uchun qidiruv) va yangi `react_to_message` tool (AI xabarga emoji bilan reaksiya qo'yadi) allaqachon mavjud edi/qo'shildi.

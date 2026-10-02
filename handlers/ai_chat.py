@@ -22,6 +22,7 @@ from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
 import core.mod_commands as mod_commands
+import core.group_rules as group_rules
 import core.duration as duration
 from core.group_observer import mem_thread as _mem_thread
 import core.roles as roles
@@ -231,7 +232,7 @@ async def handle_message(message: Message):
     mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
     ctx = {
         "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
-        "is_group": is_group, "mod": mod_access,
+        "is_group": is_group, "mod": mod_access, "message_id": message.message_id,
         # xabarda AYNAN BITTA muddat bo'lsa (masalan "14 daqiqaga") — moderatsiya tool'lariga majburan beriladi
         "mod_minutes": duration.single_minutes(user_text) if mod_access is not None else None,
     }
@@ -278,6 +279,8 @@ async def handle_message(message: Message):
         system_prompt += f"\n\n{clock.time_context_line()}"
         if mod_access is not None:
             system_prompt += f"\n\n{moderation.SYSTEM_HINT}{await moderation.context_line(message.bot, message)}"
+        if is_group:
+            system_prompt += group_rules.as_prompt_block(message.chat.id)
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi

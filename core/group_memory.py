@@ -19,6 +19,7 @@ import time
 
 import core.tgdb as tgdb
 import core.history_summarizer as history_summarizer
+import core.nicknames as nicknames
 
 logger = logging.getLogger("group_memory")
 
@@ -38,8 +39,9 @@ def clean_name(s: str | None, limit: int = 40) -> str:
     return " ".join((s or "").split())[:limit]
 
 
-def label(name: str | None, username: str | None) -> str:
-    name = clean_name(name) or "Noma'lum"
+def label(name: str | None, username: str | None, user_id: int | None = None) -> str:
+    nick = nicknames.get(user_id) if user_id else None
+    name = nick or clean_name(name) or "Noma'lum"
     return f"{name} (@{username})" if username else name
 
 
@@ -68,11 +70,12 @@ async def record_human(bot, chat_id: int, thread_id: int | None, message_id: int
     if any(e.get("m") == message_id for e in log[-5:]):
         return  # takroriy (masalan, tahrirlangan/ikki marta kelgan) xabar
     log.append({
-        "r": "u", "n": clean_name(user.full_name), "u": user.username,
+        "r": "u", "n": clean_name(user.full_name), "u": user.username, "i": user.id,
         "t": text[:MAX_TEXT], "m": message_id,
     })
     if len(log) > HARD_CAP:
         del log[: len(log) - HARD_CAP]
+    _bump_stat(chat_id, user)
 
     now = time.monotonic()
     if now - _last_passive_save >= PASSIVE_SAVE_EVERY:
@@ -95,7 +98,7 @@ def _as_messages(entries: list[dict], exclude_mid: int | None = None) -> list[di
         if exclude_mid is not None and e.get("m") == exclude_mid:
             continue
         if e.get("r") == "u":
-            role, content = "user", f"{label(e.get('n'), e.get('u'))}: {e.get('t', '')}"
+            role, content = "user", f"{label(e.get('n'), e.get('u'), e.get('i'))}: {e.get('t', '')}"
         else:
             role, content = "assistant", e.get("t", "")
         if not content:
@@ -126,14 +129,14 @@ async def maybe_fold(bot, chat_id: int, thread_id: int | None):
 
 def tag_current(message, text: str, bot_id: int | None) -> str:
     """Joriy xabarni 'Ism (@user): [javob: ...] matn' ko'rinishiga keltiradi."""
-    speaker = label(message.from_user.full_name, message.from_user.username)
+    speaker = label(message.from_user.full_name, message.from_user.username, message.from_user.id)
     quote = ""
     r = message.reply_to_message
     if r is not None and (r.text or r.caption):
         if r.from_user and bot_id is not None and r.from_user.id == bot_id:
             who = "sizning (botning) xabaringiz"
         elif r.from_user:
-            who = label(r.from_user.full_name, r.from_user.username)
+            who = label(r.from_user.full_name, r.from_user.username, r.from_user.id)
         else:
             who = "noma'lum"
         q = " ".join((r.text or r.caption).split())[:200]
@@ -185,6 +188,29 @@ def candidates_by_text(chat_id: int, text: str, limit: int = 5) -> list[tuple[in
             found.append((rec.get("t", 0), int(uid), rec.get("n") or "", rec.get("u")))
     found.sort(reverse=True)
     return [(uid, n, u) for _, uid, n, u in found[:limit]]
+
+
+# ────────────────────────── statistika (faol a'zolar) ──────────────────────────
+
+def _stats_bucket(chat_id: int) -> dict:
+    return tgdb.get().setdefault("group_stats", {}).setdefault(str(chat_id), {})
+
+
+def _bump_stat(chat_id: int, user):
+    rec = _stats_bucket(chat_id).setdefault(str(user.id), {"n": 0})
+    rec["n"] = rec.get("n", 0) + 1
+    rec["name"], rec["username"] = clean_name(user.full_name), user.username
+
+
+def top_active(chat_id: int, limit: int = 10) -> list[tuple[int, str, str | None, int]]:
+    """Guruhda eng ko'p yozgan (BOT KUZATGAN) a'zolar: [(user_id, ism, username, xabar_soni)]."""
+    stats = _stats_bucket(chat_id)
+    top = sorted(stats.items(), key=lambda kv: kv[1].get("n", 0), reverse=True)[:limit]
+    return [(int(uid), label(r.get("name"), r.get("username"), int(uid)), r.get("username"), r.get("n", 0)) for uid, r in top]
+
+
+def total_messages(chat_id: int) -> int:
+    return sum(r.get("n", 0) for r in _stats_bucket(chat_id).values())
 
 
 def recent_members(chat_id: int, limit: int = 10) -> list[tuple[int, str, str | None]]:
