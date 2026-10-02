@@ -15,6 +15,11 @@ GROUP_COMMANDS = [
     BotCommand(command="taqiqlar", description="🚫 Taqiqlangan so'zlar (admin)"),
     BotCommand(command="statistika", description="📊 Guruh statistikasi"),
     BotCommand(command="top_faollar", description="🏆 Eng faol a'zolarni belgilash (admin)"),
+    BotCommand(command="top_faollar_avto", description="🏆 Har kuni 20:00da avto-yuborish (admin)"),
+    BotCommand(command="aireakmode", description="😁 AI avto-reaksiya: on/off (admin)"),
+    BotCommand(command="antispam", description="🛡 Anti-spam: on/off (admin)"),
+    BotCommand(command="tabrik_qoshish", description="🎉 Kalendar tabrigi qo'shish (admin)"),
+    BotCommand(command="tabriklar", description="🎉 Tabriklar ro'yxati"),
 ]
 
 GENERAL_COMMANDS = [
