@@ -373,3 +373,13 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - **Statistika:** `/statistika` — bot kuzatgan xabarlar soni va eng faol 5 a'zo (hammaga ochiq).
 - **`/top_faollar`** (admin): bot **o'zi kuzatgan** (tag/reply/chatmode orqali ko'rgan) eng faol a'zolarni BITTA xabarda (20 tadan ko'p bo'lsa, bir nechta xabarda) tag qiladi. Bu guruhning BARCHA a'zosini emas, faqat faol/kuzatilganlarni qamraydi — session/userbot kerak emas.
 - **Foydalanuvchi ma'lumoti va reaksiya:** `get_user_profile`/`lookup_user` tool'lari (username/ism/bio, admin uchun qidiruv) va yangi `react_to_message` tool (AI xabarga emoji bilan reaksiya qo'yadi) allaqachon mavjud edi/qo'shildi.
+
+## Qo'shimcha guruh vositalari (2-bosqich)
+- **VIP chatmode tuzatildi:** avval guruhga rasm/video yuborilganda `/vipchatmode`/`/chatmode`ning hisob-kitob mantig'i butunlay chetlab o'tilardi (rasm oddiy kunlik limitga tushib qolardi). Endi matn kabi to'g'ri ishlaydi.
+- **GLOBAL qora ro'yxat** (`core/global_blacklist.py`, FAQAT superadmin: `/qora_qoshish`, `/qora_ochir`, `/qoralar`) — barcha guruhlarda birdek ishlaydi, so'z uchrasa xabar o'chadi; 3-marta buzilsa 60 daqiqaga mute, 5-marta — ban (24 soatlik oyna). Har guruhning o'z `/taqiq_*` ro'yxati bilan birga ishlaydi.
+- **`/aireakmode: on|off`** — yoqilsa, bot mavzuga mos xabarlarga (javob yozmasdan) emoji bilan reaksiya qo'yadi; neytral/qisqa xabarlarga tegmaydi.
+- **`/antispam on|off`** — flood nazorati: 8 soniyada 6+ xabar yoki bir xil xabarni 5+ marta takrorlash — avtomatik 10 daqiqaga mute.
+- **`/statistika`** endi FAQAT guruh/bot adminlari va superadmin uchun ishlaydi (boshqalarga ruxsat yo'q xabari).
+- **Kunlik avtomatik jadval** (`core/scheduler.py`, har daqiqa tekshiradi, Toshkent vaqti):
+  - `/top_faollar_avto on|off` — soat 20:00da `/top_faollar` natijasi avtomatik yuboriladi.
+  - `/tabrik_qoshish DD-MM matn`, `/tabriklar`, `/tabrik_ochir N` — kalendar tabriklari (bayramlar), har yili soat 09:00da avtomatik yuboriladi. **Eslatma:** bu tug'ilgan kun emas, kalendar/bayram tabrig'i — foydalanuvchilarning tug'ilgan sanasi haqida ma'lumot yo'q.

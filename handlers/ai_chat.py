@@ -138,11 +138,13 @@ async def handle_message(message: Message):
         # reply qilish — boshqa har qanday xabar E'TIBORSIZ qoldiriladi.
         chat_mode_rec = chat_mode.get(message.chat.id)
         if has_media:
-            # Rasm/hujjat guruhda FAQAT bot tag/reply qilinganda qabul qilinadi — chatmode
-            # ham bunga taalluqli emas (aks holda guruhdagi HAR bir rasm diskka tushardi).
+            # Rasm/hujjat guruhda FAQAT bot tag/reply qilinganda qabul qilinadi (aks holda
+            # guruhdagi HAR bir rasm diskka tushardi). MUHIM: chat_mode_rec BU YERDA "None"ga
+            # TUSHIRILMAYDI — avval shunday edi va buning oqibatida /vipchatmode (va oddiy
+            # /chatmode'ning owner-first hisobi) rasm/video xabarlarga umuman qo'llanmasdi:
+            # VIP guruhda rasm yuborilsa ham, pastdagi oddiy kunlik limitga tushib qolardi.
             if not (is_mentioned or is_reply_to_bot):
                 return
-            chat_mode_rec = None
         elif chat_mode_rec is None and not (is_mentioned or is_reply_to_bot):
             return
 

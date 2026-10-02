@@ -13,7 +13,10 @@ import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 
+import core.ai_reaction as ai_reaction
+import core.antispam as antispam
 import core.banned_words as banned_words
+import core.global_blacklist as global_blacklist
 import core.group_memory as group_memory
 import core.moderation as moderation
 import core.tgdb as tgdb
@@ -60,16 +63,37 @@ class GroupObserver(BaseMiddleware):
 
         text = m.text or m.caption or ""
         if text and not text.startswith("/"):
-            if banned_words.find_match(chat_id, text) is not None:
-                if await self._delete_banned(m):
+            is_global = global_blacklist.find_match(text) is not None
+            is_local = banned_words.find_match(chat_id, text) is not None
+            if is_global or is_local:
+                if await self._delete_banned(m, escalate=is_global):
                     return True
+
+            access = await moderation.get_access(m.bot, chat_id, m.from_user.id)
+            if access is None and antispam.is_enabled(chat_id):
+                if antispam.register_and_check(chat_id, m.from_user.id, text):
+                    await self._handle_flood(m)
+
             await group_memory.record_human(m.bot, chat_id, mem_thread(m), m.message_id, m.from_user, text)
+            if ai_reaction.is_enabled(chat_id):
+                ai_reaction.react_in_background(m.bot, chat_id, m.message_id, text, m.from_user.id)
         elif changed:
             await tgdb.save(m.bot)
         return False
 
-    async def _delete_banned(self, m: Message) -> bool:
-        """Taqiqlangan so'z: guruh/bot adminlari TEKSHIRILMAYDI. O'chirish muvaffaqiyatli bo'lsagina True."""
+    async def _handle_flood(self, m: Message):
+        ctx = {"bot": m.bot, "chat_id": m.chat.id, "is_group": True, "mod": moderation.ModAccess(0, is_owner=True)}
+        r = await moderation.dispatch(m.bot, "mute_user", {"user_id": m.from_user.id, "minutes": antispam.MUTE_MINUTES}, ctx)
+        if r.get("ok"):
+            name = group_memory.label(m.from_user.full_name, m.from_user.username, m.from_user.id)
+            try:
+                await m.bot.send_message(m.chat.id, f"🚫 {name} — flood (juda tez-tez yozish) uchun {antispam.MUTE_MINUTES} daqiqaga mute qilindi.")
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def _delete_banned(self, m: Message, escalate: bool = False) -> bool:
+        """Taqiqlangan so'z: guruh/bot adminlari TEKSHIRILMAYDI. O'chirish muvaffaqiyatli bo'lsagina True.
+        escalate=True (GLOBAL qora ro'yxat) bo'lsa — strike hisoblanadi va 3/5-chisida mute/ban qo'llanadi."""
         access = await moderation.get_access(m.bot, m.chat.id, m.from_user.id)
         if access is not None:
             return False
@@ -80,9 +104,21 @@ class GroupObserver(BaseMiddleware):
         if not result.ok:
             logger.info("Taqiqlangan so'z xabarini o'chirib bo'lmadi: %s", result.message)
             return False
+        name = group_memory.label(m.from_user.full_name, m.from_user.username, m.from_user.id)
+        note = ""
+        if escalate:
+            n = global_blacklist.register_strike(m.chat.id, m.from_user.id)
+            ctx = {"bot": m.bot, "chat_id": m.chat.id, "is_group": True, "mod": moderation.ModAccess(0, is_owner=True)}
+            if n >= global_blacklist.BAN_AT:
+                r = await moderation.dispatch(m.bot, "ban_user", {"user_id": m.from_user.id}, ctx)
+                if r.get("ok"):
+                    note = " Takroriy buzilish tufayli guruhdan ban qilindi."
+            elif n >= global_blacklist.MUTE_AT:
+                r = await moderation.dispatch(m.bot, "mute_user", {"user_id": m.from_user.id, "minutes": global_blacklist.MUTE_MINUTES}, ctx)
+                if r.get("ok"):
+                    note = f" Takroriy buzilish tufayli {global_blacklist.MUTE_MINUTES} daqiqaga mute qilindi."
         try:
-            name = group_memory.label(m.from_user.full_name, m.from_user.username, m.from_user.id)
-            await m.bot.send_message(m.chat.id, f"🚫 {name} xabari o'chirildi — taqiqlangan so'z ishlatilgan.")
+            await m.bot.send_message(m.chat.id, f"🚫 {name} xabari o'chirildi — taqiqlangan so'z ishlatilgan.{note}")
         except Exception:  # noqa: BLE001
             pass
         return True

@@ -2,6 +2,7 @@
 Entry point — webhook mode (Render uchun), StokerDownloader / KanalKotibRobot /
 mafia_host_bot repolaringizdagi umumiy deploy patterniga mos.
 """
+import asyncio
 import logging
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -27,6 +28,7 @@ from handlers.ai_chat import router as ai_chat_router
 from handlers.slide_preview import router as slide_preview_router
 from core.legacy_cleanup import purge_userbot_data
 import core.nicknames as nicknames
+import core.scheduler as scheduler
 from core.group_observer import GroupObserver
 import core.file_cleanup as file_cleanup
 import core.bot_identity as bot_identity
@@ -69,6 +71,7 @@ async def on_startup(bot: Bot):
     # Userbot olib tashlangan: eski sessiya (hisobga kirish huquqi) ma'lumotlarini DB'dan o'chiramiz
     await purge_userbot_data(bot)
     await nicknames.seed_defaults(bot)  # standart taxalluslar (masalan 8054272729 -> "Omirbayev aka")
+    asyncio.create_task(scheduler.run_forever(bot))  # kunlik top-faollar (20:00) va tabriklar (09:00)
 
 
 async def _register_commands(bot: Bot):
