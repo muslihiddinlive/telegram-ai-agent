@@ -18,6 +18,7 @@ from tools.file_tools import FILE_TOOLS, file_dispatch, is_file_tool
 import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
 import core.moderation as moderation
+import core.userbot_tools as userbot_tools
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -38,6 +39,11 @@ _TOOL_STATUS_LABELS = {
     "remember_note": "Eslatma saqlanmoqda",
     "post_story": "Story tayyorlanib, profilga qo'yilmoqda",
     "look_at_image": "Rasm ko'rilmoqda",
+    "list_group_members": "Guruh a'zolari ro'yxati olinmoqda",
+    "get_member_profile": "Foydalanuvchi profili o'qilmoqda",
+    "send_member_photos": "Profil rasmlari yuklanmoqda",
+    "send_member_stories": "Story'lar yuklanmoqda",
+    "read_channel_posts": "Kanal postlari o'qilmoqda",
     "fetch_url_text": "Sahifa matni o'qilmoqda",
     "scrape_page_text": "Sahifa o'qilmoqda",
     "extract_page_links": "Sahifadan havolalar olinmoqda",
@@ -733,6 +739,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "search_web": _search_web,  # ms-file-toolkit'ning DDG-only versiyasini
     # Bing-fallback qo'shilgan versiyamiz bilan ALMASHTIRAMIZ (pastdagi
     # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).
+    **userbot_tools.HANDLERS,  # userbot (core/userbot.py) — schema'lar faqat u ulangan bo'lsa AI'ga beriladi
 }
 
 
