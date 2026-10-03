@@ -34,6 +34,7 @@ _TOOL_STATUS_LABELS = {
     "lookup_user": "Foydalanuvchi qidirilmoqda",
     "react_to_message": "Reaksiya qo'yilmoqda",
     "set_daily_top_active": "Kunlik sozlama o'zgartirilmoqda",
+    "wipe_group_memory": "Guruh xotirasi tozalanmoqda",
     "remember_note": "Eslatma saqlanmoqda",
     "post_story": "Story tayyorlanib, profilga qo'yilmoqda",
     "look_at_image": "Rasm ko'rilmoqda",
@@ -295,6 +296,22 @@ TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "wipe_group_memory",
+            "description": (
+                "Shu GURUH haqida sizning (AI) xotirangizda saqlangan HAMMA narsani — suhbat jurnali/xulosasi, "
+                "a'zolar indeksi, xabar statistikasi — DB'DAN BUTUNLAY O'CHIRADI (haqiqiy o'chirish, shunchaki "
+                "'unutdim' deb aytib qo'yish emas). Foydalanuvchi 'hammasini unut', 'xotirani tozala', "
+                "'guruh ma'lumotlarini o'chir' kabi ANIQ so'rasa chaqiring. O'chirishdan OLDIN eski ma'lumotlar "
+                ".txt fayl qilib guruhga yuboriladi (zaxira). Admin sozlamalari (taqiqlangan so'zlar, guruh "
+                "qoidalari, chatmode va h.k.) BUNGA TEGMAYDI, faqat xotira o'chadi. Faqat guruh/bot adminlari "
+                "uchun va faqat guruhda ishlaydi."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "set_daily_top_active",
             "description": (
                 "Shu GURUHDA har kuni soat 20:00da (Toshkent) eng faol a'zolarni (bot kuzatganlarini) "
@@ -460,6 +477,35 @@ async def _set_daily_top_active(user_id: int, args: dict, ctx: dict) -> dict:
     enabled = bool(args.get("enabled"))
     await auto_top.set_enabled(ctx["bot"], ctx["chat_id"], enabled)
     return {"status": "yoqildi" if enabled else "o'chirildi", "vaqt": "har kuni 20:00 (Toshkent)" if enabled else None}
+
+
+async def _wipe_group_memory(user_id: int, args: dict, ctx: dict) -> dict:
+    import core.group_wipe as group_wipe
+    import core.roles as roles
+    from aiogram.types import BufferedInputFile
+
+    if not ctx.get("is_group"):
+        return {"error": "Bu faqat guruhda ishlaydi."}
+    if not (roles.is_superadmin(user_id) or roles.is_admin(user_id) or ctx.get("mod") is not None):
+        return {"error": "Buni faqat guruh yoki bot adminlari qila oladi."}
+
+    chat_id = ctx["chat_id"]
+    export_text = group_wipe.build_export(chat_id)
+    try:
+        await ctx["bot"].send_document(
+            chat_id,
+            BufferedInputFile(export_text.encode("utf-8"), filename=f"guruh_xotirasi_{chat_id}.txt"),
+            caption="📄 O'chirishdan oldingi zaxira — guruh xotirasining to'liq eksporti.",
+        )
+    except Exception as e:  # noqa: BLE001 — eksport yuborilmasa ham, foydalanuvchi so'ragani uchun tozalashni davom ettiramiz
+        logger.warning("Guruh xotirasi eksporti yuborilmadi: %s", e)
+
+    removed = await group_wipe.wipe(ctx["bot"], chat_id)
+    return {
+        "status": "guruh xotirasi butunlay o'chirildi",
+        "o'chirilgan": removed,
+        "eslatma": "Admin sozlamalari (taqiqlar, qoidalar, chatmode) saqlanib qoldi, faqat xotira tozalandi.",
+    }
 
 
 MAX_NOTES_PER_USER = 30  # foydalanuvchi boshiga eng ko'pi (eskirgan/keraksiz to'planib ketmasin)
@@ -683,6 +729,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "lookup_user": _lookup_user,
     "react_to_message": _react_to_message,
     "set_daily_top_active": _set_daily_top_active,
+    "wipe_group_memory": _wipe_group_memory,
     "search_web": _search_web,  # ms-file-toolkit'ning DDG-only versiyasini
     # Bing-fallback qo'shilgan versiyamiz bilan ALMASHTIRAMIZ (pastdagi
     # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).

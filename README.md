@@ -381,3 +381,10 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - **`/antispam on|off`** — flood nazorati: 8 soniyada 6+ xabar yoki bir xil xabarni 5+ marta takrorlash — avtomatik 10 daqiqaga mute.
 - **`/statistika`** endi FAQAT guruh/bot adminlari va superadmin uchun ishlaydi (boshqalarga ruxsat yo'q xabari).
 - **Kunlik avtomatik yuborish** (`core/scheduler.py`, har daqiqa tekshiradi, Toshkent vaqti, soat 20:00): admin AI'ga oddiy gap bilan ("har kuni eng faol userlarni tag qil") aytadi — AI `set_daily_top_active` tool orqali yoqadi/o'chiradi, alohida komanda yo'q.
+
+## Guruh xotirasini butunlay tozalash
+Admin AI'ga "hammasini unut", "guruh xotirasini tozala" kabi aniq aytsa, `wipe_group_memory` tool chaqiriladi:
+suhbat jurnali/xulosasi, a'zolar indeksi va xabar statistikasi DB'dan **haqiqatan o'chiriladi** (AI shunchaki
+"unutdim" deb yozib qo'yishi emas). O'chirishdan OLDIN eski ma'lumotlar `.txt` fayl qilib guruhga yuboriladi
+(zaxira). Admin sozlamalariga (taqiqlangan so'zlar, guruh qoidalari, chatmode/VIP, anti-spam va h.k.) **tegilmaydi**
+— faqat "xotira" tozalanadi. Faqat guruh/bot adminlari uchun, boshqa guruhlarning ma'lumotiga ta'sir qilmaydi.
