@@ -186,6 +186,17 @@ shaxsiy kalit ulangan/ulanmagan userlar bir-biriga ta'sir qilmaydi).
 - **oddiy user** — /start bosgan har kim AVTOMATIK (admin tasdig'i kerak emas), kunlik so'rov limiti bilan (standart 50/kun, `/panel` orqali o'zgartiriladi)
 - **blocked** — superadmin `/panel` orqali bloklagan user, shaxsiy chatda botdan foydalana olmaydi (qayta ochish mumkin)
 
+## Panel orqali xabar yuborish (`core/admin_messaging.py`)
+- **Bitta foydalanuvchiga** (superadmin va adminlar): `/panel → Foydalanuvchilar → <user> → ✉️ Xabar yozish`, so'ng matnni yozasiz.
+  Xabar jo'natuvchi nomisiz, "📩 Admin xabari" sifatida boradi (panel superadmin identligini adminlardan yashirgani uchun).
+  Oddiy adminlarga soatiga 30 ta xabar limiti bor, superadminga yo'q.
+- **Hammaga (broadcast)** — FAQAT superadmin: `/panel → 📢 Hammaga xabar`. Matn yoziladi → ko'rinishi va qabul qiluvchilar soni
+  ko'rsatiladi → «✅ Yuborish» bosilgandagina ketadi (ikki marta bosish qayta yubormaydi). Bloklanganlar va o'zingiz chiqarib tashlanadi;
+  ~16 xabar/s, FloodWait'da kutib 1 marta qayta uriniladi, bir vaqtda faqat bitta broadcast. Oxirida hisobot keladi
+  (yetkazildi/yetkazilmadi va sabablari — botni bloklaganlar yoki hech qachon /start bosmaganlar).
+  Ruxsat serverda ham tekshiriladi: admin tugmani/callback'ni qo'lda yuborsa ham broadcast ishlamaydi.
+- Matn HTML-escape qilinadi (admin yozgan `<`, `&` aynan o'zi ko'rinadi). Hozircha faqat matn (rasm/fayl yo'q). `/panel` yarim qolgan oqimni bekor qiladi.
+
 ## Yangilanish: debounced DB yozish (StokerDownloader patterni)
 `core/tgdb.py` endi har `save()` chaqiruvida darhol Telegram'ga yozmaydi —
 faqat "dirty" belgisini qo'yadi, background task har 5 soniyada bittalab

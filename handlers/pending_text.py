@@ -14,6 +14,8 @@ import core.user_api_keys as user_api_keys
 import core.shared_keys as shared_keys
 import core.ai_persona as ai_persona
 from admin.panel import render_search_results
+import core.admin_messaging as admin_messaging
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 router = Router()
 
@@ -35,6 +37,44 @@ async def handle_pending(message: Message):
     action = state["action"]
     data = state["data"]
     text = message.text.strip()
+
+    # ── Admin panel: bitta foydalanuvchiga xabar (admin + superadmin) ──
+    if action == "msg_user_text":
+        pending_input.clear(user_id)
+        if text.startswith("/"):
+            await message.answer("❌ Bekor qilindi.")
+            return
+        ok, reply = await admin_messaging.send_dm(message.bot, user_id, int(data["target_uid"]), text)
+        await message.answer(reply)
+        return
+
+    # ── Broadcast (FAQAT superadmin): matn qabul qilinadi, yuborishdan OLDIN ko'rsatiladi va tasdiqlanadi ──
+    if action == "broadcast_text":
+        if not admin_messaging.can_broadcast(user_id):
+            pending_input.clear(user_id)
+            await message.answer("Ruxsat yo'q.")
+            return
+        if text.startswith("/"):
+            pending_input.clear(user_id)
+            await message.answer("❌ Bekor qilindi.")
+            return
+        if err := admin_messaging.validate_text(text):
+            await message.answer(f"⚠️ {err} Qisqaroq yozing yoki /panel bilan bekor qiling.")
+            return
+        pending_input.set(user_id, "broadcast_confirm", {"text": text})
+        count = len(admin_messaging.recipients(user_id))
+        await message.answer(
+            f"👀 Ko'rinishi:\n\n{admin_messaging.format_broadcast(text)}\n\n"
+            f"— {count} ta foydalanuvchiga yuboriladi. Tasdiqlaysizmi?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="✅ Yuborish", callback_data="panel:bc_yes"),
+                InlineKeyboardButton(text="❌ Bekor", callback_data="panel:bc_no"),
+            ]]),
+        )
+        return
+    if action == "broadcast_confirm":
+        await message.answer("Yuborish yoki bekor qilish tugmasini bosing (yoki /panel).")
+        return
 
     # ── Foydalanuvchi limitini o'zgartirish (admin/superadmin) ──
     if action == "set_user_limit":

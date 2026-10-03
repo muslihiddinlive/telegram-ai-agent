@@ -5,6 +5,8 @@ moslashtirilgan:
   - admin: FAQAT "Foydalanuvchilar"ni ko'radi — "Adminlar" bo'limi umuman
     ko'rsatilmaydi (superadmin identligi/adminlar ro'yxati adminlardan yashirin)
 """
+import asyncio
+
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -15,6 +17,7 @@ import core.pending_input as pending_input
 import core.shared_keys as shared_keys
 import core.ai_persona as ai_persona
 import core.global_blacklist as global_blacklist
+import core.admin_messaging as admin_messaging
 
 router = Router()
 
@@ -26,6 +29,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(text="🔑 AI kalitlar", callback_data="panel:keys")])
         rows.append([InlineKeyboardButton(text="🎭 AI shaxsiyati", callback_data="panel:persona")])
         rows.append([InlineKeyboardButton(text="🌐 Global qora ro'yxat", callback_data="panel:qora")])
+        rows.append([InlineKeyboardButton(text="📢 Hammaga xabar (broadcast)", callback_data="panel:bc")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -33,6 +37,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
 async def open_panel(message: Message):
     if not (roles.is_superadmin(message.from_user.id) or roles.is_admin(message.from_user.id)):
         return  # oddiy/tasdiqlangan userlar panelni ko'rmaydi
+    pending_input.clear(message.from_user.id)  # yarim qolgan oqim (xabar yozish, broadcast...) bekor bo'ladi
     await message.answer("🛠 Boshqaruv paneli:", reply_markup=main_menu_kb(message.from_user.id))
 
 
@@ -105,6 +110,7 @@ async def user_detail(call: CallbackQuery):
             kb_rows.append([InlineKeyboardButton(text="🚫 Bloklash", callback_data=f"panel:revoke:{uid}")])
     else:
         kb_rows.append([InlineKeyboardButton(text="✅ Blokdan chiqarish", callback_data=f"panel:approve:{uid}")])
+    kb_rows.append([InlineKeyboardButton(text="✉️ Xabar yozish", callback_data=f"panel:msg:{uid}")])
     # Xotira/maxfiylik nazorati — superadmin va admin ikkalasi ham ko'ra oladi
     # (admin va superadmin uchun)
     if notes_count:
@@ -182,6 +188,90 @@ async def set_limit_start(call: CallbackQuery):
     uid = call.data.split(":")[-1]
     pending_input.set(caller, "set_user_limit", {"target_uid": uid})
     await call.message.answer(f"Foydalanuvchi {uid} uchun yangi kunlik limitni yuboring (raqam):")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:msg:"))
+async def message_user_start(call: CallbackQuery):
+    caller = call.from_user.id
+    if not admin_messaging.can_message_user(caller):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    uid = call.data.split(":")[-1]
+    if not uid.lstrip("-").isdigit():
+        await call.answer("Noto'g'ri foydalanuvchi", show_alert=True)
+        return
+    pending_input.set(caller, "msg_user_text", {"target_uid": int(uid)})
+    await call.message.answer(
+        f"✉️ {uid} ga yuboriladigan xabar matnini yozing.\n"
+        f"Xabar sizning ismingizsiz, \"Admin xabari\" sifatida boradi. Bekor qilish: /panel"
+    )
+    await call.answer()
+
+
+# ── Broadcast (FAQAT superadmin): matn → oldindan ko'rish → tasdiqlash → yuborish ──
+
+_bg_tasks: set = set()  # create_task'ni GC yeb qo'ymasligi uchun
+
+
+@router.callback_query(F.data == "panel:bc")
+async def broadcast_start(call: CallbackQuery):
+    caller = call.from_user.id
+    if not admin_messaging.can_broadcast(caller):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    if admin_messaging.is_broadcast_active():
+        await call.answer("Boshqa broadcast hozir ishlayapti", show_alert=True)
+        return
+    pending_input.set(caller, "broadcast_text")
+    count = len(admin_messaging.recipients(caller))
+    await call.message.answer(
+        f"📢 Hamma foydalanuvchilarga ({count} ta, bloklanmaganlar) yuboriladigan xabar matnini yozing.\n"
+        f"Yuborishdan oldin ko'rib, tasdiqlaysiz. Bekor qilish: /panel"
+    )
+    await call.answer()
+
+
+async def _run_broadcast(bot: Bot, caller: int, text: str):
+    try:
+        res = await admin_messaging.broadcast(bot, caller, text)
+        if "error" in res:
+            report = f"⚠️ {res['error']}"
+        else:
+            reasons = ", ".join(f"{k}: {v}" for k, v in res["reasons"].items())
+            report = (f"📢 Broadcast tugadi.\nYetkazildi: {res['sent']} / {res['total']}"
+                      + (f"\nYetkazilmadi: {res['failed']} ({reasons})" if res["failed"] else ""))
+    except Exception as e:  # noqa: BLE001
+        report = f"⚠️ Broadcast xatolik bilan to'xtadi: {type(e).__name__}"
+    try:
+        await bot.send_message(caller, report)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@router.callback_query(F.data == "panel:bc_yes")
+async def broadcast_confirm(call: CallbackQuery, bot: Bot):
+    caller = call.from_user.id
+    if not admin_messaging.can_broadcast(caller):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    state = pending_input.get(caller)
+    if not state or state["action"] != "broadcast_confirm":
+        await call.answer("Muddati o'tgan — qaytadan boshlang", show_alert=True)
+        return
+    text = state["data"]["text"]
+    pending_input.clear(caller)  # ikki marta bosilsa ikki marta yuborilmasin
+    task = asyncio.create_task(_run_broadcast(bot, caller, text))
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    await call.message.edit_text("📤 Yuborilmoqda... tugagach hisobot keladi.")
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:bc_no")
+async def broadcast_cancel(call: CallbackQuery):
+    pending_input.clear(call.from_user.id)
+    await call.message.edit_text("❌ Broadcast bekor qilindi.")
     await call.answer()
 
 
