@@ -36,8 +36,10 @@ mafia_host_bot):
   shundan keyin unutiladi (qisqa muddatli kontekst)
 - **`remember_note` tool** (`core/ai_tools.py`) — foydalanuvchi "eslab qol",
   "meni ... deb chaqir" desa, AI buni DB'ga DOIMIY yozadi (foydalanuvchi
-  boshiga eng ko'pi 30 ta, eskilari avtomatik siljib chiqadi) va **HAR BIR
-  keyingi suhbatga** (hatto boshqa kun/topic'da ham) avtomatik qaytariladi
+  boshiga eng ko'pi 30 ta, eskilari avtomatik siljib chiqadi) va keyingi
+  suhbatlarga avtomatik qaytariladi. **Eslatma qayerda aytilgan bo'lsa, faqat o'sha yerda ishlaydi:**
+  guruhda aytilgani shu guruhga bog'lanadi (`db["group_notes"]`, boshqa guruhga va shaxsiy chatga chiqmaydi),
+  shaxsiy chatda aytilgani esa guruhlarga chiqmaydi
   (`handlers/ai_chat.py` — system prompt'ga qo'shiladi). Test qilindi:
   saqlash, qaytarish, foydalanuvchilar orasida aralashmaslik — barchasi to'g'ri.
 
@@ -396,8 +398,15 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 - **Kunlik avtomatik yuborish** (`core/scheduler.py`, har daqiqa tekshiradi, Toshkent vaqti, soat 20:00): admin AI'ga oddiy gap bilan ("har kuni eng faol userlarni tag qil") aytadi — AI `set_daily_top_active` tool orqali yoqadi/o'chiradi, alohida komanda yo'q.
 
 ## Guruh xotirasini butunlay tozalash
-Admin AI'ga "hammasini unut", "guruh xotirasini tozala" kabi aniq aytsa, `wipe_group_memory` tool chaqiriladi:
-suhbat jurnali/xulosasi, a'zolar indeksi va xabar statistikasi DB'dan **haqiqatan o'chiriladi** (AI shunchaki
-"unutdim" deb yozib qo'yishi emas). O'chirishdan OLDIN eski ma'lumotlar `.txt` fayl qilib guruhga yuboriladi
-(zaxira). Admin sozlamalariga (taqiqlangan so'zlar, guruh qoidalari, chatmode/VIP, anti-spam va h.k.) **tegilmaydi**
-— faqat "xotira" tozalanadi. Faqat guruh/bot adminlari uchun, boshqa guruhlarning ma'lumotiga ta'sir qilmaydi.
+Admin AI'ga "hammasini unut", "guruh xotirasini tozala" kabi aniq aytsa, `wipe_group_memory` tool chaqiriladi.
+Faqat SHU guruhga ta'sir qiladi, boshqa guruh va foydalanuvchilarning global ma'lumotiga (rol/limit, shaxsiy chat
+eslatmalari, `/laqab` taxallusi) tegilmaydi. O'chirishdan OLDIN eski ma'lumotlar `.txt` fayl qilib guruhga yuboriladi (zaxira).
+
+- **Xotira tozalash (standart):** suhbat jurnali/xulosasi, a'zolar indeksi, xabar statistikasi va guruhda aytilgan
+  eslatmalar ("meni ... deb chaqir") DB'dan **haqiqatan o'chiriladi** + jarayon xotirasidagi keshlar tozalanadi.
+  Admin sozlamalari (taqiqlangan so'zlar, qoidalar, chatmode/VIP, anti-spam...) saqlanadi.
+- **To'liq reset (`full_reset`):** "to'liq reset", "sozlamalari bilan hammasini", "guruh yangi qo'shilgandek bo'lsin"
+  deyilsa — yuqoridagilar + admin sozlamalari, ogohlantirishlar, blacklist strike'lar, kanal yozuvi ham o'chadi
+  (zaxira faylga sozlamalar ham yoziladi). Faqat bot adminlari va guruh egasi uchun.
+
+Tozalangan navbatda AI eski kontekst bilan javob yozmaydi (tayyor matn yuboriladi) va yangi bo'sh logga hech narsa yozilmaydi.
