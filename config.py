@@ -28,3 +28,15 @@ DEEPSEEK_API_KEYS = _split_keys("DEEPSEEK_API_KEYS")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
 ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]  # Fernet.generate_key() bilan yarating
+
+# ── Userbot (Telethon, FAQAT O'QISH) — core/userbot.py. IXTIYORIY: uchalasi berilmasa funksiya o'chiq.
+# Session'ni gen_userbot_session.py bilan oling; ENV'dan boshqa joyga (DB, repo) QO'YMANG.
+# DIQQAT: shu session boshqa joyda (boshqa userbot) bir vaqtda ishlatilsa Telegram uni bekor qiladi.
+USERBOT_API_ID = int(os.environ.get("USERBOT_API_ID") or 0)
+USERBOT_API_HASH = os.environ.get("USERBOT_API_HASH", "")
+USERBOT_SESSION = os.environ.get("USERBOT_SESSION", "")
+# "all" — hamma foydalanuvchi so'ray oladi (soatiga USERBOT_RATE_PER_HOUR limit bilan); "admins" — faqat adminlar
+USERBOT_ACCESS = os.environ.get("USERBOT_ACCESS", "all").strip().lower()
+if USERBOT_ACCESS not in ("all", "admins"):
+    USERBOT_ACCESS = "admins"  # noto'g'ri qiymatda xavfsizroq tomonga
+USERBOT_RATE_PER_HOUR = int(os.environ.get("USERBOT_RATE_PER_HOUR", 15))

@@ -309,12 +309,25 @@ Faqat **superadmin** (config.SUPERADMIN_ID) xabar sifatida `exec: <kod>`
 yuborsa, kod serverda TO'G'RIDAN-TO'G'RI bajariladi (cheklanmagan RCE).
 Bu — production'da debugging uchun kuchli, lekin xavfli vosita. Agar kerak
 bo'lmasa, `main.py`da `admin_terminal_router`ni ro'yxatdan olib tashlang.
-## Userbot olib tashlangan
-Telethon asosidagi userbot (`/userbot`, `/kalitsoz_qoshish`, `/kalitsozlar`, `/away`) **butunlay olib tashlandi** —
-Telegram session string hisobga to'liq kirish huquqi beradi, bu xavfli. Profilga ulash endi FAQAT Telegram'ning
-rasmiy yo'li bilan: **Sozlamalar → Hisob → Chatlarni avtomatlashtirish** (Business chatbot), qarang «Profilga AI sifatida ulash».
-Ishga tushganda `core/legacy_cleanup.py` eski sessiya ma'lumotlarini (`telegram_session`, `api_id`, `api_hash`) DB'dan o'chiradi
-(shaxsiy AI API kalitlariga tegmaydi).
+## Userbot (faqat o'qiydi, IXTIYORIY)
+Eski ko'p-akkauntli userbot (`/userbot`, `/kalitsoz_qoshish`, `/away`) olib tashlangan. Uning o'rniga **bitta, egasining o'z
+(ishlatilmaydigan) akkaunti** bilan ishlaydigan, faqat o'qiydigan modul bor (`core/userbot.py`, `core/userbot_tools.py`).
+Session DB'da emas, faqat ENV'da turadi (`core/legacy_cleanup.py` DB'dagi eski sessiyalarni baribir tozalab turadi).
+
+**Yoqish:** `python gen_userbot_session.py` (lokalda) → Render env'ga `USERBOT_API_ID`, `USERBOT_API_HASH`, `USERBOT_SESSION`.
+Uchalasi bo'lmasa funksiya o'chiq, bot odatdagidek ishlaydi. Akkaunt kerakli guruh(lar)ga a'zo bo'lishi kerak.
+
+**AI nima qila oladi:** guruh a'zolari ro'yxati (admin bo'lmaganlar ham; uzun bo'lsa .txt fayl), profil (ism/username/bio/shaxsiy kanal),
+profil rasmlarini yuklab shu chatga yuborish, story'larni (faol + mahkamlangan) yuklab yuborish, ochiq kanal postlarini o'qish.
+Story egasiga "ko'rildi" bildirilmaydi. Telegram maxfiligi (yopiq bio/story, yashirin a'zolar) o'z-o'zidan amal qiladi.
+
+**Sozlamalar:** `USERBOT_ACCESS=all|admins` (standart `all`: hamma so'rashi mumkin; `admins`: faqat bot/guruh adminlari),
+`USERBOT_RATE_PER_HOUR=15` (oddiy foydalanuvchi uchun soatlik limit; adminlarga tegmaydi).
+
+**Muhim:** (1) shu session'ni boshqa joyda bir vaqtda ishlatmang — Telegram uni bekor qiladi (AUTH_KEY_DUPLICATED); shunda funksiya
+o'zini o'chiradi, bot ishlashda davom etadi. (2) Render zero-downtime deploy paytida eski va yangi nusxa ozgina vaqt birga ishlashi mumkin
+— shunda ham shu xato chiqishi mumkin; kerak bo'lsa qayta deploy qiling. (3) Telegram'ni ommaviy yig'ish uchun ishlatmang: akkaunt limitga/ban'ga tushishi mumkin.
+Testlar: `pip install pytest && pytest tests`.
 
 ## ⚠️ Muhim: Private Chat Topics yoqish
 Bu funksiya ishlashi uchun: **@BotFather → /mybots → botingiz → Bot Settings**

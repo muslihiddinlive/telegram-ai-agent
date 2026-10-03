@@ -18,6 +18,8 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyb
 
 from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
+import core.userbot as userbot
+import core.userbot_tools as userbot_tools
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
@@ -330,12 +332,14 @@ async def handle_message(message: Message):
     # bot "kimning ID'sini bilmoqchisiz?" deb so'ragach, foydalanuvchi shunchaki
     # ID'ni yuborsa (o'zida "mute"/"ban" so'zi bo'lmaydi), tool yana yo'qolib qolardi.
     active_tools = TOOLS
+    if userbot.is_enabled():  # schema'lar faqat userbot ulangan bo'lsa (behuda token yemasin)
+        active_tools = active_tools + userbot_tools.SCHEMAS
     if mod_access is not None:
         recent_context = " ".join((m.get("content") or "") for m in history[-6:]) + " " + user_text
         if moderation.looks_like_mod_request(recent_context):
             mod_schemas = moderation.tool_schemas(message.bot, mod_access)
             if mod_schemas:
-                active_tools = TOOLS + mod_schemas
+                active_tools = active_tools + mod_schemas
 
     try:
         # GURUHDA user_id=None yuboriladi — shu bilan ai.chat() shaxsiy kalitni

@@ -14,5 +14,11 @@ services:
         sync: false
       - key: ENCRYPTION_KEY
         sync: false
+      - key: USERBOT_API_ID
+        sync: false
+      - key: USERBOT_API_HASH
+        sync: false
+      - key: USERBOT_SESSION
+        sync: false
       - key: PORT
         value: 8080

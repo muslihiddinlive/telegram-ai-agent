@@ -32,6 +32,7 @@ import core.scheduler as scheduler
 from core.group_observer import GroupObserver
 import core.file_cleanup as file_cleanup
 import core.bot_identity as bot_identity
+import core.userbot as userbot
 from tools.file_tools import USER_FILES_ROOT
 
 logging.basicConfig(level=logging.INFO)
@@ -71,6 +72,7 @@ async def on_startup(bot: Bot):
     # Userbot olib tashlangan: eski sessiya (hisobga kirish huquqi) ma'lumotlarini DB'dan o'chiramiz
     await purge_userbot_data(bot)
     await nicknames.seed_defaults(bot)  # standart taxalluslar (masalan 8054272729 -> "Omirbayev aka")
+    await userbot.start()  # sozlanmagan/xato bo'lsa bot yiqilmaydi — funksiya shunchaki o'chiq qoladi
     asyncio.create_task(scheduler.run_forever(bot))  # kunlik top-faollar (20:00) va tabriklar (09:00)
 
 
@@ -95,6 +97,7 @@ async def _register_commands(bot: Bot):
 
 
 async def on_shutdown(bot: Bot):
+    await userbot.stop()
     await tgdb.force_flush()  # qoldiq (hali flush qilinmagan) o'zgarishlarni yo'qotmaslik uchun
 
 
