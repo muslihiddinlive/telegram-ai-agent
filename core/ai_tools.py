@@ -19,6 +19,7 @@ import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
 import core.moderation as moderation
 import core.userbot_tools as userbot_tools
+import core.tariffs as tariffs
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -840,6 +841,13 @@ async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     # DIQQAT: tartib MUHIM — avval O'ZIMIZNING DISPATCH tekshiriladi, shu
     # bilan "search_web" kabi nomlarni ms-file-toolkit versiyasidan O'ZIMIZ
     # yozgan (yaxshilangan) versiya bilan ALMASHTIRISH imkoni bo'ladi.
+    # Tarif cheklovi SERVERDA majburlanadi: AI'ga ruxsatsiz tool berilmaydi, lekin u nomini o'zi to'qib chaqirsa ham o'tmaydi.
+    feats = ctx.get("features")
+    if feats is not None:
+        need = tariffs.required_feature(name, is_file_tool(name))
+        if need is not None and need not in feats:
+            return {"error": "Bu imkoniyat tarifingizda yo'q. Foydalanuvchiga /tarif orqali Plus/Pro tarifini ko'rishni ayting.",
+                    "tarif_kerak": need}
     fn = DISPATCH.get(name)
     if fn:
         return await fn(user_id, args, ctx)

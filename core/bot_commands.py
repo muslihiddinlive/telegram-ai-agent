@@ -26,6 +26,7 @@ GENERAL_COMMANDS = [
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
     BotCommand(command="laqab", description="🏷 Guruhda ishlatiladigan taxallusingiz"),
+    BotCommand(command="tarif", description="💳 Tariflar va Telegram Stars bilan to'lov"),
 ]
 
 ADMIN_COMMANDS = GENERAL_COMMANDS + [

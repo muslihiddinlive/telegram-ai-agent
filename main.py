@@ -17,6 +17,7 @@ import core.roles as roles
 from core.channels import on_bot_added_to_chat
 from admin.panel import router as panel_router
 from handlers.start import router as start_router
+from handlers.tariff import router as tariff_router
 from handlers.topics import router as topics_router
 from handlers.group_settings import router as group_settings_router
 from handlers.group_tools import router as group_tools_router
@@ -43,6 +44,7 @@ dp.message.outer_middleware(GroupObserver())  # guruhdagi HAR BIR xabarni kuzata
 
 dp.include_router(panel_router)
 dp.include_router(start_router)
+dp.include_router(tariff_router)  # ai_chat'dan OLDIN: /tarif, to'lov (pre_checkout/successful_payment) AI'ga ketib qolmasin
 dp.include_router(topics_router)
 dp.include_router(group_settings_router)
 dp.include_router(group_tools_router)
