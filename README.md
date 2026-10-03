@@ -382,7 +382,13 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 
 ## Yangi guruh imkoniyatlari
 - **Shaxsiyat:** AI endi "Paradoks AI" sifatida tanishadi, botning egasini doim "aka" deb chaqiradi (`core/ai_persona.py`).
-- **Taxalluslar (`/laqab`):** har bir foydalanuvchi o'z taxallusini o'rnatadi/o'chiradi; guruh xabarlarida va AI kontekstida ism o'rniga shu ishlatiladi (`core/nicknames.py`). ID 8054272729 standart holatda "Omirbayev aka" bilan boshlanadi (o'zi o'zgartira oladi).
+- **Taxalluslar (`/laqab`):** har bir foydalanuvchi o'z taxallusini o'rnatadi/o'chiradi; guruh xabarlarida va AI kontekstida ism o'rniga shu ishlatiladi (`core/nicknames.py`).
+  **Avtomatik taxallus:** foydalanuvchi chatda "meni Mocci opa deb chaqir" desa va `/laqab` ishlatmagan bo'lsa, AI `set_my_nickname`
+  orqali uni **hamma guruhda** ishlatiladigan taxallus qilib saqlaydi (`db["auto_nicknames"]`). `/laqab` bilan o'rnatilgani doim ustun;
+  `/laqab -o'chir` ikkalasini ham o'chiradi. Reklama bo'lib ketmasligi uchun server tomonida qattiq filtr (`validate_auto`):
+  eng ko'pi 24 belgi va 3 so'z, faqat harflar (havola, @, emoji, `_`, 2 tadan ko'p raqam yo'q), reklama/tijorat so'zlari
+  (kripto, kazino, shop, obuna, kanal...) va admin/bot/rasmiy/support/bot nomiga o'xshash so'zlar rad etiladi, kuniga 3 martadan
+  ko'p almashtirib bo'lmaydi. Laqabni faqat gapirgan odamning o'zi uchun qo'yish mumkin (tool'da boshqa odamni ko'rsatish parametri yo'q). ID 8054272729 standart holatda "Omirbayev aka" bilan boshlanadi (o'zi o'zgartira oladi).
 - **Taqiqlangan so'zlar:** `/taqiq_qoshish`, `/taqiq_ochir`, `/taqiqlar` (admin). So'z uchrasa, xabar avtomatik o'chiriladi (guruh/bot adminlari TEKSHIRILMAYDI). Standart ro'yxatda "dnx" bor (`core/banned_words.py`).
 - **Guruh qoidalari ("algoritm prompt"):** `/qoida_qoshish`, `/qoidalar`, `/qoida_ochir` (admin) — erkin matnli ko'rsatmalar AI'ning shu guruhdagi system prompt'iga doimiy qo'shiladi (`core/group_rules.py`).
 - **Statistika:** `/statistika` — bot kuzatgan xabarlar soni va eng faol 5 a'zo (hammaga ochiq).
