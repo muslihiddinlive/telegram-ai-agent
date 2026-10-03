@@ -14,6 +14,7 @@ import core.roles as roles
 import core.pending_input as pending_input
 import core.shared_keys as shared_keys
 import core.ai_persona as ai_persona
+import core.global_blacklist as global_blacklist
 
 router = Router()
 
@@ -24,6 +25,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(text="🛡 Adminlar", callback_data="panel:admins:0")])
         rows.append([InlineKeyboardButton(text="🔑 AI kalitlar", callback_data="panel:keys")])
         rows.append([InlineKeyboardButton(text="🎭 AI shaxsiyati", callback_data="panel:persona")])
+        rows.append([InlineKeyboardButton(text="🌐 Global qora ro'yxat", callback_data="panel:qora")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -425,6 +427,52 @@ async def set_vision_model_start(call: CallbackQuery):
 
 
 # ── AI shaxsiyati / system prompt (FAQAT superadmin) ──
+
+@router.callback_query(F.data == "panel:qora")
+async def show_global_blacklist(call: CallbackQuery):
+    """GLOBAL qora ro'yxat (barcha guruhda ishlaydi) — faqat superadmin ko'radi/boshqaradi."""
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    words = global_blacklist.get()
+    rows = [
+        [InlineKeyboardButton(text=f"❌ {w}", callback_data=f"panel:qora_rm:{i}")]
+        for i, w in enumerate(words)
+    ]
+    if len(words) < global_blacklist.MAX_WORDS:
+        rows.append([InlineKeyboardButton(text="➕ So'z qo'shish", callback_data="panel:qora_add")])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    text = (
+        "🌐 <b>Global qora ro'yxat</b> — barcha guruhda birdek ishlaydi, so'z uchrasa xabar o'chiriladi.\n"
+        f"Eskalatsiya: {global_blacklist.MUTE_AT}-marta — {global_blacklist.MUTE_MINUTES} daqiqa mute, "
+        f"{global_blacklist.BAN_AT}-marta — ban (24 soatlik oyna).\n\n"
+        + (f"{len(words)} ta so'z bor." if words else "Hali so'z qo'shilmagan.")
+    )
+    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data == "panel:qora_add")
+async def global_blacklist_add_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    pending_input.set(call.from_user.id, "add_global_blacklist_word", {})
+    await call.message.answer("Qo'shmoqchi bo'lgan so'zni yozing:")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:qora_rm:"))
+async def global_blacklist_remove_cb(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
+    index = int(call.data.split(":")[-1])
+    words = global_blacklist.get()
+    if 0 <= index < len(words):
+        await global_blacklist.remove(bot, words[index])
+        await call.answer("O'chirildi 🗑")
+    await show_global_blacklist(call)
+
 
 @router.callback_query(F.data == "panel:persona")
 async def show_persona(call: CallbackQuery):

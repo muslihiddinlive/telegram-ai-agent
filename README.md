@@ -376,10 +376,8 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 
 ## Qo'shimcha guruh vositalari (2-bosqich)
 - **VIP chatmode tuzatildi:** avval guruhga rasm/video yuborilganda `/vipchatmode`/`/chatmode`ning hisob-kitob mantig'i butunlay chetlab o'tilardi (rasm oddiy kunlik limitga tushib qolardi). Endi matn kabi to'g'ri ishlaydi.
-- **GLOBAL qora ro'yxat** (`core/global_blacklist.py`, FAQAT superadmin: `/qora_qoshish`, `/qora_ochir`, `/qoralar`) — barcha guruhlarda birdek ishlaydi, so'z uchrasa xabar o'chadi; 3-marta buzilsa 60 daqiqaga mute, 5-marta — ban (24 soatlik oyna). Har guruhning o'z `/taqiq_*` ro'yxati bilan birga ishlaydi.
+- **GLOBAL qora ro'yxat** — FAQAT superadmin, `/panel → 🌐 Global qora ro'yxat` (inline tugmalar, komanda emas) — barcha guruhlarda birdek ishlaydi, so'z uchrasa xabar o'chadi; 3-marta buzilsa 60 daqiqaga mute, 5-marta — ban (24 soatlik oyna). Har guruhning o'z `/taqiq_*` ro'yxati bilan birga ishlaydi.
 - **`/aireakmode: on|off`** — yoqilsa, bot mavzuga mos xabarlarga (javob yozmasdan) emoji bilan reaksiya qo'yadi; neytral/qisqa xabarlarga tegmaydi.
 - **`/antispam on|off`** — flood nazorati: 8 soniyada 6+ xabar yoki bir xil xabarni 5+ marta takrorlash — avtomatik 10 daqiqaga mute.
 - **`/statistika`** endi FAQAT guruh/bot adminlari va superadmin uchun ishlaydi (boshqalarga ruxsat yo'q xabari).
-- **Kunlik avtomatik jadval** (`core/scheduler.py`, har daqiqa tekshiradi, Toshkent vaqti):
-  - `/top_faollar_avto on|off` — soat 20:00da `/top_faollar` natijasi avtomatik yuboriladi.
-  - `/tabrik_qoshish DD-MM matn`, `/tabriklar`, `/tabrik_ochir N` — kalendar tabriklari (bayramlar), har yili soat 09:00da avtomatik yuboriladi. **Eslatma:** bu tug'ilgan kun emas, kalendar/bayram tabrig'i — foydalanuvchilarning tug'ilgan sanasi haqida ma'lumot yo'q.
+- **Kunlik avtomatik yuborish** (`core/scheduler.py`, har daqiqa tekshiradi, Toshkent vaqti, soat 20:00): admin AI'ga oddiy gap bilan ("har kuni eng faol userlarni tag qil") aytadi — AI `set_daily_top_active` tool orqali yoqadi/o'chiradi, alohida komanda yo'q.

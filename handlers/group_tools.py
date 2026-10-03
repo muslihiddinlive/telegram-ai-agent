@@ -17,8 +17,6 @@ import core.ai_reaction as ai_reaction
 import core.antispam as antispam
 import core.auto_top as auto_top
 import core.banned_words as banned_words
-import core.congrats as congrats
-import core.global_blacklist as global_blacklist
 import core.group_memory as group_memory
 import core.group_rules as group_rules
 import core.nicknames as nicknames
@@ -183,23 +181,6 @@ async def top_active_cmd(message: Message):
         await message.reply("Hali faol a'zo kuzatilmagan.")
 
 
-@router.message(Command("top_faollar_avto"), F.chat.type.in_({"group", "supergroup"}))
-async def top_active_auto_cmd(message: Message):
-    """Har kuni soat 20:00 (Toshkent) da /top_faollar natijasi avtomatik yuborilsinmi."""
-    if not await _can_manage(message):
-        await message.reply("⚠️ Bu komandani faqat guruh adminlari, bot adminlari yoki superadmin ishlata oladi.")
-        return
-    arg = _arg(message).lower()
-    if arg not in ("on", "off"):
-        cur = "YOQILGAN ✅" if auto_top.is_enabled(message.chat.id) else "O'CHIRILGAN ⛔"
-        await message.reply(
-            f"Joriy holat: {cur}\n\nYoqish: <code>/top_faollar_avto on</code>\nO'chirish: <code>/top_faollar_avto off</code>"
-        )
-        return
-    await auto_top.set_enabled(message.bot, message.chat.id, arg == "on")
-    await message.reply("✅ Har kuni soat 20:00da (Toshkent) avtomatik yuboriladi." if arg == "on" else "✅ Avtomatik yuborish o'chirildi.")
-
-
 # ────────────────────────── /aireakmode ──────────────────────────
 
 @router.message(F.text.regexp(r"(?i)^/aireakmode\b"), F.chat.type.in_({"group", "supergroup"}))
@@ -241,77 +222,3 @@ async def antispam_cmd(message: Message):
         return
     await antispam.set_enabled(message.bot, message.chat.id, arg == "on")
     await message.reply("✅ Anti-spam YOQILDI." if arg == "on" else "✅ Anti-spam O'CHIRILDI.")
-
-
-# ────────────────────────── kalendar tabriklari ──────────────────────────
-
-@router.message(Command("tabrik_qoshish"), F.chat.type.in_({"group", "supergroup"}))
-async def congrats_add_cmd(message: Message):
-    if not await _can_manage(message):
-        await message.reply("⚠️ Bu komandani faqat guruh adminlari, bot adminlari yoki superadmin ishlata oladi.")
-        return
-    arg = _arg(message)
-    if not arg:
-        await message.reply("Format: <code>/tabrik_qoshish 08-03 Xotin-qizlar bayrami bilan!</code>")
-        return
-    ok, err = await congrats.add(message.bot, message.chat.id, arg)
-    await message.reply("✅ Qo'shildi. Har yili soat 09:00da (Toshkent) avtomatik yuboriladi." if ok else f"⚠️ {err}")
-
-
-@router.message(Command("tabriklar"), F.chat.type.in_({"group", "supergroup"}))
-async def congrats_list_cmd(message: Message):
-    items = congrats.get(message.chat.id)
-    if not items:
-        await message.reply("Hozircha tabrik qo'shilmagan. Qo'shish: <code>/tabrik_qoshish DD-MM matn</code>")
-        return
-    listed = "\n".join(f"{i + 1}. {it['day']:02d}-{it['month']:02d}: {html.escape(it['text'])}" for i, it in enumerate(items))
-    await message.reply(f"🎉 Kalendar tabriklari:\n{listed}\n\nO'chirish: <code>/tabrik_ochir N</code>")
-
-
-@router.message(Command("tabrik_ochir"), F.chat.type.in_({"group", "supergroup"}))
-async def congrats_remove_cmd(message: Message):
-    if not await _can_manage(message):
-        await message.reply("⚠️ Bu komandani faqat guruh adminlari, bot adminlari yoki superadmin ishlata oladi.")
-        return
-    arg = _arg(message)
-    if not arg.isdigit():
-        await message.reply("Raqam ko'rsating: <code>/tabrik_ochir 1</code>")
-        return
-    ok = await congrats.remove(message.bot, message.chat.id, int(arg) - 1)
-    await message.reply("✅ O'chirildi." if ok else "⚠️ Shu raqamli tabrik topilmadi.")
-
-
-# ────────────────────────── GLOBAL qora ro'yxat (faqat superadmin, hamma guruhda) ──────────────────────────
-
-@router.message(Command("qora_qoshish"))
-async def global_blacklist_add_cmd(message: Message):
-    if not roles.is_superadmin(message.from_user.id):
-        return
-    arg = _arg(message)
-    if not arg:
-        await message.reply("So'zni yozing: <code>/qora_qoshish so'z</code>")
-        return
-    ok = await global_blacklist.add(message.bot, arg)
-    await message.reply(f"✅ «{html.escape(arg)}» GLOBAL qora ro'yxatga (hamma guruhda) qo'shildi." if ok else "⚠️ Bu so'z allaqachon ro'yxatda yoki limit to'ldi.")
-
-
-@router.message(Command("qora_ochir"))
-async def global_blacklist_remove_cmd(message: Message):
-    if not roles.is_superadmin(message.from_user.id):
-        return
-    ok = await global_blacklist.remove(message.bot, _arg(message))
-    await message.reply("✅ O'chirildi." if ok else "⚠️ Bu so'z ro'yxatda yo'q.")
-
-
-@router.message(Command("qoralar"))
-async def global_blacklist_list_cmd(message: Message):
-    if not roles.is_superadmin(message.from_user.id):
-        return
-    words = global_blacklist.get()
-    listed = ", ".join(f"«{html.escape(w)}»" for w in words) if words else "(bo'sh)"
-    await message.reply(
-        f"🌐 GLOBAL qora ro'yxat (hamma guruhda): {listed}\n\n"
-        f"Eskalatsiya: {global_blacklist.MUTE_AT}-marta — {global_blacklist.MUTE_MINUTES} daqiqa mute, "
-        f"{global_blacklist.BAN_AT}-marta — ban.\n"
-        "Qo'shish: /qora_qoshish, o'chirish: /qora_ochir"
-    )

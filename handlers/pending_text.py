@@ -139,6 +139,13 @@ async def handle_pending(message: Message):
                 f"yoki /panel bilan bekor qiling."
             )
 
+    # ── Superadmin: global qora ro'yxatga so'z qo'shish (panel orqali) ──
+    elif action == "add_global_blacklist_word":
+        import core.global_blacklist as global_blacklist
+        ok = await global_blacklist.add(message.bot, text)
+        pending_input.clear(user_id)
+        await message.answer(f"✅ «{text.strip()}» qo'shildi." if ok else "⚠️ Bu so'z allaqachon ro'yxatda yoki limit to'ldi.")
+
     # ── Superadmin: RASM O'QISH (vision) kaliti qo'shish — chat kalitlaridan alohida to'plam ──
     elif action == "add_vision_key":
         provider = data["provider"]

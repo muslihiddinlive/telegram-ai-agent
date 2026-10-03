@@ -33,6 +33,7 @@ _TOOL_STATUS_LABELS = {
     "get_user_profile": "Profil ma'lumotlari olinmoqda",
     "lookup_user": "Foydalanuvchi qidirilmoqda",
     "react_to_message": "Reaksiya qo'yilmoqda",
+    "set_daily_top_active": "Kunlik sozlama o'zgartirilmoqda",
     "remember_note": "Eslatma saqlanmoqda",
     "post_story": "Story tayyorlanib, profilga qo'yilmoqda",
     "look_at_image": "Rasm ko'rilmoqda",
@@ -294,6 +295,25 @@ TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "set_daily_top_active",
+            "description": (
+                "Shu GURUHDA har kuni soat 20:00da (Toshkent) eng faol a'zolarni (bot kuzatganlarini) "
+                "avtomatik tag qilib xabar yuborishni YOQADI yoki O'CHIRADI. Foydalanuvchi "
+                "'har kuni eng faol userlarni tag qil', 'kunlik faollarni yubor', shunga o'xshash so'rasa "
+                "yoki uni o'chirishni so'rasa ishlating. Faqat guruh/bot adminlari uchun."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "enabled": {"type": "boolean", "description": "true — yoqish, false — o'chirish"},
+                },
+                "required": ["enabled"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "look_at_image",
             "description": (
                 "Foydalanuvchi yuborgan RASM yoki VIDEOni 'ko'radi': vision modeli uni tasvirlaydi va undagi yozuvlarni "
@@ -427,6 +447,19 @@ async def _react_to_message(user_id: int, args: dict, ctx: dict) -> dict:
     except Exception as e:  # noqa: BLE001 — emoji Telegram ro'yxatida bo'lmasligi mumkin
         return {"error": f"Reaksiya qo'yilmadi: {e}"}
     return {"status": "reaksiya qo'yildi"}
+
+
+async def _set_daily_top_active(user_id: int, args: dict, ctx: dict) -> dict:
+    import core.auto_top as auto_top
+    import core.roles as roles
+
+    if not ctx.get("is_group"):
+        return {"error": "Bu faqat guruhda ishlaydi."}
+    if not (roles.is_superadmin(user_id) or roles.is_admin(user_id) or ctx.get("mod") is not None):
+        return {"error": "Buni faqat guruh yoki bot adminlari yoqa/o'chira oladi."}
+    enabled = bool(args.get("enabled"))
+    await auto_top.set_enabled(ctx["bot"], ctx["chat_id"], enabled)
+    return {"status": "yoqildi" if enabled else "o'chirildi", "vaqt": "har kuni 20:00 (Toshkent)" if enabled else None}
 
 
 MAX_NOTES_PER_USER = 30  # foydalanuvchi boshiga eng ko'pi (eskirgan/keraksiz to'planib ketmasin)
@@ -649,6 +682,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "get_user_profile": _get_user_profile,
     "lookup_user": _lookup_user,
     "react_to_message": _react_to_message,
+    "set_daily_top_active": _set_daily_top_active,
     "search_web": _search_web,  # ms-file-toolkit'ning DDG-only versiyasini
     # Bing-fallback qo'shilgan versiyamiz bilan ALMASHTIRAMIZ (pastdagi
     # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).
