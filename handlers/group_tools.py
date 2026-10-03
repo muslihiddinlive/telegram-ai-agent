@@ -49,8 +49,10 @@ async def laqab_cmd(message: Message):
     arg = _arg(message)
     if not arg:
         cur = nicknames.get(message.from_user.id)
+        auto_note = ("(chatda o'zingiz aytganingiz bo'yicha avtomatik o'rnatilgan; <code>/laqab Ism</code> bilan "
+                     "o'zingiz belgilasangiz u ustun bo'ladi)\n\n" if cur and nicknames.source(message.from_user.id) == "auto" else "")
         await message.reply(
-            (f"Joriy taxallusingiz: <b>{html.escape(cur)}</b>\n\n" if cur else "Hali taxallus o'rnatmagansiz.\n\n")
+            (f"Joriy taxallusingiz: <b>{html.escape(cur)}</b>\n{auto_note}" if cur else "Hali taxallus o'rnatmagansiz.\n\n")
             + f"O'rnatish: <code>/laqab Yangi Ism</code>\nO'chirish: <code>/laqab -o'chir</code>"
         )
         return
