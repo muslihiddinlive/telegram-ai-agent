@@ -305,14 +305,22 @@ TOOLS: list[dict] = [
             "name": "wipe_group_memory",
             "description": (
                 "Shu GURUH haqida sizning (AI) xotirangizda saqlangan HAMMA narsani — suhbat jurnali/xulosasi, "
-                "a'zolar indeksi, xabar statistikasi — DB'DAN BUTUNLAY O'CHIRADI (haqiqiy o'chirish, shunchaki "
-                "'unutdim' deb aytib qo'yish emas). Foydalanuvchi 'hammasini unut', 'xotirani tozala', "
-                "'guruh ma'lumotlarini o'chir' kabi ANIQ so'rasa chaqiring. O'chirishdan OLDIN eski ma'lumotlar "
-                ".txt fayl qilib guruhga yuboriladi (zaxira). Admin sozlamalari (taqiqlangan so'zlar, guruh "
-                "qoidalari, chatmode va h.k.) BUNGA TEGMAYDI, faqat xotira o'chadi. Faqat guruh/bot adminlari "
-                "uchun va faqat guruhda ishlaydi."
+                "a'zolar indeksi, xabar statistikasi, guruhda aytilgan eslatmalar (masalan 'meni ... deb chaqir') — "
+                "DB'DAN BUTUNLAY O'CHIRADI (haqiqiy o'chirish, shunchaki 'unutdim' deb aytib qo'yish emas). "
+                "Foydalanuvchi 'hammasini unut', 'xotirani tozala', 'guruh ma'lumotlarini o'chir' kabi ANIQ so'rasa "
+                "chaqiring. O'chirishdan OLDIN eski ma'lumotlar .txt fayl qilib guruhga yuboriladi (zaxira). "
+                "Odatda admin sozlamalari (taqiqlangan so'zlar, guruh qoidalari, chatmode va h.k.) BUNGA TEGMAYDI. "
+                "full_reset=true FAQAT foydalanuvchi ANIQ 'to'liq reset', 'sozlamalari bilan hammasini', 'guruh "
+                "endi qo'shilgandek bo'lsin' deb so'rasagina — u sozlamalarni ham o'chiradi (faqat bot adminlari va "
+                "guruh egasi uchun). Tozalangandan keyin javobni o'zingiz yozmang: tizim tayyor xabar yuboradi. "
+                "Faqat guruh/bot adminlari uchun va faqat guruhda ishlaydi."
             ),
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "full_reset": {"type": "boolean", "description": "true — admin sozlamalarini ham o'chirib, guruhni butunlay 'yangi' holatga qaytarish (standart false)"},
+                },
+            },
         },
     },
     {
@@ -496,7 +504,12 @@ async def _wipe_group_memory(user_id: int, args: dict, ctx: dict) -> dict:
         return {"error": "Buni faqat guruh yoki bot adminlari qila oladi."}
 
     chat_id = ctx["chat_id"]
-    export_text = group_wipe.build_export(chat_id)
+    full = bool(args.get("full_reset"))
+    if full:
+        mod = ctx.get("mod")
+        if not (roles.is_superadmin(user_id) or roles.is_admin(user_id) or (mod is not None and mod.is_owner)):
+            return {"error": "To'liq reset (sozlamalar bilan) faqat bot adminlari yoki guruh egasi uchun. Oddiy xotira tozalash mumkin."}
+    export_text = group_wipe.build_export(chat_id, full=full)
     try:
         await ctx["bot"].send_document(
             chat_id,
@@ -506,11 +519,11 @@ async def _wipe_group_memory(user_id: int, args: dict, ctx: dict) -> dict:
     except Exception as e:  # noqa: BLE001 — eksport yuborilmasa ham, foydalanuvchi so'ragani uchun tozalashni davom ettiramiz
         logger.warning("Guruh xotirasi eksporti yuborilmadi: %s", e)
 
-    removed = await group_wipe.wipe(ctx["bot"], chat_id)
+    removed = await group_wipe.wipe(ctx["bot"], chat_id, full=full)
+    ctx["wiped"] = "full" if full else "memory"  # handlers/ai_chat.py: eski kontekst bilan javob yozdirmaydi va logga yozmaydi
     return {
-        "status": "guruh xotirasi butunlay o'chirildi",
+        "status": "guruh to'liq reset qilindi" if full else "guruh xotirasi butunlay o'chirildi",
         "o'chirilgan": removed,
-        "eslatma": "Admin sozlamalari (taqiqlar, qoidalar, chatmode) saqlanib qoldi, faqat xotira tozalandi.",
     }
 
 
@@ -520,17 +533,26 @@ MAX_NOTES_PER_USER = 30  # foydalanuvchi boshiga eng ko'pi (eskirgan/keraksiz to
 async def _remember_note(user_id: int, args: dict, ctx: dict) -> dict:
     import core.tgdb as tgdb
     db = tgdb.get()
-    notes = db["users"].setdefault(str(user_id), {}).setdefault("notes", [])
+    if ctx.get("is_group"):
+        # GURUHDA aytilgan narsa FAQAT shu guruhga tegishli (db["group_notes"][chat][user]) — aks holda u
+        # foydalanuvchining global eslatmasiga tushib, hamma guruhga sizib chiqardi va guruh tozalanganda
+        # ham qolib ketardi (core/group_wipe.py shu bucket'ni o'chiradi).
+        notes = db.setdefault("group_notes", {}).setdefault(str(ctx["chat_id"]), {}).setdefault(str(user_id), [])
+    else:
+        notes = db["users"].setdefault(str(user_id), {}).setdefault("notes", [])
     notes.append(args["note"])
     notes[:] = notes[-MAX_NOTES_PER_USER:]  # eng oxirgi N tasi qoladi
     await tgdb.save(ctx["bot"])
     return {"status": "saqlandi"}
 
 
-def get_user_notes(user_id: int) -> list[str]:
-    """Superadmin panel VA ai_chat.py (kontekstga qaytarish uchun) ishlatadi."""
+def get_user_notes(user_id: int, chat_id: int | None = None) -> list[str]:
+    """Superadmin panel VA ai_chat.py (kontekstga qaytarish uchun) ishlatadi.
+    chat_id berilsa (guruh) — FAQAT shu guruhda saqlangan eslatmalar; shaxsiy chat eslatmalari guruhga chiqmaydi."""
     import core.tgdb as tgdb
     db = tgdb.get()
+    if chat_id is not None:
+        return db.get("group_notes", {}).get(str(chat_id), {}).get(str(user_id), [])
     return db["users"].get(str(user_id), {}).get("notes", [])
 
 
@@ -541,7 +563,9 @@ async def clear_user_notes(bot, user_id: int):
     rec = db["users"].get(str(user_id))
     if rec and "notes" in rec:
         rec["notes"] = []
-        await tgdb.save(bot, force=True)
+    for per_user in db.get("group_notes", {}).values():  # guruhlardagi eslatmalari ham
+        per_user.pop(str(user_id), None)
+    await tgdb.save(bot, force=True)
 
 
 async def _create_presentation(user_id: int, args: dict, ctx: dict) -> dict:

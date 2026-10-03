@@ -19,6 +19,7 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyb
 from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 import core.userbot as userbot
+import core.group_wipe as group_wipe
 import core.userbot_tools as userbot_tools
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
@@ -301,7 +302,7 @@ async def handle_message(message: Message):
             )
         # DOIMIY eslatmalar (remember_note orqali saqlangan) — topic tarixidan farqli
         # o'laroq, bular HAR DOIM (20-xabar chegarasidan tashqari ham) qo'shiladi.
-        saved_notes = get_user_notes(user_id)
+        saved_notes = get_user_notes(user_id, message.chat.id if is_group else None)
         if saved_notes:
             notes_block = "\n".join(f"- {n}" for n in saved_notes)
             system_prompt += f"\n\nBu foydalanuvchi haqida siz avval eslab qolgan narsalar:\n{notes_block}"
@@ -394,6 +395,14 @@ async def handle_message(message: Message):
                     "content": json.dumps(tool_result, ensure_ascii=False, default=str)[:8000],
                 })
 
+            if ctx.get("wiped"):
+                # Guruh tozalandi: AI'ning ESKI kontekst (convo) asosidagi javobi tozalangan ma'lumotni qaytadan
+                # eslatib yoki logga yozib yuborishi mumkin — shuning uchun javobni AI'ga yozdirmaymiz.
+                final_text = group_wipe.reply_text(ctx["wiped"])
+                raw_text_for_history = final_text
+                file_done = True  # keyingi AI so'rovi va fayl-yuborish bosqichi kerak emas
+                break
+
             has_file = any(output_files(r) for _, r in tool_outputs)
             if has_file:
                 # Fayl yaratilgan — u pastda alohida yuboriladi; qayta AI so'rovi
@@ -485,7 +494,9 @@ async def handle_message(message: Message):
                 file_cleanup.delete_file_now(file_path)
 
     # Tarixga yozamiz
-    if is_group:
+    if is_group and ctx.get("wiped"):
+        pass  # xotira shu navbatda tozalandi — yangi bo'sh logga hech narsa yozmaymiz
+    elif is_group:
         # odam xabari allaqachon group_observer tomonidan yozilgan — faqat bot javobi qo'shiladi
         await group_memory.record_bot(message.bot, message.chat.id, group_mem_thread, raw_text_for_history)
         await group_memory.maybe_fold(message.bot, message.chat.id, group_mem_thread)
