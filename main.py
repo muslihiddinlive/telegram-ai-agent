@@ -18,6 +18,8 @@ from core.channels import on_bot_added_to_chat
 from admin.panel import router as panel_router
 from handlers.start import router as start_router
 from handlers.tariff import router as tariff_router
+from handlers.support import router as support_router
+from handlers.command_guard import router as command_guard_router
 from handlers.topics import router as topics_router
 from handlers.group_settings import router as group_settings_router
 from handlers.group_tools import router as group_tools_router
@@ -42,6 +44,7 @@ bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"
 dp = Dispatcher()
 dp.message.outer_middleware(GroupObserver())  # guruhdagi HAR BIR xabarni kuzatadi (xotira + a'zolar indeksi)
 
+dp.include_router(support_router)  # BIRINCHI: murojaat sessiyasi paytidagi xabarlar/komandalar boshqa handler'larga (start, panel, AI...) ketmasin
 dp.include_router(panel_router)
 dp.include_router(start_router)
 dp.include_router(tariff_router)  # ai_chat'dan OLDIN: tariflar tugmasi, to'lov (pre_checkout/successful_payment) AI'ga ketib qolmasin
@@ -52,6 +55,7 @@ dp.include_router(api_integration_router)
 dp.include_router(profile_router)  # ai_chat'dan OLDIN — story uchun yuborilgan rasm/video AI-suhbatga ketib qolmasin
 dp.include_router(admin_terminal_router)  # ai_chat'dan OLDIN — "exec:" AI'ga ketmasin
 dp.include_router(slide_preview_router)
+dp.include_router(command_guard_router)  # xato yozilgan komandalar AI'ga ketib "bajardim" demasin
 dp.include_router(pending_text_router)  # MUHIM: ai_chat'dan OLDIN — aks holda pending matnlar AI'ga ketadi
 dp.include_router(ai_chat_router)
 

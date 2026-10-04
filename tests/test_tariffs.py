@@ -645,7 +645,7 @@ def test_plans_button_opens_plans_with_buy_buttons_in_private_only():
     c = plans_call(U)
     run(th.plans_cb(c))
     text, kw = c.answers[0]
-    assert buttons(kw["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro"] and "Bepul" in text and "150" in text
+    assert buttons(kw["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro", "support:start"] and "Bepul" in text and "150" in text
     g = plans_call(U, chat="supergroup")
     run(th.plans_cb(g))
     assert g.answers == [] and g.alerts[0][1] is True                       # guruhda callback ochilmaydi
@@ -655,7 +655,7 @@ def test_plans_page_hides_unbuyable_buttons_and_staff_note():
     run(tariffs.grant(None, U, "pro"))
     c = plans_call(U)
     run(th.plans_cb(c))
-    assert buttons(c.answers[0][1]["reply_markup"]) == ["tariff:buy:pro"]    # Plus yo'q (pastroq), Pro — uzaytirish
+    assert buttons(c.answers[0][1]["reply_markup"]) == ["tariff:buy:pro", "support:start"]    # Plus yo'q (pastroq), Pro — uzaytirish
     s = plans_call(SUPER)
     run(th.plans_cb(s))
     assert "adminsiz" in s.answers[0][0]
@@ -689,7 +689,7 @@ def test_start_menu_has_tariffs_button_and_deeplink_opens_plans(monkeypatch):
     assert "tariff:menu" in buttons(m.out[0][1]["reply_markup"])
     m = start_msg(U)
     run(start.start(m, SimpleNamespace(args="tariff")))                      # guruhdagi tugmadan deep-link
-    assert "Tariflar" in m.out[0][0] and buttons(m.out[0][1]["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro"]
+    assert "Tariflar" in m.out[0][0] and buttons(m.out[0][1]["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro", "support:start"]
     g = start_msg(U, chat="supergroup")
     run(start.start(g, SimpleNamespace(args="tariff")))
     assert "Salom" in g.out[0][0]                                            # guruhda deep-link e'tiborsiz — oddiy salom
@@ -782,18 +782,17 @@ def test_unrecognised_paid_invoice_is_not_swallowed():
     m = make_msg(U, payment=pay(U, "pro", payload="tariff:gold:5", charge="zz"))
     run(th.successful_payment(m))
     assert tariffs.active_tier(U).id == "free"
-    assert "paysupport" in m.out.answers[0][0]
+    assert buttons(m.out.answers[0][1]["reply_markup"]) == ["support:start"]
     assert m.bot.sent and m.bot.sent[0][0] == SUPER and "zz" in m.bot.sent[0][1]     # superadmin refund uchun xabar oladi
 
 
-def test_paysupport_forwards_to_superadmin_escaped():
+def test_paysupport_is_only_a_button_opener_no_text_argument():
+    import handlers.support as support
     m = make_msg(U, text="/paysupport pul yechildi <b>tarif yo'q</b>")
-    run(th.paysupport(m))
-    chat, text = m.bot.sent[0]
-    assert chat == SUPER and "&lt;b&gt;" in text and "Ali &lt;b&gt;" in text
-    empty = make_msg(U, text="/paysupport")
-    run(th.paysupport(empty))
-    assert not empty.bot.sent and "paysupport muammo" in empty.out.answers[0][0]
+    run(support.paysupport(m))
+    text, kw = m.out.answers[0]
+    assert buttons(kw["reply_markup"]) == ["support:start"] and not m.bot.sent       # hech narsa adminga ketmaydi, faqat tugma
+    assert not hasattr(th, "paysupport")
 
 
 # ── panel ────────────────────────────────────────────────────────────────
