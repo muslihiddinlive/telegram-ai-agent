@@ -20,6 +20,7 @@ from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 import core.userbot as userbot
 import core.group_wipe as group_wipe
+import core.tariffs as tariffs
 import core.userbot_tools as userbot_tools
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
@@ -217,7 +218,7 @@ async def handle_message(message: Message):
             # faqat kunlik limit tekshiriladi (avtomatik 20/kun bilan boshlanadi)
             if not roles.can_use_in_group(user_id):
                 await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring yoki "
-                                    "limitni oshirish uchun botga shaxsiy chatda /tarif yozing.")
+                                    "limitni oshirish uchun tarifni tanlang:", reply_markup=tariffs.plans_markup(in_group=True))
                 return
 
         user_text = _strip_bot_mention(raw_text, bot_username)
@@ -233,7 +234,7 @@ async def handle_message(message: Message):
             return
         if not roles.can_make_request(user_id):
             await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring yoki "
-                                 "limitni oshirish uchun /tarif ni bosing.")
+                                 "limitni oshirish uchun tarifni tanlang:", reply_markup=tariffs.plans_markup())
             return
 
     mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
@@ -449,7 +450,8 @@ async def handle_message(message: Message):
                       "<code>14 daqiqaga mute ber</code>.")
         raw_text_for_history = final_text
 
-    await indicator.finish(final_text)
+    quota_hit = any(isinstance(r, dict) and r.get("kvota_tugadi") for _, r in tool_outputs)
+    await indicator.finish(final_text, reply_markup=tariffs.plans_markup(in_group=is_group) if quota_hit else None)
 
     # Fayl/prezentatsiya/diagramma yaratish — 3x qimmatroq (guruhda ham,
     # shaxsiy chatda ham bir xil qoida)

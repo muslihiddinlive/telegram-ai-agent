@@ -44,7 +44,7 @@ dp.message.outer_middleware(GroupObserver())  # guruhdagi HAR BIR xabarni kuzata
 
 dp.include_router(panel_router)
 dp.include_router(start_router)
-dp.include_router(tariff_router)  # ai_chat'dan OLDIN: /tarif, to'lov (pre_checkout/successful_payment) AI'ga ketib qolmasin
+dp.include_router(tariff_router)  # ai_chat'dan OLDIN: tariflar tugmasi, to'lov (pre_checkout/successful_payment) AI'ga ketib qolmasin
 dp.include_router(topics_router)
 dp.include_router(group_settings_router)
 dp.include_router(group_tools_router)

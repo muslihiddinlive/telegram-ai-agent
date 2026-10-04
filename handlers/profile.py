@@ -143,7 +143,7 @@ async def story_start(call: CallbackQuery):
     await _edit(
         call,
         "📸 Story uchun <b>rasm yoki video</b> yuboring.\n\n"
-        "• Story qo'yish hamma uchun cheksiz; izoh (caption) yozish esa Plus/Pro tarifida (/tarif).\n"
+        "• Story qo'yish hamma uchun cheksiz; izoh (caption) yozish esa Plus/Pro tarifida («💳 Tariflar» — /start menyusida).\n"
         "• Izoh (caption) yozsangiz (Plus/Pro): oddiy matn bo'lsa — <b>aynan shunday</b> story matni bo'ladi; "
         "AI'ga buyruq bo'lsa (masalan «shunga jiddiy izoh yoz») — AI uni bajarib matnni <b>o'zi yozadi</b>.\n"
         "• Fayl 20 MB dan oshmasin (videoni bot o'zi Story formatiga o'tkazadi, eng ko'pi 60 soniya).\n"
@@ -265,7 +265,7 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         )
     elif st.get("caption_locked"):
         caption_line = ("🔒 Story <b>izohsiz</b> chiqadi: izoh (caption) qo'yish Plus yoki Pro tarifida. "
-                        "Tariflar: /tarif — story qo'yishning o'zi hamma uchun cheksiz.")
+                        "Story qo'yishning o'zi hamma uchun cheksiz.")
     else:
         caption_line = "📝 Story matnsiz chiqadi (izoh yozilmagan)."
     rows = [
@@ -277,6 +277,8 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
             rows.append([("🔁 Boshqacha yozish", "profile:regen")])
         elif mode == story_caption.FALLBACK and st.get("reason") != story_caption.R_LIMIT:
             rows.append([("🔁 AI bilan qayta tekshirish", "profile:regen")])
+    if st.get("caption_locked"):
+        rows.append([(tariffs.PLANS_BUTTON_TEXT, tariffs.PLANS_CALLBACK)])
     rows.append([("❌ Bekor qilish", "profile:menu")])
     text = (
         "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?\n\n"

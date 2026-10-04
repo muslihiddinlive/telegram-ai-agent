@@ -4,17 +4,19 @@ va darrov botdan foydalanishga ruxsat beradi. Faqat superadmin bloklagan userlar
 (role="blocked") kira olmaydi.
 """
 from aiogram import Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 import core.tgdb as tgdb
 import core.roles as roles
+import core.tariffs as tariffs
+from handlers.tariff import send_plans
 
 router = Router()
 
 
 @router.message(CommandStart())
-async def start(message: Message):
+async def start(message: Message, command: CommandObject):
     user_id = message.from_user.id
     db = tgdb.get()
     uid = str(user_id)
@@ -35,8 +37,13 @@ async def start(message: Message):
         await message.answer("🚫 Sizga botdan foydalanish cheklangan.")
         return
 
+    if (command.args or "").strip() == tariffs.PLANS_DEEPLINK and message.chat.type == "private":
+        await send_plans(message)  # guruhdagi "💳 Tariflar" tugmasidan keldi (deep-link)
+        return
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Profil boshqaruvi", callback_data="profile:menu")],
+        [InlineKeyboardButton(text=tariffs.PLANS_BUTTON_TEXT, callback_data=tariffs.PLANS_CALLBACK)],
         [InlineKeyboardButton(text="🔑 AI API integratsiya", callback_data="apikey:menu")],
     ])
     await message.answer(
