@@ -174,7 +174,7 @@ def test_free_user_gets_4_files_then_denied_without_running_tool(monkeypatch, tm
     for _ in range(4):
         assert "error" not in run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))
     res = run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))
-    assert res["kvota_tugadi"] == "files" and "4/4" in res["error"] and "/tarif" in res["error"]
+    assert res["kvota_tugadi"] == "files" and "4/4" in res["error"] and "Tariflar" in res["error"] and "/tarif" not in res["error"]
     assert calls.count("file") == 4                                      # 5-chi marta tool UMUMAN ishga tushmadi
     assert tariffs.quota_used(U, "files") == 4
 
@@ -330,12 +330,13 @@ def test_profile_story_caption_locked_for_free_but_posting_unlimited(monkeypatch
 
 class ReminderBot:
     def __init__(self, fail=()):
-        self.sent, self.fail = [], set(fail)
+        self.sent, self.fail, self.markups = [], set(fail), []
 
     async def send_message(self, chat_id, text, **kw):
         if chat_id in self.fail:
             raise RuntimeError("blocked")
         self.sent.append((chat_id, text))
+        self.markups.append(kw.get("reply_markup"))
 
 
 def test_reminders_d3_d1_end_each_once():
@@ -350,7 +351,8 @@ def test_reminders_d3_d1_end_each_once():
     assert run(tariffs.send_reminders(bot, now=at(0.5))) == 0
     assert run(tariffs.send_reminders(bot, now=until + 3600)) == 1 and "tugadi" in bot.sent[-1][1]
     assert run(tariffs.send_reminders(bot, now=until + 7200)) == 0
-    assert [c for c, _ in bot.sent] == [U, U, U] and all("/tarif" in t for _, t in bot.sent)
+    assert [c for c, _ in bot.sent] == [U, U, U] and all("/tarif" not in t and "tugma" in t for _, t in bot.sent)
+    assert all(m is not None and m.inline_keyboard[0][0].callback_data == "tariff:menu" for m in bot.markups)
 
 
 def test_one_day_left_skips_d3_and_renewal_resets_reminders():
@@ -470,14 +472,12 @@ def test_pending_tariff_value_rejects_non_superadmin_and_supports_cancel():
 
 def test_user_detail_and_tarif_page_show_usage():
     fresh_user()["files_today"] = 3
-    m = make_msg(U)
-    run(th.tarif_cmd(m))
-    text = m.out.answers[0][0]
+    c = plans_call(U)
+    run(th.plans_cb(c))
+    text = c.answers[0][0]
     assert "fayl: 3/4" in text and "rasm: 0/2" in text and "fayl yaratish 20/kun" in text and "fayl yaratish 100/kun" in text
-    assert "story izohi" in text
+    assert "story izohi" in text and "/tarif" not in text
 
-
-# ── xarid qoidalari va to'lovni tekshirish ───────────────────────────────
 
 def test_purchase_rules():
     assert tariffs.can_purchase(U, "plus")[0] and tariffs.can_purchase(U, "pro")[0]
@@ -619,24 +619,98 @@ def buttons(kb):
     return [b.callback_data for row in kb.inline_keyboard for b in row] if kb else []
 
 
-def test_tarif_command_private_shows_buy_buttons_and_group_redirects():
-    m = make_msg(U)
-    run(th.tarif_cmd(m))
-    text, kw = m.out.answers[0]
+def plans_call(uid, chat="private"):
+    answers, alerts = [], []
+
+    async def answer(text, **kw):
+        answers.append((text, kw))
+
+    async def call_answer(text=None, show_alert=False):
+        alerts.append((text, show_alert))
+
+    msg = SimpleNamespace(chat=SimpleNamespace(type=chat), answer=answer)
+    return SimpleNamespace(from_user=SimpleNamespace(id=uid), data=tariffs.PLANS_CALLBACK, message=msg, answer=call_answer,
+                           answers=answers, alerts=alerts)
+
+
+def test_no_tarif_command_exists_anywhere():
+    import inspect
+    import core.bot_commands as bot_commands
+    assert not hasattr(th, "tarif_cmd")
+    sources = inspect.getsource(th) + inspect.getsource(bot_commands)
+    assert 'Command("tarif")' not in sources and 'command="tarif"' not in sources
+
+
+def test_plans_button_opens_plans_with_buy_buttons_in_private_only():
+    c = plans_call(U)
+    run(th.plans_cb(c))
+    text, kw = c.answers[0]
     assert buttons(kw["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro"] and "Bepul" in text and "150" in text
-    g = make_msg(U, chat="supergroup")
-    run(th.tarif_cmd(g))
-    assert "shaxsiy chatda" in g.out.replies[0][0] and not g.out.answers
+    g = plans_call(U, chat="supergroup")
+    run(th.plans_cb(g))
+    assert g.answers == [] and g.alerts[0][1] is True                       # guruhda callback ochilmaydi
 
 
-def test_tarif_command_hides_buttons_that_cannot_be_bought_and_staff_note():
+def test_plans_page_hides_unbuyable_buttons_and_staff_note():
     run(tariffs.grant(None, U, "pro"))
-    m = make_msg(U)
-    run(th.tarif_cmd(m))
-    assert buttons(m.out.answers[0][1]["reply_markup"]) == ["tariff:buy:pro"]    # Plus yo'q (pastroq), Pro — uzaytirish
-    s = make_msg(SUPER)
-    run(th.tarif_cmd(s))
-    assert "adminsiz" in s.out.answers[0][0]
+    c = plans_call(U)
+    run(th.plans_cb(c))
+    assert buttons(c.answers[0][1]["reply_markup"]) == ["tariff:buy:pro"]    # Plus yo'q (pastroq), Pro — uzaytirish
+    s = plans_call(SUPER)
+    run(th.plans_cb(s))
+    assert "adminsiz" in s.answers[0][0]
+
+
+def test_plans_markup_private_uses_callback_group_uses_deeplink(monkeypatch):
+    import core.bot_identity as bot_identity
+    private = tariffs.plans_markup()
+    assert private.inline_keyboard[0][0].callback_data == "tariff:menu" and "Tariflar" in private.inline_keyboard[0][0].text
+    monkeypatch.setattr(bot_identity, "_username", "my_ai_bot")
+    group = tariffs.plans_markup(in_group=True)
+    assert group.inline_keyboard[0][0].url == "https://t.me/my_ai_bot?start=tariff" and group.inline_keyboard[0][0].callback_data is None
+    monkeypatch.setattr(bot_identity, "_username", None)
+    assert tariffs.plans_markup(in_group=True) is None                       # username noma'lum — guruhda tugma yo'q (xato emas)
+
+
+def test_start_menu_has_tariffs_button_and_deeplink_opens_plans(monkeypatch):
+    import handlers.start as start
+
+    def start_msg(uid, chat="private"):
+        out = []
+
+        async def answer(text, **kw):
+            out.append((text, kw))
+
+        return SimpleNamespace(from_user=SimpleNamespace(id=uid, full_name="Ali", username="ali"),
+                               chat=SimpleNamespace(type=chat, id=uid), answer=answer, bot=None, out=out)
+
+    m = start_msg(U)
+    run(start.start(m, SimpleNamespace(args=None)))
+    assert "tariff:menu" in buttons(m.out[0][1]["reply_markup"])
+    m = start_msg(U)
+    run(start.start(m, SimpleNamespace(args="tariff")))                      # guruhdagi tugmadan deep-link
+    assert "Tariflar" in m.out[0][0] and buttons(m.out[0][1]["reply_markup"]) == ["tariff:buy:plus", "tariff:buy:pro"]
+    g = start_msg(U, chat="supergroup")
+    run(start.start(g, SimpleNamespace(args="tariff")))
+    assert "Salom" in g.out[0][0]                                            # guruhda deep-link e'tiborsiz — oddiy salom
+
+
+def test_indicator_finish_attaches_markup_and_skips_rich_mode():
+    from core.thinking_indicator import ThinkingIndicator
+    sent = []
+
+    class B:
+        async def send_message(self, chat_id, text, **kw):
+            sent.append(kw.get("reply_markup"))
+
+        async def send_rich_message(self, **kw):
+            raise AssertionError("tugma bor — rich xabar ishlatilmasligi kerak")
+
+    ind = ThinkingIndicator.__new__(ThinkingIndicator)
+    ind.bot, ind.chat_id, ind.thread_id, ind.reply_to_message_id, ind._task, ind._mode = B(), 1, None, None, None, "rich"
+    markup = tariffs.plans_markup()
+    run(ind.finish("matn", reply_markup=markup))
+    assert sent == [markup]
 
 
 def test_buy_sends_stars_invoice_with_exact_price_and_payload():

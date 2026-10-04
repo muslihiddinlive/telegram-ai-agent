@@ -29,7 +29,10 @@ import math
 import time
 from dataclasses import dataclass
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 import config
+import core.bot_identity as bot_identity
 import core.tgdb as tgdb
 
 logger = logging.getLogger("tariffs")
@@ -95,6 +98,23 @@ def tiers() -> dict[str, Tier]:
 
 def paid_tiers() -> list[Tier]:
     return [t for t in tiers().values() if t.id != "free"]
+
+
+PLANS_CALLBACK = "tariff:menu"
+PLANS_DEEPLINK = "tariff"   # https://t.me/<bot>?start=tariff — guruhdan shaxsiy chatda tariflar sahifasini ochadi
+PLANS_BUTTON_TEXT = "💳 Tariflar"
+
+
+def plans_markup(in_group: bool = False) -> InlineKeyboardMarkup | None:
+    """"💳 Tariflar" inline tugmasi (buyruqsiz kirish). Shaxsiy chatda — callback; guruhda — bot'ga deep-link (tugma
+    bosilganda shaxsiy chat ochiladi, chunki to'lov faqat shaxsiy chatda). Bot username noma'lum bo'lsa guruhda tugma yo'q."""
+    if not in_group:
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=PLANS_BUTTON_TEXT, callback_data=PLANS_CALLBACK)]])
+    username = bot_identity.get_username()
+    if not username:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text=PLANS_BUTTON_TEXT, url=f"https://t.me/{username}?start={PLANS_DEEPLINK}")]])
 
 
 def _bucket() -> dict:
@@ -215,8 +235,9 @@ def quota_available(user_id: int, kind: str) -> bool:
 def quota_denied_text(user_id: int, kind: str) -> str:
     what = "fayl yaratish" if kind == KIND_FILES else "rasm o'qish"
     limit = quota_limit(user_id, kind)
-    return (f"Bugungi {what} limiti tugadi ({limit}/{limit}). Limit ertaga yangilanadi; ko'proq kerak bo'lsa shaxsiy chatda /tarif "
-            f"orqali Plus/Pro tarifini olish mumkin. Foydalanuvchiga shuni muloyim ayting.")
+    return (f"Bugungi {what} limiti tugadi ({limit}/{limit}). Limit ertaga yangilanadi; ko'proq kerak bo'lsa Plus/Pro tarifini olish "
+            f"mumkin — javobingiz tagiga «💳 Tariflar» tugmasi avtomatik qo'shiladi. Foydalanuvchiga shuni muloyim ayting "
+            f"(buyruq yozishni aytmang).")
 
 
 def counts_as_use(kind: str, result) -> bool:
@@ -291,7 +312,7 @@ def check_payment(payload: str, payer_id: int, currency: str, amount: int, stric
         if not ok:
             return None, why
         if amount != tier.stars:
-            return None, "Narx o'zgargan — /tarif orqali qaytadan oling."
+            return None, "Narx o'zgargan — «💳 Tariflar» tugmasi orqali qaytadan oling."
     return tier_id, None
 
 
@@ -403,10 +424,10 @@ def reminder_text(user_id: int, kind: str) -> str:
     name = tiers().get(rec.get("tier"), tiers()["free"]).name
     if kind == "end":
         return (f"⌛ <b>{name}</b> tarifingiz muddati tugadi, Bepul tarifga qaytdingiz.\n"
-                f"Davom ettirish uchun: /tarif")
+                f"Davom ettirish uchun pastdagi tugmani bosing.")
     left = "1 kundan kam" if kind == "d1" else "3 kundan kam"
     return (f"⏰ <b>{name}</b> tarifingiz tugashiga {left} vaqt qoldi.\n"
-            f"Uzaytirish (muddat ustiga +{DURATION_DAYS} kun qo'shiladi): /tarif")
+            f"Uzaytirish (muddat ustiga +{DURATION_DAYS} kun qo'shiladi) uchun pastdagi tugmani bosing.")
 
 
 async def send_reminders(bot, now: float | None = None) -> int:
@@ -418,7 +439,7 @@ async def send_reminders(bot, now: float | None = None) -> int:
         processed += 1
         rec = _bucket()[str(uid)]
         try:
-            await bot.send_message(uid, reminder_text(uid, kind))
+            await bot.send_message(uid, reminder_text(uid, kind), reply_markup=plans_markup())
             sent += 1
         except Exception as e:  # noqa: BLE001
             logger.info("Tarif eslatmasi yuborilmadi (uid=%s): %s", uid, type(e).__name__)

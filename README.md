@@ -208,7 +208,11 @@ Hamma tarifda fayl/hujjat yaratish va rasm o'qish bor — farq **kunlik kvotada*
   Bepul foydalanuvchi izoh yozsa, story izohsiz chiqadi va buning sababi ko'rsatiladi.
 - **Eslatma:** tarif tugashiga 3 kun va 1 kun qolganda hamda tugagach (7 kun ichida) foydalanuvchiga xabar boradi — har biri bir martadan,
   uzaytirilsa yangidan hisoblanadi (fon vazifasi har 30 daqiqada, `core/scheduler.py`).
-- Foydalanuvchi: shaxsiy chatda `/tarif` → tugma → Stars hisob-fakturasi → to'lov (bugungi sarf ham ko'rsatiladi). Limit = max(foydalanuvchining o'z limiti, tarif limiti).
+- **Buyruq yo'q (`/tarif` olib tashlangan) — hammasi inline tugmalar orqali:** `/start` menyusidagi «💳 Tariflar»; so'rov limiti yoki fayl/rasm
+  kvotasi tugaganda javob tagidagi «💳 Tariflar» tugmasi (guruhda tugma deep-link `?start=tariff` bo'lib shaxsiy chatda tariflarni ochadi,
+  chunki to'lov faqat shaxsiy chatda); muddat eslatmalaridagi tugma; story izohi yopiq bo'lganda ham tugma chiqadi. Tugma → tariflar sahifasi
+  (bugungi sarf bilan) → Stars hisob-fakturasi → to'lov. Narx/limitlarni faqat superadmin `/panel → 💳 Tariflar` da boshqaradi.
+  Limit = max(foydalanuvchining o'z limiti, tarif limiti).
 - Xarid qoidalari: o'sha tarifni uzaytirish (+30 kun); yuqoriroqqa o'tish (30 kun hozirdan, qolgan kunlar kuymaydi — oldindan ogohlantiriladi);
   faol yuqori tarif ustiga pastrog'ini sotib olib bo'lmaydi. To'lov idempotent (bir xil `charge_id` ikki marta hisoblanmaydi); `pre_checkout`da narx/foydalanuvchi/valyuta tekshiriladi.
 - Superadmin `/panel → 💳 Tariflar`: faol obunachilar va jami tushum; foydalanuvchi sahifasida: 🎁 qo'lda berish (30 kun), ❌ bekor qilish,

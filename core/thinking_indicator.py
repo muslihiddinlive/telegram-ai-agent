@@ -180,11 +180,12 @@ class ThinkingIndicator:
         except Exception:
             pass  # tarmoq/limit xatolari — e'tiborsiz qoldiramiz
 
-    async def finish(self, final_text: str):
+    async def finish(self, final_text: str, reply_markup=None):
+        """reply_markup (masalan "💳 Tariflar" tugmasi) berilsa — oddiy send_message ishlatiladi (rich xabar tugma qo'shmaydi)."""
         if self._task:
             self._task.cancel()
 
-        if self._mode == "rich":
+        if self._mode == "rich" and reply_markup is None:
             # Rich draft'ni yopish uchun rasmiy hujjat sendRichMessage'ni
             # tavsiya qiladi (oddiy sendMessage emas).
             try:
@@ -205,7 +206,7 @@ class ThinkingIndicator:
         # AI-bot bir-biriga javob berayotganda ham aralashib ketmasligi uchun).
         await self.bot.send_message(
             self.chat_id, final_text, message_thread_id=self.thread_id,
-            reply_parameters=self._reply_parameters(),
+            reply_parameters=self._reply_parameters(), reply_markup=reply_markup,
         )
 
     def _reply_parameters(self):

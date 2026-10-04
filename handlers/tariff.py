@@ -1,7 +1,9 @@
 """
-/tarif — tariflar, joriy holat va Telegram Stars (XTR) bilan sotib olish.
+Tariflar — joriy holat va Telegram Stars (XTR) bilan sotib olish. BUYRUQ YO'Q: hammasi inline tugmalar orqali —
+/start menyusidagi "💳 Tariflar", limit/kvota tugaganda javob tagidagi tugma, eslatma xabarlaridagi tugma (shaxsiy chatda callback
+`tariff:menu`; guruhdan deep-link `?start=tariff` — handlers/start.py). Superadmin narx/limitlarni /panel → 💳 Tariflar'da boshqaradi.
 
-Oqim: /tarif → tugma (tariff:buy:<tier>) → send_invoice (XTR) → pre_checkout_query (qat'iy tekshiruv, 10 soniya ichida
+Oqim: "💳 Tariflar" → tugma (tariff:buy:<tier>) → send_invoice (XTR) → pre_checkout_query (qat'iy tekshiruv, 10 soniya ichida
 javob) → successful_payment (idempotent hisoblash) → tarif yoqiladi. /paysupport — Telegram talab qiladigan to'lov murojaati.
 Faqat SHAXSIY chatda ishlaydi.
 """
@@ -69,13 +71,20 @@ def render_plans(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
     return "\n".join(lines), (InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
 
 
-@router.message(Command("tarif"))
-async def tarif_cmd(message: Message):
-    if message.chat.type != "private":
-        await message.reply("💳 Tariflar bilan shaxsiy chatda ishlang: botga to'g'ridan-to'g'ri /tarif yozing.")
-        return
-    text, kb = render_plans(message.from_user.id)
+async def send_plans(message: Message):
+    """Tariflar sahifasini yangi xabar sifatida yuboradi (shaxsiy chat)."""
+    text, kb = render_plans(message.chat.id)
     await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == tariffs.PLANS_CALLBACK)
+async def plans_cb(call: CallbackQuery):
+    if call.message is None or call.message.chat.type != "private":
+        await call.answer("Tariflar faqat shaxsiy chatda ochiladi", show_alert=True)
+        return
+    text, kb = render_plans(call.from_user.id)
+    await call.message.answer(text, reply_markup=kb)  # yangi xabar: asl xabar (menyu/eslatma) joyida qoladi
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("tariff:buy:"))
