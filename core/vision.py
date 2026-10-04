@@ -21,6 +21,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageOps
 
 import core.shared_keys as shared_keys
+import core.token_usage as token_usage
 from core.ai_rotator import KeyRotator
 
 logger = logging.getLogger("vision")
@@ -174,6 +175,8 @@ async def _call_groq(key: str, images: list[bytes], prompt: str) -> str:
         try:
             resp = await attempt(model)
             _groq_working = model
+            token_usage.record_response("groq", resp, model=model, purpose="vision", est_prompt_text=prompt,
+                                        est_completion_text=resp.choices[0].message.content)
             return resp.choices[0].message.content or ""
         except Exception as e:  # noqa: BLE001
             if not _is_model_error(e):
@@ -192,6 +195,8 @@ async def _call_groq(key: str, images: list[bytes], prompt: str) -> str:
             resp = await attempt(model)
             _groq_working = model
             logger.info("Groq vision modeli avtomatik topildi: %s", model)
+            token_usage.record_response("groq", resp, model=model, purpose="vision", est_prompt_text=prompt,
+                                        est_completion_text=resp.choices[0].message.content)
             return resp.choices[0].message.content or ""
         except Exception as e:  # noqa: BLE001
             if not _is_model_error(e):
@@ -216,6 +221,8 @@ async def _call_openai_like(provider: str, key: str, images: list[bytes], prompt
     resp = await client.chat.completions.create(
         model=model, messages=[{"role": "user", "content": content}], max_tokens=700, temperature=0.2,
     )
+    token_usage.record_response(provider, resp, model=model, purpose="vision", est_prompt_text=prompt,
+                                est_completion_text=resp.choices[0].message.content)
     return resp.choices[0].message.content or ""
 
 
@@ -228,7 +235,10 @@ async def _call_anthropic(key: str, images: list[bytes], prompt: str) -> str:
         model=shared_keys.get_vision_model("anthropic"), max_tokens=700,
         messages=[{"role": "user", "content": content}],
     )
-    return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    token_usage.record_response("anthropic", resp, model=shared_keys.get_vision_model("anthropic"), purpose="vision",
+                                est_prompt_text=prompt, est_completion_text=out)
+    return out
 
 
 async def _call_gemini(key: str, images: list[bytes], prompt: str) -> str:
@@ -247,10 +257,16 @@ async def _call_gemini(key: str, images: list[bytes], prompt: str) -> str:
     if r.status_code != 200:
         raise VisionError(f"Gemini HTTP {r.status_code}: {r.text[:200]}")
     try:
-        parts = r.json()["candidates"][0]["content"]["parts"]
+        body_out = r.json()
+        parts = body_out["candidates"][0]["content"]["parts"]
     except (KeyError, IndexError, ValueError) as e:
         raise VisionError("Gemini javobi bo'sh yoki bloklangan.") from e
-    return "".join(p.get("text", "") for p in parts)
+    out = "".join(p.get("text", "") for p in parts)
+    meta = body_out.get("usageMetadata") or {}
+    usage = {"prompt_tokens": meta.get("promptTokenCount"), "completion_tokens": meta.get("candidatesTokenCount")} if meta else None
+    token_usage.record_response("gemini", {"usage": usage} if usage else {}, model=model, purpose="vision",
+                                est_prompt_text=prompt, est_completion_text=out)
+    return out
 
 
 async def _dispatch(provider: str, key: str, images: list[bytes], prompt: str) -> str:
@@ -288,7 +304,8 @@ async def describe(images: list[bytes], question: str | None = None, is_video: b
                 break
             tried.add(key)
             try:
-                text = _clean(await _dispatch(provider, key, prepared, prompt))
+                with token_usage.scope(purpose="vision"):  # kim/qayerda konteksti saqlanadi, maqsad — vision
+                    text = _clean(await _dispatch(provider, key, prepared, prompt))
                 if text:
                     return text
                 errors.append(f"{provider}: bo'sh javob")

@@ -20,6 +20,7 @@ from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 import core.userbot as userbot
 import core.group_wipe as group_wipe
+import core.token_usage as token_usage
 import core.tariffs as tariffs
 import core.userbot_tools as userbot_tools
 from core.thinking_indicator import ThinkingIndicator
@@ -238,6 +239,11 @@ async def handle_message(message: Message):
             return
 
     mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
+    # Token hisobi uchun: kim (user), qayerda (chat), nima uchun (chat). Har bir update o'z task'ida — kontekst aralashmaydi.
+    token_usage.set_context(chat_id=message.chat.id, chat_type=message.chat.type,
+                            chat_title=(message.chat.title or message.from_user.full_name) if message.from_user else message.chat.title,
+                            user_id=user_id, user_name=(f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name),
+                            purpose="chat")
     ctx = {
         # Tarif kvotalari (fayl yaratish / rasm o'qish) — ai_tools.dispatch serverda majburlaydi. Hisob so'rov limiti bilan bir xil
         # odamdan ketadi (guruhda chatmode egasi); VIP chatmode — cheksiz.

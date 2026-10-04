@@ -20,8 +20,21 @@ import re
 import time
 
 import config
+import core.token_usage as token_usage
 
 logger = logging.getLogger("ai_rotator")
+
+
+def _record_usage(provider: str, response, messages: list[dict], tools: list[dict] | None, personal: bool) -> None:
+    """Muvaffaqiyatli AI chaqiruvini token hisobiga yozadi (core/token_usage.py). Hech qachon asosiy oqimni buzmaydi."""
+    try:
+        msg = response.choices[0].message
+        names = [tc.function.name for tc in (getattr(msg, "tool_calls", None) or [])]
+        completion_text = (getattr(msg, "content", None) or "") + "".join(str(tc.function.arguments) for tc in (getattr(msg, "tool_calls", None) or []))
+        token_usage.record_response(provider, response, personal=personal, tools=names or None,
+                                    est_prompt_text=token_usage.messages_text(messages, tools), est_completion_text=completion_text)
+    except Exception:  # noqa: BLE001
+        logger.exception("Token hisobiga yozib bo'lmadi")
 
 # Ba'zi provayderlar (masalan xKiro kabi tashqi/proxy xizmatlar) AI model
 # tool-chaqiruv argumentini noto'g'ri turda yasasa (masalan massiv o'rniga
@@ -117,8 +130,10 @@ class _FakeChoice:
 
 
 class _FakeResponse:
-    def __init__(self, choices):
+    def __init__(self, choices, usage=None, model=None):
         self.choices = choices
+        self.usage = usage  # Anthropic: {"input_tokens", "output_tokens"} — core/token_usage.py ikkala nomni ham tushunadi
+        self.model = model
 
 
 def _tools_kw(tools: list[dict] | None) -> dict:
@@ -229,6 +244,7 @@ class MultiProviderAI:
                 personal_provider, personal_key = found
                 try:
                     response = await self._call(personal_provider, personal_key, messages, tools)
+                    _record_usage(personal_provider, response, messages, tools, personal=True)  # foydalanuvchining o'z hisobi — alohida
                     return {"provider": personal_provider, "response": response, "personal": True}
                 except Exception as e:
                     raise AllKeysExhaustedError(
@@ -247,6 +263,7 @@ class MultiProviderAI:
             try:
                 key = await rotator.next_key()
                 response = await self._call(provider, key, messages, tools)
+                _record_usage(provider, response, messages, tools, personal=False)  # token baribir sarflangan (keyingi tekshiruv rad etsa ham)
 
                 # Yuqoridagi izohga qarang: tool-argument turi xato bo'lib,
                 # provayder buni matn sifatida qaytarsa — keyingi provayderga
@@ -349,7 +366,9 @@ class MultiProviderAI:
                 elif block.type == "tool_use":
                     tool_calls.append(_FakeToolCall(block.name, json.dumps(block.input), block.id))
             message = _FakeMessage("\n".join(text_parts), tool_calls or None)
-            return _FakeResponse([_FakeChoice(message)])
+            usage = {"input_tokens": getattr(resp.usage, "input_tokens", None), "output_tokens": getattr(resp.usage, "output_tokens", None)} \
+                if getattr(resp, "usage", None) is not None else None
+            return _FakeResponse([_FakeChoice(message)], usage=usage, model=getattr(resp, "model", None) or model_override)
 
         elif provider == "custom":
             # Foydalanuvchi o'zi ulagan norasmiy/OpenAI-mos API (core/user_api_keys.py,

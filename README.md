@@ -240,6 +240,20 @@ Har bir admin inline tugma (ism/@username va ID). Ustiga bosilsa: **1)** «Admin
 tugmani qayta bosish yoki bosqichni o'tkazib yuborish ishlamaydi. O'chirilgan adminning shaxsiy `/` menyusidan `/panel` olib tashlanadi va moderatsiya
 keshidagi eski huquqi tozalanadi. «❌ Yo'q» tugmalari hech narsani o'zgartirmaydi. Ismi saqlanmagan adminlar uchun ism Telegram'dan olinib eslab qolinadi.
 
+## Kunlik token hisoboti (`core/token_usage.py`)
+Har kuni **00:00 UTC** dan keyin (scheduler har daqiqa tekshiradi) superadminga **kechagi kun** hisoboti yuboriladi. Hisob bitta joyda yuritiladi:
+`core/ai_rotator.py` (suhbat, tool, xulosa, reaksiya, story izohi) va `core/vision.py` (rasm o'qish; Groq/OpenAI/xKiro/Anthropic/Gemini) har bir **muvaffaqiyatli**
+AI chaqiruvidan keyin yozadi. Kim/qayerda/nima uchun — `ContextVar` orqali (`handlers/ai_chat.py` guruh+foydalanuvchini belgilaydi, fon vazifalar o'z maqsadini qo'shadi).
+- **Hisobotda:** jami token (kirish/chiqish, so'rovlar, o'rtacha, oldingi kunga nisbatan ▲▼%), **qaysi provayder/model**, **nimaga** (suhbat / rasm o'qish / xotira xulosasi /
+  avto-reaksiya / story izohi), **qayerda** (guruhlar / shaxsiy chat / tizim-fon), **eng ko'p sarflangan joy**, top guruhlar, top foydalanuvchilar, AI chaqirgan tool'lar.
+- Foydalanuvchining **o'z API kaliti** bilan ketgan tokenlar alohida ("Shaxsiy kalitlar") — sizning hisobingizga kirmaydi.
+- Provayder usage bermasa, token matn uzunligidan baholanadi (~4 belgi = 1 token) va hisobotda "taxminiy" deb belgilanadi. Tool'lar kesimi taxminiy: bir so'rovning
+  tokeni uning tool'lari o'rtasida teng bo'linadi. Pul hisobi yo'q (faqat token) — narx provayder/modelga bog'liq.
+- `/panel → 📊 Token hisoboti`: **bugun (hozirgacha)** yoki **kecha**, xuddi shu formatda.
+- Bot 00:00 da o'chiq (masalan Render bepul tarifda uxlab qolgan) bo'lsa — qayta ishga tushgach kechikib yetkaziladi (yuborilgan kun DB'da belgilanadi, ikki marta ketmaydi;
+  ko'p kun o'chiq bo'lsa ham faqat kechagi kun uchun bitta hisobot). Yuborib bo'lmasa 5 martagacha qayta uriniladi. Birinchi ishga tushishda bo'sh hisobot yuborilmaydi.
+- Xotira (`db.json`) o'smasin: faqat oxirgi 8 kun, kuniga 100 ta guruh va 150 ta foydalanuvchi kesimi (qolgani "Boshqalar"ga yig'iladi).
+
 ## Panel orqali xabar yuborish (`core/admin_messaging.py`)
 - **Bitta foydalanuvchiga** (superadmin va adminlar): `/panel → Foydalanuvchilar → <user> → ✉️ Xabar yozish`, so'ng matnni yozasiz.
   Xabar jo'natuvchi nomisiz, "📩 Admin xabari" sifatida boradi (panel superadmin identligini adminlardan yashirgani uchun).

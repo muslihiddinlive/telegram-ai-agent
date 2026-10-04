@@ -147,6 +147,13 @@ async def save(bot: Bot, force: bool = False):
         await _flush_now()
 
 
+def mark_dirty():
+    """Sinxron (bot'siz) "o'zgardi" belgisi — tez-tez yoziladigan hisoblagichlar uchun (core/token_usage.py). Haqiqiy yozishni
+    background flusher bajaradi (bot havolasi oldingi save()'dan eslab qolingan)."""
+    global _dirty
+    _dirty = True
+
+
 async def force_flush():
     """Bot to'xtatilishidan oldin (shutdown) qoldiq o'zgarishlarni yozib qo'yish uchun."""
     if _dirty:

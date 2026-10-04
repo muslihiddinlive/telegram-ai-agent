@@ -13,6 +13,7 @@ import time
 import core.auto_top as auto_top
 import core.clock as clock
 import core.tariffs as tariffs
+import core.token_usage as token_usage
 
 logger = logging.getLogger("scheduler")
 
@@ -36,6 +37,11 @@ async def _run_top_faollar(bot):
 async def run_forever(bot):
     global _last_top_date, _last_tariff_check
     while True:
+        try:
+            # Kunlik token hisoboti: har kuni 00:00 UTC dan keyin (kecha uchun), superadminga. Alohida try — boshqa vazifalar xatosi to'smasin.
+            await token_usage.send_daily_report(bot)
+        except Exception:  # noqa: BLE001
+            logger.exception("Token hisobotini yuborishda xatolik")
         try:
             if time.time() - _last_tariff_check >= TARIFF_REMINDER_EVERY:
                 _last_tariff_check = time.time()
