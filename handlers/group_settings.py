@@ -4,6 +4,7 @@ Guruh ichida bot javobini boshqarish komandalari.
 /chatmode — guruh egasi/adminlari + bot adminlari + superadmin.
 /vipchatmode — FAQAT superadmin (cheksiz rejim).
 """
+import logging
 import re
 
 from aiogram import Router, F
@@ -24,6 +25,7 @@ async def _is_group_admin(message: Message) -> bool:
     return member.status in ("creator", "administrator")
 
 
+logger = logging.getLogger("group_settings")
 _CHATMODE_RE = re.compile(r"(?is)^/(vip)?chatmode(?:@\w+)?\s*:?\s*(\w*)")
 
 
@@ -60,7 +62,13 @@ async def toggle_chat_mode(message: Message):
 
     if is_vip_cmd:
         if not roles.is_superadmin(uid):
-            return  # jim — bu komanda mavjudligi oddiy userlarga ko'rinmaydi
+            # Oddiy a'zoga jim (komanda mavjudligi sir qoladi), LEKIN logga yoziladi. Bot yoki guruh admini bo'lsa — sababi aytiladi
+            # (aks holda egasi "komanda ishlamayapti" deb o'ylaydi, aslida akkaunt ID'si SUPERADMIN_ID'ga teng emas).
+            logger.warning("/vipchatmode superadmin emas: uid=%s chat=%s", uid, chat_id)
+            if roles.is_admin(uid) or await _is_group_admin(message):
+                await message.reply(f"👑 /vipchatmode faqat superadmin uchun. Sizning Telegram ID'ingiz: <code>{uid}</code> — "
+                                    f"u botning superadmin ID'siga teng emas.")
+            return
         if arg == "on":
             await chat_mode.enable(message.bot, chat_id, owner_id=uid, vip=True)
             await message.reply(

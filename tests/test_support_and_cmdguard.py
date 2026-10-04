@@ -294,3 +294,27 @@ def test_no_text_paysupport_flow_left():
     bot = harness.make_bot()
     send(bot, U, "/paysupport shu yerga yozaman")
     assert not [d for d in calls(bot, "SendMessage") if d["chat_id"] == SUPER] and "support:start" in str(calls(bot, "SendMessage")[-1]["reply_markup"])
+
+
+# ── /vipchatmode: kim yozganiga qarab javob ──────────────────────────────
+
+def test_vip_non_superadmin_feedback_depends_on_privilege(caplog):
+    # oddiy a'zo — jim (komanda sir), lekin logga yoziladi
+    plain = harness.make_bot()
+    with caplog.at_level("WARNING", logger="group_settings"):
+        send(plain, 77, "/vipchatmode on", chat=GROUP, chat_type="supergroup")
+    assert plain.session.texts(GROUP) == [] and "superadmin emas: uid=77" in caplog.text
+    # guruh admini — sababi va o'z ID'si aytiladi
+    group_admin = harness.make_bot(admins={78})
+    send(group_admin, 78, "/vipchatmode: on", chat=GROUP, chat_type="supergroup")
+    txt = group_admin.session.texts(GROUP)
+    assert len(txt) == 1 and "faqat superadmin" in txt[0] and "78" in txt[0]
+    # bot admini — xuddi shunday
+    bot_admin = harness.make_bot()
+    send(bot_admin, ADMIN, "/vipchatmode on", chat=GROUP, chat_type="supergroup")
+    assert "faqat superadmin" in bot_admin.session.texts(GROUP)[0]
+    assert chat_mode.get(GROUP) is None                                      # hech biri yoqa olmadi
+    # superadmin — ishlaydi
+    boss = harness.make_bot()
+    send(boss, SUPER, "/vipchatmode: on", chat=GROUP, chat_type="supergroup")
+    assert chat_mode.get(GROUP)["vip"] is True and "VIP chat rejimi YOQILDI" in boss.session.texts(GROUP)[0]
