@@ -38,6 +38,11 @@ async def register_admin_commands(bot: Bot, chat_id: int):
     await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=chat_id))
 
 
+async def unregister_admin_commands(bot: Bot, chat_id: int):
+    """Adminlikdan olingan odamning shaxsiy '/' menyusidan /panel'ni olib tashlaydi (umumiy menyuga qaytadi)."""
+    await bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=chat_id))
+
+
 async def register_group_commands(bot: Bot):
     """/guruh_ruxsat va /guruh_ruxsat_ochirish — FAQAT guruh chatlarida ko'rinadi."""
     await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())

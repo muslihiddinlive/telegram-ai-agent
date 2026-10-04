@@ -234,6 +234,12 @@ to'g'ri komanda taklif qilinadi va AI'ga yuborilmaydi; taklif faqat foydalanuvch
 oddiy userga ko'rsatilmaydi; oddiy userga u hamon jim). Boshqa botga mo'ljallangan (`/cmd@BoshqaBot`) komandalar jim yutiladi; hech narsaga o'xshamagan
 `/help` kabilar avvalgidek tegilmaydi. AI tizim ko'rsatmasiga ham "sozlamalarni o'zgartira olmaysiz, bajarilmagan amalni bajarilgan demang" qoidasi qo'shilgan.
 
+## Adminlarni boshqarish (`/panel → 🛡 Adminlar`, faqat superadmin)
+Har bir admin inline tugma (ism/@username va ID). Ustiga bosilsa: **1)** «Adminni olib tashlaysizmi?» → «⚠️ Ha, davom etish» → **2)** «OXIRGI TASDIQ» →
+«🗑 Ha, adminni o'chirish». Ikkala tasdiq ham serverda majburlanadi (faqat shu admin uchun, ketma-ket, 2 daqiqa ichida, bir martalik) — eski xabardagi
+tugmani qayta bosish yoki bosqichni o'tkazib yuborish ishlamaydi. O'chirilgan adminning shaxsiy `/` menyusidan `/panel` olib tashlanadi va moderatsiya
+keshidagi eski huquqi tozalanadi. «❌ Yo'q» tugmalari hech narsani o'zgartirmaydi. Ismi saqlanmagan adminlar uchun ism Telegram'dan olinib eslab qolinadi.
+
 ## Panel orqali xabar yuborish (`core/admin_messaging.py`)
 - **Bitta foydalanuvchiga** (superadmin va adminlar): `/panel → Foydalanuvchilar → <user> → ✉️ Xabar yozish`, so'ng matnni yozasiz.
   Xabar jo'natuvchi nomisiz, "📩 Admin xabari" sifatida boradi (panel superadmin identligini adminlardan yashirgani uchun).
