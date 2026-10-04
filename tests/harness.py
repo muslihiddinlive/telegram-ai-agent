@@ -70,3 +70,13 @@ def message_update(update_id, chat_id, user_id, text=None, chat_type="supergroup
 
 async def feed(dp, bot, update):
     await dp.feed_update(bot, update)
+
+
+def press_callback(dp, bot, user_id, data, update_id=1, message_id=50):
+    """Shaxsiy chatda inline tugma bosilishini haqiqiy Dispatcher orqali yuboradi."""
+    from aiogram.types import CallbackQuery
+    user = User(id=user_id, is_bot=False, first_name="Ali", username=f"u{user_id}")
+    msg = Message(message_id=message_id, date=NOW, chat=Chat(id=user_id, type="private"),
+                  from_user=User(id=BOT_ID, is_bot=True, first_name="Bot"), text="panel")
+    cq = CallbackQuery(id=str(update_id), from_user=user, chat_instance="x", message=msg, data=data)
+    return dp.feed_update(bot, Update(update_id=update_id, callback_query=cq))  # coroutine — run() bilan bajariladi

@@ -6,11 +6,14 @@ moslashtirilgan:
     ko'rsatilmaydi (superadmin identligi/adminlar ro'yxati adminlardan yashirin)
 """
 import asyncio
+import html
+import time
 
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
+import core.bot_commands as bot_commands
 import core.tgdb as tgdb
 import core.roles as roles
 import core.pending_input as pending_input
@@ -778,18 +781,126 @@ async def persona_reset_cb(call: CallbackQuery, bot: Bot):
 
 # ── Adminlar (FAQAT superadmin ko'radi) ──
 
+ADMIN_DEL_TTL = 120  # soniya: tasdiqlash bosqichlari shu vaqt ichida bajarilishi kerak
+_admin_del: dict[int, dict] = {}  # superadmin_id -> {"uid": admin_id, "step": 1|2, "t": vaqt}
+
+
+async def _admin_label(bot: Bot, uid: str, info: dict) -> str:
+    """Ro'yxatda tanib olish uchun ism: saqlangan bo'lmasa Telegram'dan so'raymiz va eslab qolamiz (xato bo'lsa — ID)."""
+    if not info.get("name"):
+        try:
+            chat = await bot.get_chat(int(uid))
+            name = getattr(chat, "full_name", None) or getattr(chat, "first_name", None) or getattr(chat, "title", None)
+            username = getattr(chat, "username", None)
+            if isinstance(name, str) and name:
+                info["name"] = name + (f" (@{username})" if isinstance(username, str) and username else "")
+        except Exception:  # noqa: BLE001
+            pass
+    return info.get("name") or uid
+
+
+async def render_admins(bot: Bot) -> tuple[str, InlineKeyboardMarkup]:
+    admins = roles.list_admins()
+    rows = []
+    for uid, info in admins.items():
+        label = await _admin_label(bot, uid, info)
+        rows.append([InlineKeyboardButton(text=f"🛡 {label} · {uid}"[:60], callback_data=f"panel:adm:{uid}")])
+    rows.append([InlineKeyboardButton(text="➕ Admin qo'shish", callback_data="panel:add_admin")])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    text = ("🛡 <b>Adminlar</b>\nAdminni olib tashlash uchun uning ustiga bosing."
+            if admins else "🛡 <b>Adminlar</b>\nHozircha admin yo'q.")
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 @router.callback_query(F.data.startswith("panel:admins:"))
-async def show_admins(call: CallbackQuery):
+async def show_admins(call: CallbackQuery, bot: Bot):
     if not roles.is_superadmin(call.from_user.id):
         await call.answer("Ruxsat yo'q", show_alert=True)
         return
-    admins = roles.list_admins()
-    lines = [f"🛡 {info.get('name') or uid} (ID: {uid})" for uid, info in admins.items()] or ["Hozircha admin yo'q."]
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Admin qo'shish", callback_data="panel:add_admin")],
-        [InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")],
-    ])
-    await call.message.edit_text("\n".join(lines), reply_markup=kb)
+    _admin_del.pop(call.from_user.id, None)
+    text, kb = await render_admins(bot)
+    await call.message.edit_text(text, reply_markup=kb)
+
+
+def _del_state(caller: int, uid: str, step: int, now: float | None = None) -> bool:
+    """Tasdiqlash bosqichi ketma-ket va o'z vaqtida bajarilganini tekshiradi (eski xabardagi tugmani qayta bosish o'tmaydi)."""
+    st = _admin_del.get(caller)
+    return bool(st and st["uid"] == uid and st["step"] == step and (time.time() if now is None else now) - st["t"] <= ADMIN_DEL_TTL)
+
+
+async def _deny_unless_super(call: CallbackQuery) -> bool:
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return True
+    return False
+
+
+@router.callback_query(F.data.startswith("panel:adm:"))
+async def admin_manage(call: CallbackQuery, bot: Bot):
+    """1-tasdiq: admin ustiga bosildi → 'o'chirasizmi?'"""
+    if await _deny_unless_super(call):
+        return
+    uid = call.data.split(":")[-1]
+    info = roles.list_admins().get(uid)
+    if info is None:
+        await call.answer("Bu admin allaqachon ro'yxatda yo'q", show_alert=True)
+        text, kb = await render_admins(bot)
+        await call.message.edit_text(text, reply_markup=kb)
+        return
+    _admin_del[call.from_user.id] = {"uid": uid, "step": 1, "t": time.time()}
+    label = await _admin_label(bot, uid, info)
+    await call.message.edit_text(
+        f"🛡 <b>{html.escape(label)}</b> (ID: <code>{uid}</code>)\n\nBu adminni adminlikdan olib tashlaysizmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⚠️ Ha, davom etish", callback_data=f"panel:admdel1:{uid}")],
+            [InlineKeyboardButton(text="❌ Yo'q, qoldirish", callback_data="panel:admins:0")],
+        ]))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:admdel1:"))
+async def admin_delete_step1(call: CallbackQuery, bot: Bot):
+    """2-tasdiq: oxirgi ogohlantirish."""
+    if await _deny_unless_super(call):
+        return
+    uid = call.data.split(":")[-1]
+    if not _del_state(call.from_user.id, uid, 1):
+        await call.answer("Tasdiqlash muddati tugagan — adminni qaytadan tanlang", show_alert=True)
+        text, kb = await render_admins(bot)
+        await call.message.edit_text(text, reply_markup=kb)
+        return
+    _admin_del[call.from_user.id] = {"uid": uid, "step": 2, "t": time.time()}
+    info = roles.list_admins().get(uid, {})
+    label = await _admin_label(bot, uid, info)
+    await call.message.edit_text(
+        f"⚠️ <b>OXIRGI TASDIQ</b>\n\n<b>{html.escape(label)}</b> (ID: <code>{uid}</code>) adminlikdan olib tashlanadi: "
+        f"/panel va admin imkoniyatlari yo'qoladi. Keyin uni yana admin qilib qo'shish mumkin.\n\nRostdan ham o'chirilsinmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 Ha, adminni o'chirish", callback_data=f"panel:admdel2:{uid}")],
+            [InlineKeyboardButton(text="❌ Yo'q, bekor qilish", callback_data="panel:admins:0")],
+        ]))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:admdel2:"))
+async def admin_delete_step2(call: CallbackQuery, bot: Bot):
+    if await _deny_unless_super(call):
+        return
+    uid = call.data.split(":")[-1]
+    if not _del_state(call.from_user.id, uid, 2):
+        await call.answer("Tasdiqlash muddati tugagan yoki bosqich o'tkazib yuborilgan — qaytadan boshlang", show_alert=True)
+        text, kb = await render_admins(bot)
+        await call.message.edit_text(text, reply_markup=kb)
+        return
+    _admin_del.pop(call.from_user.id, None)  # bir martalik: ikkinchi marta bosilsa o'tmaydi
+    removed = await roles.remove_admin(bot, int(uid))
+    try:
+        await bot_commands.unregister_admin_commands(bot, int(uid))  # shaxsiy '/' menyusidan /panel ketadi
+    except Exception:  # noqa: BLE001
+        pass
+    await call.answer("✅ Admin o'chirildi" if removed else "Bu admin allaqachon yo'q edi", show_alert=True)
+    text, kb = await render_admins(bot)
+    await call.message.edit_text(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "panel:add_admin")

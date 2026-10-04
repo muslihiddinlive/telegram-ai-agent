@@ -99,10 +99,17 @@ async def add_admin(bot, user_id: int, name: str | None = None):
     await tgdb.save(bot, force=True)
 
 
-async def remove_admin(bot, user_id: int):
+async def remove_admin(bot, user_id: int) -> bool:
+    """Adminlikni olib tashlaydi. Admin bo'lgan bo'lsa True. Moderatsiya keshidagi (chat, user) yozuvlari ham tozalanadi —
+    aks holda eski admin huquqi kesh muddati tugaguncha ishlab turardi."""
     db = tgdb.get()
-    db.get("admins", {}).pop(str(user_id), None)
-    await tgdb.save(bot, force=True)
+    existed = db.get("admins", {}).pop(str(user_id), None) is not None
+    if existed:
+        import core.moderation as moderation
+        for key in [k for k in moderation._access_cache if k[1] == user_id]:
+            moderation._access_cache.pop(key, None)
+        await tgdb.save(bot, force=True)
+    return existed
 
 
 def list_admins() -> dict:
