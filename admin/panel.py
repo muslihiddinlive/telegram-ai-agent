@@ -22,6 +22,8 @@ import core.ai_persona as ai_persona
 import core.global_blacklist as global_blacklist
 import core.admin_messaging as admin_messaging
 import core.tariffs as tariffs
+import core.token_usage as token_usage
+import datetime as dt
 
 router = Router()
 
@@ -35,6 +37,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(text="🌐 Global qora ro'yxat", callback_data="panel:qora")])
         rows.append([InlineKeyboardButton(text="📢 Hammaga xabar (broadcast)", callback_data="panel:bc")])
         rows.append([InlineKeyboardButton(text="💳 Tariflar", callback_data="panel:tariffs")])
+        rows.append([InlineKeyboardButton(text="📊 Token hisoboti", callback_data="panel:tokens:today")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -220,6 +223,29 @@ def _tariff_line(uid: int) -> str:
     if cur.id == "free":
         return "Bepul"
     return f"{cur.name} ({tariffs.days_left(uid)} kun qoldi)"
+
+
+# ── Token hisoboti (FAQAT superadmin): bugun (hozirgacha) yoki kecha — kunlik avto-hisobot bilan bir xil format ──
+
+@router.callback_query(F.data.startswith("panel:tokens:"))
+async def show_tokens(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    which = call.data.split(":")[-1]
+    today = dt.datetime.now(dt.timezone.utc)
+    day = (today - dt.timedelta(days=1 if which == "yesterday" else 0)).strftime("%Y-%m-%d")
+    prev = (today - dt.timedelta(days=2 if which == "yesterday" else 1)).strftime("%Y-%m-%d")
+    chunks = token_usage.build_report(day, prev, partial=(which != "yesterday"))
+    other = ("yesterday", "📅 Kecha") if which != "yesterday" else ("today", "📅 Bugun (hozirgacha)")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=other[1], callback_data=f"panel:tokens:{other[0]}")],
+        [InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")],
+    ])
+    await call.message.edit_text(chunks[0], reply_markup=kb if len(chunks) == 1 else None)
+    for i, extra in enumerate(chunks[1:], 1):
+        await call.message.answer(extra, reply_markup=kb if i == len(chunks) - 1 else None)
+    await call.answer()
 
 
 # ── Tariflar (FAQAT superadmin): statistika + qo'lda berish/bekor qilish/refund ──

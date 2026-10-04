@@ -15,6 +15,7 @@ import logging
 import re
 
 from core.ai_rotator import ai
+import core.token_usage as token_usage
 import core.roles as roles
 import core.vision as vision
 
@@ -133,10 +134,11 @@ async def resolve(bot, user_id: int, caption: str | None, kind: str, photo_path:
         f"RASMDAGI MATN (OCR): {ocr or '(yo`q yoki o`qib bo`lmadi)'}"
     )
     try:
-        result = await ai.chat(
-            messages=[{"role": "system", "content": _SYSTEM}, {"role": "user", "content": user_msg}],
-            tools=None, user_id=user_id,
-        )
+        with token_usage.scope(chat_id=user_id, chat_type="private", user_id=user_id, purpose="story_caption"):
+            result = await ai.chat(
+                messages=[{"role": "system", "content": _SYSTEM}, {"role": "user", "content": user_msg}],
+                tools=None, user_id=user_id,
+            )
         await roles.register_request(bot, user_id)
         raw = result["response"].choices[0].message.content
     except Exception as e:  # noqa: BLE001

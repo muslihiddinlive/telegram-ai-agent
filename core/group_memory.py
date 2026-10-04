@@ -19,6 +19,7 @@ import time
 
 import core.tgdb as tgdb
 import core.history_summarizer as history_summarizer
+import core.token_usage as token_usage
 import core.nicknames as nicknames
 
 logger = logging.getLogger("group_memory")
@@ -123,7 +124,8 @@ async def maybe_fold(bot, chat_id: int, thread_id: int | None):
         return
     overflow = mem["log"][: len(mem["log"]) - MAX_LOG]
     mem["log"] = mem["log"][len(overflow):]
-    mem["summary"] = await history_summarizer.summarize(mem["summary"], _as_messages(overflow))
+    with token_usage.scope(chat_id=chat_id, chat_type="supergroup", purpose="summary"):
+        mem["summary"] = await history_summarizer.summarize(mem["summary"], _as_messages(overflow))
     await tgdb.save(bot)
 
 

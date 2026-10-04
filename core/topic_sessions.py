@@ -14,6 +14,7 @@ thread_id = None bo'lsa — "General" (topic tashqarisidagi asosiy chat).
 from aiogram import Bot
 import core.tgdb as tgdb
 import core.history_summarizer as history_summarizer
+import core.token_usage as token_usage
 
 MAX_HISTORY = 50  # oxirida SO'Z-MA-SO'Z ushlab turiladigan "yaqin" xabarlar soni
 SUMMARIZE_BATCH = 10  # shuncha ORTIQCHA xabar yig'ilgach, BIR YO'LA (kamroq AI-chaqiruv
@@ -54,7 +55,8 @@ async def append_and_save(bot: Bot, user_id: int, thread_id: int | None, role: s
     if len(session["history"]) > MAX_HISTORY + SUMMARIZE_BATCH:
         overflow = session["history"][:SUMMARIZE_BATCH]
         session["history"] = session["history"][SUMMARIZE_BATCH:]
-        session["summary"] = await history_summarizer.summarize(session["summary"], overflow)
+        with token_usage.scope(purpose="summary"):
+            session["summary"] = await history_summarizer.summarize(session["summary"], overflow)
 
     await tgdb.save(bot)
 

@@ -11,6 +11,7 @@ from aiogram.types import ReactionTypeEmoji
 
 import core.tgdb as tgdb
 from core.ai_rotator import ai
+import core.token_usage as token_usage
 
 logger = logging.getLogger("ai_reaction")
 
@@ -61,10 +62,11 @@ async def maybe_react(bot, chat_id: int, message_id: int, text: str, user_id: in
     if len(text.split()) < MIN_WORDS:
         return
     try:
-        result = await ai.chat(
-            messages=[{"role": "system", "content": _SYSTEM}, {"role": "user", "content": text[:500]}],
-            tools=None, user_id=user_id,
-        )
+        with token_usage.scope(chat_id=chat_id, chat_type="supergroup", user_id=user_id, purpose="reaction"):
+            result = await ai.chat(
+                messages=[{"role": "system", "content": _SYSTEM}, {"role": "user", "content": text[:500]}],
+                tools=None, user_id=user_id,
+            )
         emoji = _parse_emoji(result["response"].choices[0].message.content)
         if not emoji:
             return
