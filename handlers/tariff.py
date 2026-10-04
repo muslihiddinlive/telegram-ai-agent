@@ -26,11 +26,18 @@ def _feature_line(t: tariffs.Tier) -> str:
     bits = []
     if t.daily_limit:
         bits.append(f"{t.daily_limit} so'rov/kun")
-    if tariffs.FEATURE_VISION in t.features:
-        bits.append("rasm o'qish")
-    if tariffs.FEATURE_FILES in t.features:
-        bits.append("fayl/hujjat yaratish (docx, xlsx, pptx, pdf, taqdimot, diagramma)")
+    bits.append(f"fayl yaratish {t.files}/kun")
+    bits.append(f"rasm o'qish {t.vision}/kun")
+    bits.append("story izohi bor" if t.caption else "story izohisiz")
     return ", ".join(bits)
+
+
+def _usage_line(user_id: int) -> str:
+    parts = []
+    for kind, label in ((tariffs.KIND_FILES, "fayl"), (tariffs.KIND_VISION, "rasm")):
+        limit = tariffs.quota_limit(user_id, kind)
+        parts.append(f"{label}: {tariffs.quota_used(user_id, kind)}/{'∞' if limit is None else limit}")
+    return "Bugun ishlatildi — " + ", ".join(parts)
 
 
 def render_plans(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
@@ -41,12 +48,13 @@ def render_plans(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
         lines.append("Siz adminsiz: hamma imkoniyat doim ochiq, tarif kerak emas.\n")
     elif cur.id == "free":
         lines.append(f"Joriy tarif: <b>{free.name}</b> — {roles.effective_daily_limit(user_id)} so'rov/kun, "
-                     f"bugun qoldi: {roles.remaining_requests(user_id)}\n")
+                     f"bugun qoldi: {roles.remaining_requests(user_id)}\n{_usage_line(user_id)}\n")
     else:
         until = datetime.datetime.fromtimestamp(tariffs.until_ts(user_id)).strftime("%d.%m.%Y")
         lines.append(f"Joriy tarif: <b>{cur.name}</b> — {tariffs.days_left(user_id)} kun qoldi ({until} gacha)\n"
-                     f"Bugun qoldi: {roles.remaining_requests(user_id)} so'rov\n")
-    lines.append(f"🆓 <b>{free.name}</b> — kunlik limit (standart {roles.DEFAULT_DAILY_LIMIT}), rasm/fayl yo'q")
+                     f"Bugun qoldi: {roles.remaining_requests(user_id)} so'rov\n{_usage_line(user_id)}\n")
+    lines.append(f"🆓 <b>{free.name}</b> — kunlik so'rov limiti (standart {roles.DEFAULT_DAILY_LIMIT}), "
+                 f"fayl yaratish {free.files}/kun, rasm o'qish {free.vision}/kun, story izohisiz")
     rows = []
     for t in tariffs.paid_tiers():
         lines.append(f"{t.name} — {_feature_line(t)}\n   <b>{t.stars} ⭐ / {tariffs.DURATION_DAYS} kun</b>")
@@ -54,8 +62,10 @@ def render_plans(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
         if ok:
             label = f"{'🔄 Uzaytirish' if cur.id == t.id else '⭐ Olish'}: {t.name} — {t.stars} ⭐"
             rows.append([InlineKeyboardButton(text=label, callback_data=f"tariff:buy:{t.id}")])
-    lines.append("\nTo'lov Telegram Stars bilan, bot ichida. Muddat tugagach avtomatik Bepul tarifga qaytasiz. "
-                 "To'lov bo'yicha savol: /paysupport")
+    lines.append("\n«Fayl yaratish» — docx/xlsx/pptx/pdf/html/py va boshqa har qanday fayl, taqdimot, diagramma. "
+                 "Story qo'yish hamma uchun cheksiz, faqat story izohi (caption) Plus/Pro'da.\n"
+                 "To'lov Telegram Stars bilan, bot ichida. Muddat tugagach avtomatik Bepul tarifga qaytasiz "
+                 "(tugashidan oldin eslatma keladi). To'lov bo'yicha savol: /paysupport")
     return "\n".join(lines), (InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
 
 

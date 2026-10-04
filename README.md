@@ -188,25 +188,32 @@ shaxsiy kalit ulangan/ulanmagan userlar bir-biriga ta'sir qilmaydi).
 
 ## Tariflar (Telegram Stars) — `core/tariffs.py`, `handlers/tariff.py`
 Oylik (30 kun) obuna, to'lov bot ichida **Telegram Stars (XTR)** bilan; muddat tugagach avtomatik **Bepul** tarifga qaytadi.
+Hamma tarifda fayl/hujjat yaratish va rasm o'qish bor — farq **kunlik kvotada**:
 
-| Tarif | Kunlik limit | Rasm o'qish | Fayl/hujjat yaratish | Narx (standart) |
-|---|---|---|---|---|
-| Bepul | foydalanuvchining o'z limiti (standart 20) | yo'q | yo'q | — |
-| Plus ⭐ | 100 | ha | yo'q | 150 ⭐ |
-| Pro 💎 | 300 | ha | ha (docx/xlsx/pptx/pdf, taqdimot, diagramma) | 400 ⭐ |
+| Tarif | So'rov/kun | Fayl yaratish/kun | Rasm o'qish/kun | Story izohi (caption) | Narx (standart) |
+|---|---|---|---|---|---|
+| Bepul | foydalanuvchining o'z limiti (standart 20) | 4 | 2 | yo'q | — |
+| Plus ⭐ | 100 | 20 | 10 | ha | 150 ⭐ |
+| Pro 💎 | 300 | 100 | 70 | ha | 400 ⭐ |
 
-- Narx va limitlar Render env'da o'zgartiriladi: `TARIFF_PLUS_STARS`, `TARIFF_PRO_STARS`, `TARIFF_PLUS_LIMIT`, `TARIFF_PRO_LIMIT`.
-- Foydalanuvchi: shaxsiy chatda `/tarif` → tugma → Stars hisob-fakturasi → to'lov. Superadmin va adminlarda hamma imkoniyat doim ochiq.
-- Limit = max(foydalanuvchining o'z limiti, tarif limiti): admin qo'lda katta limit bergan bo'lsa u kamaymaydi.
-- Cheklov **serverda** majburlanadi: tarifda yo'q tool'lar AI'ga berilmaydi, AI nomini o'zi to'qib chaqirsa ham `dispatch` rad etadi;
-  rasm yuborish (Plus/Pro) va fayl/hujjat yuborish (Pro) tarifsiz foydalanuvchiga upsell xabari bilan to'xtatiladi.
-  Guruhda imkoniyat: yozgan odam YOKI hisobi to'layotgan odam (chatmode egasi) tarifi bo'yicha; VIP chatmode — hammasi ochiq.
+- **Superadmin hammasini tahrirlaydi:** `/panel → 💳 Tariflar → ✏️ <tarif>` — narx (⭐), so'rov/kun, fayl/kun, rasm/kun; Bepul uchun fayl/kun va rasm/kun.
+  O'zgarish DB'da (`db["tariff_config"]`) saqlanadi va hammaga **darhol** amal qiladi; `0` — o'sha imkoniyatni yopish; ✱ — standartdan o'zgartirilgan,
+  «↩️ Standartga qaytarish» bor. Mavjud obunachilarning muddati o'zgarmaydi; yangi narx faqat yangi hisob-fakturalarga (eskisi `pre_checkout`da rad etiladi).
+  Env (`TARIFF_*_STARS/LIMIT`) faqat boshlang'ich qiymat. Bepul tarifning so'rov limiti har bir foydalanuvchida alohida (Foydalanuvchilar → Limit).
+- **"Fayl yaratish"** = AI tool fayl chiqarsa (docx/xlsx/pptx/pdf/html/py/csv/rasm/arxiv, taqdimot, diagramma...): har bir shunday tool chaqiruvi 1 ta.
+  Faqat o'qish/qidirish tool'lari (`read_*`, `get_*`, `list_*`, `search_*`, `fetch_*`...) sanalmaydi. **"Rasm o'qish"** = `look_at_image` muvaffaqiyatli chaqiruvi.
+  Xato bilan tugagan tool kvotadan ayirilmaydi. Kvota tugasa tool **umuman ishga tushmaydi** (serverda, `ai_tools.dispatch`), AI foydalanuvchiga aytadi.
+  Kvota kun almashganda (Toshkent) yangilanadi. Admin va VIP chatmode — cheksiz. Guruhda kvota hisobi to'layotgan odamdan (chatmode egasi) ketadi.
+- **Story:** story qo'yish tarifga bog'liq emas (hamma uchun cheksiz); faqat story **izohi (caption)** Plus/Pro (yoki admin) uchun.
+  Bepul foydalanuvchi izoh yozsa, story izohsiz chiqadi va buning sababi ko'rsatiladi.
+- **Eslatma:** tarif tugashiga 3 kun va 1 kun qolganda hamda tugagach (7 kun ichida) foydalanuvchiga xabar boradi — har biri bir martadan,
+  uzaytirilsa yangidan hisoblanadi (fon vazifasi har 30 daqiqada, `core/scheduler.py`).
+- Foydalanuvchi: shaxsiy chatda `/tarif` → tugma → Stars hisob-fakturasi → to'lov (bugungi sarf ham ko'rsatiladi). Limit = max(foydalanuvchining o'z limiti, tarif limiti).
 - Xarid qoidalari: o'sha tarifni uzaytirish (+30 kun); yuqoriroqqa o'tish (30 kun hozirdan, qolgan kunlar kuymaydi — oldindan ogohlantiriladi);
-  faol yuqori tarif ustiga pastrog'ini sotib olib bo'lmaydi. To'lov idempotent (bir xil `charge_id` ikki marta hisoblanmaydi);
-  `pre_checkout`da narx/foydalanuvchi/valyuta qat'iy tekshiriladi.
+  faol yuqori tarif ustiga pastrog'ini sotib olib bo'lmaydi. To'lov idempotent (bir xil `charge_id` ikki marta hisoblanmaydi); `pre_checkout`da narx/foydalanuvchi/valyuta tekshiriladi.
 - Superadmin `/panel → 💳 Tariflar`: faol obunachilar va jami tushum; foydalanuvchi sahifasida: 🎁 qo'lda berish (30 kun), ❌ bekor qilish,
-  💸 oxirgi to'lovni **refund** qilish (Telegram `refundStarPayment`). `/paysupport` — foydalanuvchi murojaati superadminga boradi.
-- Hozircha yo'q: muddat tugashi haqida eslatma, story-izoh (`core/story_caption.py`) tarifga bog'lanmagan.
+  💸 oxirgi to'lovni **refund** qilish (Telegram `refundStarPayment`) va bugungi kvota sarfi. `/paysupport` — foydalanuvchi murojaati superadminga boradi.
+- Hozircha sanalmaydi: story izohi uchun vision (OCR/rasm tavsifi) va foydalanuvchi o'z API kalitini ulagan holatlar.
 
 ## Panel orqali xabar yuborish (`core/admin_messaging.py`)
 - **Bitta foydalanuvchiga** (superadmin va adminlar): `/panel → Foydalanuvchilar → <user> → ✉️ Xabar yozish`, so'ng matnni yozasiz.

@@ -20,8 +20,6 @@ from core.ai_rotator import ai
 from core.ai_tools import TOOLS, dispatch, get_user_notes, describe_tool_call
 import core.userbot as userbot
 import core.group_wipe as group_wipe
-import core.tariffs as tariffs
-from tools.file_tools import is_file_tool
 import core.userbot_tools as userbot_tools
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
@@ -238,19 +236,12 @@ async def handle_message(message: Message):
                                  "limitni oshirish uchun /tarif ni bosing.")
             return
 
-    # Tarif imkoniyatlari (rasm o'qish / fayl-hujjat): yozgan odam YOKI hisobi to'layotgan odam (chatmode egasi); VIP — hammasi
-    features = tariffs.features_for_request(user_id, requester_id_for_limit, vip=(charge_mode == "none"))
-    if has_media:
-        need = tariffs.FEATURE_VISION if message.photo else tariffs.FEATURE_FILES
-        if need not in features:
-            what = "Rasm yuborib AI'ga ko'rsatish" if need == tariffs.FEATURE_VISION else "Fayl/hujjat yuborish va yaratish"
-            plan = "Plus yoki Pro" if need == tariffs.FEATURE_VISION else "Pro"
-            await message.reply(f"🔒 {what} {plan} tarifida mavjud. Tariflar va narxlar: shaxsiy chatda /tarif")
-            return
-
     mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
     ctx = {
-        "features": features,
+        # Tarif kvotalari (fayl yaratish / rasm o'qish) — ai_tools.dispatch serverda majburlaydi. Hisob so'rov limiti bilan bir xil
+        # odamdan ketadi (guruhda chatmode egasi); VIP chatmode — cheksiz.
+        "quota_user": requester_id_for_limit,
+        "quota_unlimited": charge_mode == "none",
         "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
         "is_group": is_group, "mod": mod_access, "message_id": message.message_id,
         # xabarda AYNAN BITTA muddat bo'lsa (masalan "14 daqiqaga") — moderatsiya tool'lariga majburan beriladi
@@ -297,15 +288,6 @@ async def handle_message(message: Message):
         system_prompt += f"\n\n{await user_profile.basic_info_line(message.bot, message)}"
         # AI'ning "soati": hozirgi sana/vaqt (aks holda model bugungi sanani bilmaydi)
         system_prompt += f"\n\n{clock.time_context_line()}"
-        missing = []
-        if tariffs.FEATURE_FILES not in features:
-            missing.append("fayl/hujjat/taqdimot/diagramma yaratish va o'qish (Pro tarifida)")
-        if tariffs.FEATURE_VISION not in features:
-            missing.append("rasmni ko'rib tahlil qilish (Plus yoki Pro tarifida)")
-        if missing:
-            system_prompt += ("\n\nTARIF: bu foydalanuvchida hozir quyidagilar yo'q — " + "; ".join(missing) + ". Ularni bajara olmaysiz; "
-                              "so'ralsa muloyim ayting va tariflarni ko'rish uchun shaxsiy chatda /tarif buyrug'ini taklif qiling. "
-                              "Boshqa hamma narsada odatdagidek yordam bering.")
         if mod_access is not None:
             system_prompt += f"\n\n{moderation.SYSTEM_HINT}{await moderation.context_line(message.bot, message)}"
         if is_group:
@@ -356,7 +338,7 @@ async def handle_message(message: Message):
     # DIQQAT: faqat JORIY xabarni emas, so'nggi tarixni ham tekshiramiz — aks holda
     # bot "kimning ID'sini bilmoqchisiz?" deb so'ragach, foydalanuvchi shunchaki
     # ID'ni yuborsa (o'zida "mute"/"ban" so'zi bo'lmaydi), tool yana yo'qolib qolardi.
-    active_tools = tariffs.filter_tools(TOOLS, features, is_file_tool)  # tarifda yo'q tool'lar AI'ga berilmaydi
+    active_tools = TOOLS
     if userbot.is_enabled():  # schema'lar faqat userbot ulangan bo'lsa (behuda token yemasin)
         active_tools = active_tools + userbot_tools.SCHEMAS
     if mod_access is not None:

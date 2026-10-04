@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import admin.panel as panel
+import core.pending_input as pending_input
 import core.ai_tools as ai_tools
 import core.roles as roles
 import core.tariffs as tariffs
@@ -24,6 +25,7 @@ def run(coro):
 def env(monkeypatch):
     data = {"admins": {str(ADMIN): {"name": "adm"}}, "users": {}, "subscriptions": {}}
     monkeypatch.setattr(tgdb, "_cache", data)
+    pending_input._pending.clear()
     monkeypatch.setattr(roles.config, "SUPERADMIN_ID", SUPER)
     monkeypatch.setattr(th.config, "SUPERADMIN_ID", SUPER)
 
@@ -69,58 +71,410 @@ def test_quota_check_uses_tier_limit_and_reverts_after_expiry():
     assert not roles.can_make_request(U) and not roles.can_use_in_group(U)
 
 
-# ── imkoniyatlar ─────────────────────────────────────────────────────────
+# ── tarif qiymatlari va kvotalar ─────────────────────────────────────────
 
-def test_features_by_tier_staff_vip_and_payer():
-    assert tariffs.features_of(U) == frozenset()
-    run(tariffs.grant(None, U, "plus"))
-    assert tariffs.features_of(U) == {tariffs.FEATURE_VISION}
-    run(tariffs.grant(None, U, "pro"))
-    assert tariffs.features_of(U) == tariffs.ALL_FEATURES
-    assert tariffs.features_of(SUPER) == tariffs.features_of(ADMIN) == tariffs.ALL_FEATURES
-    # guruh: yozuvchi YOKI to'lovchi (chatmode egasi); VIP — hammasi
-    assert tariffs.features_for_request(77, U) == tariffs.ALL_FEATURES        # to'lovchi Pro
-    assert tariffs.features_for_request(U, 77) == tariffs.ALL_FEATURES        # yozuvchi Pro
-    assert tariffs.features_for_request(77, 78) == frozenset()
-    assert tariffs.features_for_request(77, 78, vip=True) == tariffs.ALL_FEATURES
+def test_default_tier_values_match_the_spec():
+    t = tariffs.tiers()
+    assert (t["free"].files, t["free"].vision, t["free"].caption) == (4, 2, False)
+    assert (t["plus"].files, t["plus"].vision, t["plus"].caption, t["plus"].daily_limit) == (20, 10, True, 100)
+    assert (t["pro"].files, t["pro"].vision, t["pro"].caption, t["pro"].daily_limit) == (100, 70, True, 300)
 
 
-def test_filter_tools_hides_unavailable_tools():
-    tools = [{"function": {"name": n}} for n in ("remember_note", "look_at_image", "create_presentation", "create_diagram",
-                                                 "create_docx", "set_my_nickname")]
-    is_file = lambda n: n == "create_docx"
-    names = lambda feats: [t["function"]["name"] for t in tariffs.filter_tools(tools, feats, is_file)]
-    assert names(frozenset()) == ["remember_note", "set_my_nickname"]
-    assert names({tariffs.FEATURE_VISION}) == ["remember_note", "look_at_image", "set_my_nickname"]
-    assert len(names(tariffs.ALL_FEATURES)) == 6
+@pytest.mark.parametrize("name,is_file,expected", [
+    ("look_at_image", False, "vision"), ("create_presentation", False, "files"), ("create_diagram", False, "files"),
+    ("create_docx", True, "files"), ("create_code_file", True, "files"), ("replace_docx_text", True, "files"),
+    ("read_docx_text", True, None), ("get_file_info", True, None), ("list_directory_files", True, None),
+    ("search_in_files", True, None), ("scrape_page_text", True, None), ("fetch_url_text", True, None),
+    ("remember_note", False, None), ("search_web", False, None), ("react_to_message", False, None),
+])
+def test_quota_kind_classification(name, is_file, expected):
+    assert tariffs.quota_kind(name, is_file) == expected
 
 
-def test_real_tool_catalog_is_split_as_documented():
+def test_real_catalog_every_tool_is_classified_sanely():
     from tools.file_tools import FILE_TOOLS, is_file_tool
-    free = {t["function"]["name"] for t in tariffs.filter_tools(ai_tools.TOOLS, frozenset(), is_file_tool)}
-    assert not free & {"look_at_image", "create_presentation", "create_diagram", "create_docx", "create_pdf", "read_any_file"}
-    assert "remember_note" in free and "set_my_nickname" in free
-    assert len(tariffs.filter_tools(ai_tools.TOOLS, tariffs.ALL_FEATURES, is_file_tool)) == len(ai_tools.TOOLS)
+    kinds = {t["function"]["name"]: tariffs.quota_kind(t["function"]["name"], is_file_tool(t["function"]["name"]))
+             for t in ai_tools.TOOLS}
+    assert kinds["look_at_image"] == "vision" and kinds["create_presentation"] == "files" and kinds["remember_note"] is None
+    creators = [n for n, k in kinds.items() if k == "files"]
+    assert len(creators) > 15 and all(not n.startswith(tariffs.READONLY_PREFIXES) for n in creators)
     assert len(FILE_TOOLS) > 30
 
 
-def test_dispatch_enforces_features_even_if_ai_invents_the_call(monkeypatch):
-    called = []
+def fresh_user(uid=U):
+    return tgdb.get()["users"].setdefault(str(uid), {"role": "approved", "daily_limit": 20, "requests_today": 0,
+                                                     "last_reset": roles.today_str(), "name": None, "username": None})
 
-    async def stub(user_id, args, ctx):
-        called.append(1)
-        return {"ok": True}
 
-    monkeypatch.setitem(ai_tools.DISPATCH, "look_at_image", stub)
-    monkeypatch.setitem(ai_tools.DISPATCH, "create_diagram", stub)
-    deny = run(ai_tools.dispatch("look_at_image", U, {}, {"features": frozenset()}))
-    assert deny["tarif_kerak"] == "vision" and called == []
-    deny = run(ai_tools.dispatch("create_diagram", U, {}, {"features": {tariffs.FEATURE_VISION}}))
-    assert deny["tarif_kerak"] == "files" and called == []
-    assert run(ai_tools.dispatch("look_at_image", U, {}, {"features": {tariffs.FEATURE_VISION}})) == {"ok": True}
-    assert run(ai_tools.dispatch("create_diagram", U, {}, {"features": tariffs.ALL_FEATURES})) == {"ok": True}
-    res = run(ai_tools.dispatch("create_docx", U, {}, {"features": frozenset()}))      # fayl-toolkit ham to'siladi
-    assert res["tarif_kerak"] == "files"
+def test_quota_limits_follow_tier_expiry_and_staff():
+    assert tariffs.quota_limit(U, "files") == 4 and tariffs.quota_limit(U, "vision") == 2
+    run(tariffs.grant(None, U, "plus"))
+    assert (tariffs.quota_limit(U, "files"), tariffs.quota_limit(U, "vision")) == (20, 10)
+    run(tariffs.grant(None, U, "pro"))
+    assert (tariffs.quota_limit(U, "files"), tariffs.quota_limit(U, "vision")) == (100, 70)
+    tgdb.get()["subscriptions"][str(U)]["until"] = 0                    # tugadi -> Bepul kvotasi
+    assert tariffs.quota_limit(U, "files") == 4
+    assert tariffs.quota_limit(SUPER, "files") is None and tariffs.quota_limit(ADMIN, "vision") is None   # admin cheksiz
+
+
+def test_consume_counts_and_resets_next_day():
+    fresh_user()
+    for _ in range(3):
+        run(tariffs.consume(None, U, "files"))
+    run(tariffs.consume(None, U, "vision"))
+    assert (tariffs.quota_used(U, "files"), tariffs.quota_left(U, "files"), tariffs.quota_used(U, "vision")) == (3, 1, 1)
+    tgdb.get()["users"][str(U)]["last_reset"] = "2000-01-01"            # kecha edi
+    assert tariffs.quota_used(U, "files") == 0 and tariffs.quota_left(U, "files") == 4
+    run(tariffs.consume(None, U, "files"))                              # yangi kun hisobi 0 dan boshlanadi
+    assert tariffs.quota_used(U, "files") == 1
+
+
+def test_staff_consume_is_noop():
+    run(tariffs.consume(None, SUPER, "files"))
+    assert str(SUPER) not in tgdb.get()["users"] or tgdb.get()["users"][str(SUPER)].get("files_today", 0) == 0
+
+
+# ── dispatch: kvotani serverda majburlash ────────────────────────────────
+
+def stub_tools(monkeypatch, tmp_path):
+    calls = []
+    f = tmp_path / "out.docx"
+    f.write_text("x")
+
+    async def make_file(user_id, args, ctx):
+        calls.append("file")
+        return {"status": "ok", "file_path": str(f)}
+
+    async def broken(user_id, args, ctx):
+        calls.append("broken")
+        return {"error": "xato"}
+
+    async def see(user_id, args, ctx):
+        calls.append("see")
+        return {"description": "rasm"}
+
+    async def reader(user_id, args, ctx):
+        calls.append("read")
+        return {"text": "matn"}
+
+    monkeypatch.setitem(ai_tools.DISPATCH, "create_diagram", make_file)
+    monkeypatch.setitem(ai_tools.DISPATCH, "create_presentation", broken)
+    monkeypatch.setitem(ai_tools.DISPATCH, "look_at_image", see)
+    monkeypatch.setitem(ai_tools.DISPATCH, "remember_note", reader)
+    return calls
+
+
+def ctx_for(uid=U, unlimited=False):
+    return {"quota_user": uid, "quota_unlimited": unlimited, "bot": None}
+
+
+def test_free_user_gets_4_files_then_denied_without_running_tool(monkeypatch, tmp_path):
+    calls = stub_tools(monkeypatch, tmp_path)
+    fresh_user()
+    for _ in range(4):
+        assert "error" not in run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))
+    res = run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))
+    assert res["kvota_tugadi"] == "files" and "4/4" in res["error"] and "/tarif" in res["error"]
+    assert calls.count("file") == 4                                      # 5-chi marta tool UMUMAN ishga tushmadi
+    assert tariffs.quota_used(U, "files") == 4
+
+
+def test_failed_tool_does_not_consume_quota(monkeypatch, tmp_path):
+    calls = stub_tools(monkeypatch, tmp_path)
+    fresh_user()
+    for _ in range(6):
+        assert run(ai_tools.dispatch("create_presentation", U, {}, ctx_for())) == {"error": "xato"}
+    assert tariffs.quota_used(U, "files") == 0 and calls.count("broken") == 6
+
+
+def test_vision_quota_2_free_10_plus_70_pro(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user()
+    for tier, n in (("free", 2), ("plus", 10), ("pro", 70)):
+        fresh_user(); tgdb.get()["users"][str(U)]["vision_today"] = 0
+        if tier != "free":
+            run(tariffs.grant(None, U, tier))
+        for i in range(n):
+            assert "error" not in run(ai_tools.dispatch("look_at_image", U, {}, ctx_for())), (tier, i)
+        assert run(ai_tools.dispatch("look_at_image", U, {}, ctx_for()))["kvota_tugadi"] == "vision"
+
+
+def test_files_quota_20_plus_100_pro(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    for tier, n in (("plus", 20), ("pro", 100)):
+        fresh_user(); tgdb.get()["users"][str(U)]["files_today"] = 0
+        run(tariffs.grant(None, U, tier))
+        for _ in range(n):
+            assert "error" not in run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))
+        assert run(ai_tools.dispatch("create_diagram", U, {}, ctx_for()))["kvota_tugadi"] == "files"
+
+
+def test_readonly_tools_and_other_tools_unaffected_when_quota_exhausted(monkeypatch, tmp_path):
+    calls = stub_tools(monkeypatch, tmp_path)
+    fresh_user()["files_today"] = 4
+    tgdb.get()["users"][str(U)]["vision_today"] = 2
+    assert run(ai_tools.dispatch("remember_note", U, {}, ctx_for())) == {"text": "matn"}
+    assert calls == ["read"]
+
+
+def test_unlimited_for_vip_and_staff_and_no_ctx(monkeypatch, tmp_path):
+    calls = stub_tools(monkeypatch, tmp_path)
+    fresh_user()["files_today"] = 999
+    assert "error" not in run(ai_tools.dispatch("create_diagram", U, {}, ctx_for(unlimited=True)))   # VIP chatmode
+    assert "error" not in run(ai_tools.dispatch("create_diagram", SUPER, {}, ctx_for(SUPER)))        # admin
+    assert "error" not in run(ai_tools.dispatch("create_diagram", U, {}, {"bot": None}))             # ichki chaqiruv (quota_user yo'q)
+    assert calls.count("file") == 3
+
+
+def test_quota_charged_to_payer_not_writer(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(U)["files_today"] = 4                                      # to'lovchi (chatmode egasi) kvotasi tugagan
+    fresh_user(8)
+    res = run(ai_tools.dispatch("create_diagram", 8, {}, {"quota_user": U, "quota_unlimited": False, "bot": None}))
+    assert res["kvota_tugadi"] == "files"
+    ok = run(ai_tools.dispatch("create_diagram", U, {}, {"quota_user": 8, "quota_unlimited": False, "bot": None}))
+    assert "error" not in ok and tariffs.quota_used(8, "files") == 1 and tariffs.quota_used(U, "files") == 4
+
+
+# ── superadmin narx va limitlarni tahrirlaydi ────────────────────────────
+
+@pytest.mark.parametrize("tier,field,raw,why", [
+    ("plus", "files", "abc", "son"), ("plus", "files", "-5", "son"), ("plus", "files", "1.5", "son"),
+    ("plus", "files", "100001", "gacha"), ("plus", "stars", "0", "gacha"), ("plus", "stars", "10001", "gacha"),
+    ("free", "stars", "100", "Bepul"), ("free", "daily_limit", "50", "Bepul"),
+    ("gold", "files", "5", "tarif yo'q"), ("plus", "nope", "5", "maydon yo'q"),
+])
+def test_set_config_rejects_bad_input(tier, field, raw, why):
+    ok, msg = run(tariffs.set_config(None, tier, field, raw))
+    assert not ok and why in msg and "tariff_config" not in tgdb.get()
+
+
+def test_set_config_applies_live_to_price_limits_and_quotas():
+    assert run(tariffs.set_config(None, "plus", "stars", "99"))[0]
+    assert run(tariffs.set_config(None, "plus", "files", "33"))[0]
+    assert run(tariffs.set_config(None, "plus", "vision", "0"))[0]               # 0 — o'chirish
+    assert run(tariffs.set_config(None, "plus", "daily_limit", "250"))[0]
+    assert run(tariffs.set_config(None, "free", "files", "7"))[0]
+    t = tariffs.tiers()
+    assert (t["plus"].stars, t["plus"].files, t["plus"].vision, t["plus"].daily_limit) == (99, 33, 0, 250)
+    assert t["free"].files == 7 and t["pro"].files == 100                          # boshqa tarif tegilmagan
+    run(tariffs.grant(None, U, "plus"))
+    assert tariffs.quota_limit(U, "files") == 33 and tariffs.quota_limit(U, "vision") == 0
+    assert not tariffs.quota_available(U, "vision")                                # 0 — butunlay yopiq
+    assert roles.effective_daily_limit(U) == 250
+
+
+def test_new_price_applies_to_new_invoices_but_not_existing_subscription():
+    buy(U, "plus", "c1")
+    until = tariffs.until_ts(U)
+    run(tariffs.set_config(None, "plus", "stars", "500"))
+    assert tariffs.until_ts(U) == until and tariffs.active_tier(U, NOW + DAY).id == "plus"
+    old_price = tariffs.check_payment(tariffs.make_payload(6, "plus"), 6, "XTR", 150, strict_price=True)
+    assert old_price[0] is None and "Narx o'zgargan" in old_price[1]               # eski narxdagi hisob-faktura rad etiladi
+    assert tariffs.check_payment(tariffs.make_payload(6, "plus"), 6, "XTR", 500, strict_price=True)[0] == "plus"
+
+
+def test_reset_config_restores_defaults():
+    run(tariffs.set_config(None, "pro", "files", "5"))
+    assert run(tariffs.reset_config(None, "pro")) is True and tariffs.tiers()["pro"].files == 100
+    assert run(tariffs.reset_config(None, "pro")) is False
+
+
+def test_garbage_in_stored_config_is_ignored():
+    tgdb.get()["tariff_config"] = {"plus": {"files": "evil", "stars": 77, "name": "Hack", "rank": 9}}
+    t = tariffs.tiers()["plus"]
+    assert t.files == 20 and t.stars == 77 and t.name == "Plus ⭐" and t.rank == 1  # faqat ruxsat etilgan butun maydonlar
+
+
+# ── story izohi (caption) ────────────────────────────────────────────────
+
+def test_caption_requires_plus_pro_or_staff():
+    assert tariffs.can_caption(U) is False
+    run(tariffs.grant(None, U, "plus"))
+    assert tariffs.can_caption(U) is True
+    tgdb.get()["subscriptions"][str(U)]["until"] = 0
+    assert tariffs.can_caption(U) is False
+    assert tariffs.can_caption(SUPER) and tariffs.can_caption(ADMIN)
+
+
+def test_profile_story_caption_locked_for_free_but_posting_unlimited(monkeypatch):
+    import handlers.profile as profile
+    import core.story_caption as story_caption
+    resolved = []
+
+    async def fake_resolve(bot, uid, caption, kind, photo_path=None, cache=None):
+        resolved.append(caption)
+        return caption, story_caption.LITERAL, None
+
+    monkeypatch.setattr(story_caption, "resolve", fake_resolve)
+    profile._waiting[U] = {"step": "period", "orig_caption": "Bugungi kun!", "orig_entities": None, "kind": "photo",
+                           "src": "x", "path": "x", "t": 0}
+    run(profile._apply_caption(None, U))
+    st = profile._waiting[U]
+    assert resolved == [] and st["caption"] is None and st["mode"] == story_caption.NONE and st["caption_locked"]
+    text, kb = profile._period_view(st)
+    assert "izohsiz" in text and "Plus yoki Pro" in text and "profile:post:24" in str(kb)   # joylash tugmasi bor — story baribir ketadi
+    # izoh yozmagan bepul foydalanuvchi — oddiy oqim (limitga tegmaydi)
+    profile._waiting[U] = {"step": "period", "orig_caption": None, "orig_entities": None, "kind": "photo", "src": "x", "path": "x", "t": 0}
+    run(profile._apply_caption(None, U))
+    assert resolved == [None] and not profile._waiting[U].get("caption_locked")
+    # Plus — izoh ishlaydi
+    run(tariffs.grant(None, U, "plus"))
+    profile._waiting[U] = {"step": "period", "orig_caption": "Bugungi kun!", "orig_entities": None, "kind": "photo", "src": "x", "path": "x", "t": 0}
+    run(profile._apply_caption(None, U))
+    assert resolved[-1] == "Bugungi kun!" and profile._waiting[U]["caption"] == "Bugungi kun!"
+    profile._waiting.pop(U, None)
+
+
+# ── muddat tugashi haqida eslatma ────────────────────────────────────────
+
+class ReminderBot:
+    def __init__(self, fail=()):
+        self.sent, self.fail = [], set(fail)
+
+    async def send_message(self, chat_id, text, **kw):
+        if chat_id in self.fail:
+            raise RuntimeError("blocked")
+        self.sent.append((chat_id, text))
+
+
+def test_reminders_d3_d1_end_each_once():
+    buy(U, "plus", "c1")                                                  # until = NOW + 30 kun
+    until = tariffs.until_ts(U)
+    bot = ReminderBot()
+    at = lambda days_left: until - days_left * DAY
+    assert run(tariffs.send_reminders(bot, now=at(10))) == 0              # hali erta
+    assert run(tariffs.send_reminders(bot, now=at(2.9))) == 1 and "3 kundan kam" in bot.sent[-1][1]
+    assert run(tariffs.send_reminders(bot, now=at(2.0))) == 0             # d3 qayta yuborilmaydi
+    assert run(tariffs.send_reminders(bot, now=at(0.9))) == 1 and "1 kundan kam" in bot.sent[-1][1]
+    assert run(tariffs.send_reminders(bot, now=at(0.5))) == 0
+    assert run(tariffs.send_reminders(bot, now=until + 3600)) == 1 and "tugadi" in bot.sent[-1][1]
+    assert run(tariffs.send_reminders(bot, now=until + 7200)) == 0
+    assert [c for c, _ in bot.sent] == [U, U, U] and all("/tarif" in t for _, t in bot.sent)
+
+
+def test_one_day_left_skips_d3_and_renewal_resets_reminders():
+    buy(U, "plus", "c1")
+    until = tariffs.until_ts(U)
+    bot = ReminderBot()
+    assert run(tariffs.send_reminders(bot, now=until - 0.5 * DAY)) == 1 and "1 kundan kam" in bot.sent[-1][1]
+    assert run(tariffs.send_reminders(bot, now=until - 0.4 * DAY)) == 0   # d3 ham yuborilmaydi (d1 allaqachon bor)
+    buy(U, "plus", "c2", now=until - 0.3 * DAY)                           # uzaytirdi -> muddat 30 kun surildi
+    new_until = tariffs.until_ts(U)
+    assert new_until > until + 29 * DAY and tariffs.due_reminders(now=until) == []
+    assert run(tariffs.send_reminders(bot, now=new_until - 2 * DAY)) == 1  # yangi muddat uchun eslatma yana ishlaydi
+
+
+def test_no_reminders_for_free_revoked_refunded_or_long_expired():
+    assert tariffs.due_reminders(NOW) == []
+    buy(U, "plus", "c1")
+    run(tariffs.revoke(None, U))
+    assert tariffs.due_reminders(NOW + 29 * DAY) == []                    # bekor qilingan (until=0)
+    buy(6, "pro", "c2")
+    until = tariffs.until_ts(6)
+    assert tariffs.due_reminders(until + 8 * DAY) == []                   # 7 kundan oshgan eski muddat — bezovta qilmaymiz
+    assert tariffs.due_reminders(until + 1 * DAY) == [(6, "end", until)]
+
+
+def test_blocked_user_is_marked_so_it_is_not_retried_forever():
+    buy(U, "plus", "c1")
+    until = tariffs.until_ts(U)
+    bot = ReminderBot(fail={U})
+    assert run(tariffs.send_reminders(bot, now=until - 2 * DAY)) == 0 and bot.sent == []
+    assert tariffs.due_reminders(until - 2 * DAY) == []
+
+
+def test_scheduler_runs_reminders_job(monkeypatch):
+    import core.scheduler as scheduler
+    calls = []
+
+    async def fake_send(bot):
+        calls.append(1)
+
+    monkeypatch.setattr(scheduler.tariffs, "send_reminders", fake_send)
+
+    async def one_cycle():
+        async def stop(_):
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(scheduler.asyncio, "sleep", stop)
+        scheduler._last_tariff_check = 0.0
+        with pytest.raises(asyncio.CancelledError):
+            await scheduler.run_forever(None)
+
+    run(one_cycle())
+    assert calls == [1]
+
+
+# ── panel: sozlamalarni tahrirlash ───────────────────────────────────────
+
+def test_panel_tariff_config_is_superadmin_only():
+    for data, fn in (("panel:tcfg:plus", panel.tariff_config_open), ("panel:tset:plus:files", panel.tariff_config_ask)):
+        c = pcall(ADMIN, data)
+        run(fn(c))
+        assert c.alerts == [("Faqat superadmin", True)]
+    c = pcall(ADMIN, "panel:treset:plus")
+    run(panel.tariff_config_reset(c, FakeBot()))
+    assert c.alerts == [("Faqat superadmin", True)]
+    assert pending_input.get(ADMIN) is None
+
+
+def test_panel_config_flow_end_to_end():
+    import handlers.pending_text as pt
+    c = pcall(SUPER, "panel:tariffs")
+    run(panel.show_tariffs(c))
+    kb_data = [b.callback_data for r in c.edits[0][1].inline_keyboard for b in r]
+    assert {"panel:tcfg:free", "panel:tcfg:plus", "panel:tcfg:pro"} <= set(kb_data)
+
+    c = pcall(SUPER, "panel:tcfg:plus")
+    run(panel.tariff_config_open(c))
+    buttons_ = [b.callback_data for r in c.edits[0][1].inline_keyboard for b in r]
+    assert {"panel:tset:plus:stars", "panel:tset:plus:daily_limit", "panel:tset:plus:files", "panel:tset:plus:vision"} <= set(buttons_)
+    c = pcall(SUPER, "panel:tcfg:free")
+    run(panel.tariff_config_open(c))
+    free_buttons = [b.callback_data for r in c.edits[0][1].inline_keyboard for b in r]
+    assert "panel:tset:free:stars" not in free_buttons and "panel:tset:free:files" in free_buttons
+
+    ask = pcall(SUPER, "panel:tset:plus:files")
+    ask.message.answer = lambda *a, **k: _noop()
+    run(panel.tariff_config_ask(ask))
+    assert pending_input.get(SUPER) == {"action": "tariff_value", "data": {"tier": "plus", "field": "files"}}
+
+    bad = make_msg(SUPER, text="abc")
+    run(pt.handle_pending(bad))
+    assert "Faqat butun" in bad.out.answers[0][0] and pending_input.get(SUPER) is not None      # qayta so'raydi
+    good = make_msg(SUPER, text="42")
+    good.bot = None
+    run(pt.handle_pending(good))
+    assert tariffs.tiers()["plus"].files == 42 and pending_input.get(SUPER) is None and "42" in good.out.answers[0][0]
+
+    run(panel.tariff_config_reset(pcall(SUPER, "panel:treset:plus"), FakeBot()))
+    assert tariffs.tiers()["plus"].files == 20
+
+
+async def _noop():
+    return None
+
+
+def test_pending_tariff_value_rejects_non_superadmin_and_supports_cancel():
+    import handlers.pending_text as pt
+    pending_input.set(ADMIN, "tariff_value", {"tier": "plus", "field": "files"})
+    m = make_msg(ADMIN, text="9999")
+    run(pt.handle_pending(m))
+    assert "Ruxsat yo'q" in m.out.answers[0][0] and tariffs.tiers()["plus"].files == 20 and pending_input.get(ADMIN) is None
+    pending_input.set(SUPER, "tariff_value", {"tier": "plus", "field": "files"})
+    m = make_msg(SUPER, text="/panel")
+    run(pt.handle_pending(m))
+    assert "Bekor" in m.out.answers[0][0] and tariffs.tiers()["plus"].files == 20
+
+
+def test_user_detail_and_tarif_page_show_usage():
+    fresh_user()["files_today"] = 3
+    m = make_msg(U)
+    run(th.tarif_cmd(m))
+    text = m.out.answers[0][0]
+    assert "fayl: 3/4" in text and "rasm: 0/2" in text and "fayl yaratish 20/kun" in text and "fayl yaratish 100/kun" in text
+    assert "story izohi" in text
 
 
 # ── xarid qoidalari va to'lovni tekshirish ───────────────────────────────

@@ -164,6 +164,8 @@ def _limit_of(user_id: int, rec: dict) -> int:
 def _reset_if_new_day(rec: dict):
     if rec.get("last_reset") != today_str():
         rec["requests_today"] = 0
+        rec["files_today"] = 0   # tarif kvotalari (core/tariffs.py): fayl yaratish / rasm o'qish — kunlik
+        rec["vision_today"] = 0
         rec["last_reset"] = today_str()
 
 

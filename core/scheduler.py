@@ -8,13 +8,18 @@ yuborilishi mumkin — bu xavfsiz tomonga xato, takror yuborish o'rniga o'tkazib
 import asyncio
 import logging
 
+import time
+
 import core.auto_top as auto_top
 import core.clock as clock
+import core.tariffs as tariffs
 
 logger = logging.getLogger("scheduler")
 
 CHECK_INTERVAL = 60
+TARIFF_REMINDER_EVERY = 1800  # tarif muddati eslatmalarini har 30 daqiqada tekshiramiz
 _last_top_date: str | None = None
+_last_tariff_check = 0.0
 
 
 async def _run_top_faollar(bot):
@@ -29,9 +34,12 @@ async def _run_top_faollar(bot):
 
 
 async def run_forever(bot):
-    global _last_top_date
+    global _last_top_date, _last_tariff_check
     while True:
         try:
+            if time.time() - _last_tariff_check >= TARIFF_REMINDER_EVERY:
+                _last_tariff_check = time.time()
+                await tariffs.send_reminders(bot)
             now = clock.now()
             today = now.strftime("%Y-%m-%d")
             if now.hour == 20 and _last_top_date != today:

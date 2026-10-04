@@ -835,19 +835,26 @@ def _unstringify_json(value):
 
 
 async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
+    """Tool'ni bajaradi; fayl yaratish / rasm o'qish uchun TARIF KVOTASINI serverda majburlaydi (core/tariffs.py):
+    kvota tugagan bo'lsa tool BAJARILMAYDI; muvaffaqiyatli bajarilgandagina 1 ta sanaladi. ctx["quota_user"] —
+    hisobi ketadigan odam (guruhda chatmode egasi), ctx["quota_unlimited"] — VIP chatmode."""
+    q_user = ctx.get("quota_user")
+    kind = tariffs.quota_kind(name, is_file_tool(name)) if q_user is not None and not ctx.get("quota_unlimited") else None
+    if kind and not tariffs.quota_available(q_user, kind):
+        return {"error": tariffs.quota_denied_text(q_user, kind), "kvota_tugadi": kind}
+    result = await _dispatch_inner(name, user_id, args, ctx)
+    if kind and tariffs.counts_as_use(kind, result):
+        await tariffs.consume(ctx.get("bot"), q_user, kind)
+    return result
+
+
+async def _dispatch_inner(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     # Yuqoridagi izohga qarang — AI ba'zan array/object'ni JSON-string
     # sifatida yuboradi, buni avtomatik tuzatamiz.
     args = _unstringify_json(args)
     # DIQQAT: tartib MUHIM — avval O'ZIMIZNING DISPATCH tekshiriladi, shu
     # bilan "search_web" kabi nomlarni ms-file-toolkit versiyasidan O'ZIMIZ
     # yozgan (yaxshilangan) versiya bilan ALMASHTIRISH imkoni bo'ladi.
-    # Tarif cheklovi SERVERDA majburlanadi: AI'ga ruxsatsiz tool berilmaydi, lekin u nomini o'zi to'qib chaqirsa ham o'tmaydi.
-    feats = ctx.get("features")
-    if feats is not None:
-        need = tariffs.required_feature(name, is_file_tool(name))
-        if need is not None and need not in feats:
-            return {"error": "Bu imkoniyat tarifingizda yo'q. Foydalanuvchiga /tarif orqali Plus/Pro tarifini ko'rishni ayting.",
-                    "tarif_kerak": need}
     fn = DISPATCH.get(name)
     if fn:
         return await fn(user_id, args, ctx)

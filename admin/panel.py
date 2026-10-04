@@ -102,7 +102,8 @@ async def user_detail(call: CallbackQuery):
         f"Kunlik limit: {rec.get('daily_limit')}\n"
         f"Bugun ishlatilgan: {rec.get('requests_today', 0)}\n"
         f"🧠 Eslab qolingan narsalar: {notes_count} ta\n"
-        f"💳 Tarif: {_tariff_line(int(uid)) if uid.lstrip('-').isdigit() else '-'}"
+        f"💳 Tarif: {_tariff_line(int(uid)) if uid.lstrip('-').isdigit() else '-'}\n"
+        f"📊 {_usage_text(int(uid)) if uid.lstrip('-').isdigit() else '-'}"
     )
 
     kb_rows = []
@@ -203,6 +204,14 @@ async def set_limit_start(call: CallbackQuery):
     await call.answer()
 
 
+def _usage_text(uid: int) -> str:
+    parts = []
+    for kind, label in ((tariffs.KIND_FILES, "Fayl"), (tariffs.KIND_VISION, "Rasm")):
+        limit = tariffs.quota_limit(uid, kind)
+        parts.append(f"{label}: {tariffs.quota_used(uid, kind)}/{'∞' if limit is None else limit}")
+    return "Bugun — " + ", ".join(parts)
+
+
 def _tariff_line(uid: int) -> str:
     cur = tariffs.active_tier(uid)
     if cur.id == "free":
@@ -223,10 +232,79 @@ async def show_tariffs(call: CallbackQuery):
         lines.append(f"{t.name}: {t.stars} ⭐ / {tariffs.DURATION_DAYS} kun, {t.daily_limit} so'rov/kun — "
                      f"faol: <b>{st['active'][t.id]}</b>")
     lines.append(f"\nJami tushum (qaytarilganlarsiz): <b>{st['stars_total']} ⭐</b>, xaridorlar: {st['subscribers']}")
-    lines.append("Narx/limit: Render env — TARIFF_PLUS_STARS, TARIFF_PRO_STARS, TARIFF_PLUS_LIMIT, TARIFF_PRO_LIMIT.\n"
-                 "Foydalanuvchiga berish/bekor qilish/refund: Foydalanuvchilar → foydalanuvchi.")
-    await call.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")]]))
+    lines.append("Narx va limitlarni o'zgartirish: pastdagi tarif tugmasi. Foydalanuvchiga berish/bekor qilish/refund: "
+                 "Foydalanuvchilar → foydalanuvchi.")
+    rows = [[InlineKeyboardButton(text=f"✏️ {t.name}", callback_data=f"panel:tcfg:{t.id}")] for t in tariffs.tiers().values()]
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    await call.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+def tariff_config_view(tier_id: str) -> tuple[str, InlineKeyboardMarkup]:
+    t = tariffs.tiers()[tier_id]
+    over = tariffs._overrides().get(tier_id, {})
+    mark = lambda f: " ✱" if f in over else ""  # ✱ — standartdan o'zgartirilgan
+    lines = [f"✏️ <b>{t.name}</b> sozlamalari\n"]
+    rows = []
+    for field, (_, _, paid_only) in tariffs.FIELDS.items():
+        if paid_only and tier_id == "free":
+            continue
+        lines.append(f"{tariffs.FIELD_LABELS[field]}: <b>{getattr(t, field)}</b>{mark(field)}")
+        rows.append([InlineKeyboardButton(text=f"✏️ {tariffs.FIELD_LABELS[field]}", callback_data=f"panel:tset:{tier_id}:{field}")])
+    if tier_id == "free":
+        lines.append("So'rov/kun: har bir foydalanuvchi uchun alohida (Foydalanuvchilar → Limitni o'zgartirish).")
+    lines.append("\n✱ — standart qiymatdan o'zgartirilgan. O'zgarish hammaga darhol amal qiladi; mavjud obunachilarning "
+                 "muddati va to'lagan narxi o'zgarmaydi.")
+    if over:
+        rows.append([InlineKeyboardButton(text="↩️ Standartga qaytarish", callback_data=f"panel:treset:{tier_id}")])
+    rows.append([InlineKeyboardButton(text="🔙 Tariflar", callback_data="panel:tariffs")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data.startswith("panel:tcfg:"))
+async def tariff_config_open(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    tier_id = call.data.split(":")[-1]
+    if tier_id not in tariffs.tiers():
+        await call.answer("Bunday tarif yo'q", show_alert=True)
+        return
+    text, kb = tariff_config_view(tier_id)
+    await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:tset:"))
+async def tariff_config_ask(call: CallbackQuery):
+    caller = call.from_user.id
+    if not roles.is_superadmin(caller):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    _, _, tier_id, field = call.data.split(":")
+    _, err = tariffs.validate_value(tier_id, field, "1")  # tarif/maydon mosligini tekshiradi (qiymatni emas)
+    if err and "son" not in err and "gacha" not in err:
+        await call.answer(err, show_alert=True)
+        return
+    lo, hi, _ = tariffs.FIELDS[field]
+    pending_input.set(caller, "tariff_value", {"tier": tier_id, "field": field})
+    await call.message.answer(f"✏️ {tariffs.tiers()[tier_id].name} — <b>{tariffs.FIELD_LABELS[field]}</b>: yangi qiymatni "
+                              f"yozing ({lo}–{hi}). Bekor qilish: /panel")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:treset:"))
+async def tariff_config_reset(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    tier_id = call.data.split(":")[-1]
+    if tier_id not in tariffs.tiers():
+        await call.answer("Bunday tarif yo'q", show_alert=True)
+        return
+    await tariffs.reset_config(bot, tier_id)
+    text, kb = tariff_config_view(tier_id)
+    await call.message.edit_text(text, reply_markup=kb)
+    await call.answer("↩️ Standart qiymatlar tiklandi")
 
 
 @router.callback_query(F.data.startswith("panel:tgrant:"))
