@@ -4,7 +4,7 @@ Tariflar — joriy holat va Telegram Stars (XTR) bilan sotib olish. BUYRUQ YO'Q:
 `tariff:menu`; guruhdan deep-link `?start=tariff` — handlers/start.py). Superadmin narx/limitlarni /panel → 💳 Tariflar'da boshqaradi.
 
 Oqim: "💳 Tariflar" → tugma (tariff:buy:<tier>) → send_invoice (XTR) → pre_checkout_query (qat'iy tekshiruv, 10 soniya ichida
-javob) → successful_payment (idempotent hisoblash) → tarif yoqiladi. /paysupport — Telegram talab qiladigan to'lov murojaati.
+javob) → successful_payment (idempotent hisoblash) → tarif yoqiladi. To'lov bo'yicha murojaat: handlers/support.py (inline tugma).
 Faqat SHAXSIY chatda ishlaydi.
 """
 import datetime
@@ -19,6 +19,7 @@ from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 import config
 import core.roles as roles
 import core.tariffs as tariffs
+import handlers.support as support
 
 logger = logging.getLogger("tariff")
 router = Router()
@@ -67,8 +68,9 @@ def render_plans(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
     lines.append("\n«Fayl yaratish» — docx/xlsx/pptx/pdf/html/py va boshqa har qanday fayl, taqdimot, diagramma. "
                  "Story qo'yish hamma uchun cheksiz, faqat story izohi (caption) Plus/Pro'da.\n"
                  "To'lov Telegram Stars bilan, bot ichida. Muddat tugagach avtomatik Bepul tarifga qaytasiz "
-                 "(tugashidan oldin eslatma keladi). To'lov bo'yicha savol: /paysupport")
-    return "\n".join(lines), (InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
+                 "(tugashidan oldin eslatma keladi). To'lov bo'yicha savol: «📨 Adminga murojaat» tugmasi.")
+    rows.append([InlineKeyboardButton(text="📨 To'lov bo'yicha murojaat", callback_data=support.CALLBACK)])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def send_plans(message: Message):
@@ -137,7 +139,8 @@ async def successful_payment(message: Message):
         # Pul yechilgan, lekin to'lov tanib bo'lmadi — jimgina yutib yubormaymiz: superadminga xabar (refund qo'lda)
         logger.error("successful_payment tanilmadi: uid=%s payload=%r charge=%s sabab=%s",
                      user_id, pay.invoice_payload, pay.telegram_payment_charge_id, err)
-        await message.answer("⚠️ To'lov qabul qilindi, lekin tarifni avtomatik yoqib bo'lmadi. Admin ko'rib chiqadi: /paysupport")
+        await message.answer("⚠️ To'lov qabul qilindi, lekin tarifni avtomatik yoqib bo'lmadi. Admin ko'rib chiqadi — pastdagi tugma orqali yozing:",
+                             reply_markup=support.markup())
         await _notify_superadmin(message.bot, f"⚠️ Tanilmagan to'lov!\nUser: <code>{user_id}</code>\n"
                                               f"Summa: {pay.total_amount} {pay.currency}\n"
                                               f"Charge: <code>{html.escape(pay.telegram_payment_charge_id)}</code>\n"
@@ -159,16 +162,3 @@ async def _notify_superadmin(bot, text: str):
         await bot.send_message(config.SUPERADMIN_ID, text)
     except Exception:  # noqa: BLE001
         logger.exception("Superadminga xabar yuborib bo'lmadi")
-
-
-@router.message(Command("paysupport"), F.chat.type == "private")
-async def paysupport(message: Message):
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        await message.answer("💬 To'lov bo'yicha muammoni shunday yozing: <code>/paysupport muammo tavsifi</code>\n"
-                             "Xabaringiz adminga yetkaziladi. To'lovni qaytarish (refund) ham shu orqali so'raladi.")
-        return
-    text = parts[1].strip()[:1000]
-    await _notify_superadmin(message.bot, f"💬 To'lov murojaati\nUser: <code>{message.from_user.id}</code> "
-                                          f"({html.escape(message.from_user.full_name)})\n\n{html.escape(text)}")
-    await message.answer("✅ Murojaatingiz adminga yuborildi. Javobni shu botda olasiz.")

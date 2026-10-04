@@ -11,6 +11,7 @@ import core.tgdb as tgdb
 import core.roles as roles
 import core.tariffs as tariffs
 from handlers.tariff import send_plans
+import handlers.support as support
 
 router = Router()
 
@@ -45,6 +46,7 @@ async def start(message: Message, command: CommandObject):
         [InlineKeyboardButton(text="👤 Profil boshqaruvi", callback_data="profile:menu")],
         [InlineKeyboardButton(text=tariffs.PLANS_BUTTON_TEXT, callback_data=tariffs.PLANS_CALLBACK)],
         [InlineKeyboardButton(text="🔑 AI API integratsiya", callback_data="apikey:menu")],
+        [InlineKeyboardButton(text=support.BUTTON_TEXT, callback_data=support.CALLBACK)],
     ])
     await message.answer(
         "Salom! Men sizning shaxsiy AI agentingizman.\n"

@@ -216,8 +216,23 @@ Hamma tarifda fayl/hujjat yaratish va rasm o'qish bor — farq **kunlik kvotada*
 - Xarid qoidalari: o'sha tarifni uzaytirish (+30 kun); yuqoriroqqa o'tish (30 kun hozirdan, qolgan kunlar kuymaydi — oldindan ogohlantiriladi);
   faol yuqori tarif ustiga pastrog'ini sotib olib bo'lmaydi. To'lov idempotent (bir xil `charge_id` ikki marta hisoblanmaydi); `pre_checkout`da narx/foydalanuvchi/valyuta tekshiriladi.
 - Superadmin `/panel → 💳 Tariflar`: faol obunachilar va jami tushum; foydalanuvchi sahifasida: 🎁 qo'lda berish (30 kun), ❌ bekor qilish,
-  💸 oxirgi to'lovni **refund** qilish (Telegram `refundStarPayment`) va bugungi kvota sarfi. `/paysupport` — foydalanuvchi murojaati superadminga boradi.
+  💸 oxirgi to'lovni **refund** qilish (Telegram `refundStarPayment`) va bugungi kvota sarfi. Murojaat — pastdagi «📨 Adminga murojaat» bo'limiga qarang.
 - Hozircha sanalmaydi: story izohi uchun vision (OCR/rasm tavsifi) va foydalanuvchi o'z API kalitini ulagan holatlar.
+
+## 📨 Adminga murojaat (`handlers/support.py`)
+`/start` menyusi va tariflar sahifasidagi «📨 Adminga murojaat» inline tugmasi (matnli buyruq yo'q). Bosilganda pastda
+reply-klaviatura chiqadi: **«✅ Yuborish» / «❌ Bekor qilish»**. Foydalanuvchi istalgancha xabar yozadi — matn, rasm, video, stiker, GIF, ovozli,
+fayl, emoji — **har biri alohida xabar** bo'lib saqlanadi, lekin hech qayerga ketmaydi. Faqat «✅ Yuborish» bosilganda hammasi (har biri alohida,
+o'z turida, `copy_message`) superadminga boradi; oldidan sarlavha (kim, tarifi, nechta xabar) va «✉️ Javob yozish» tugmasi (`/panel` xabar yozish oqimi).
+- Sessiya xotirada: 30 daqiqa harakatsizlikdan keyin tugaydi; 20 tagacha xabar; soatiga 5 ta murojaat; bloklanganlar yoza olmaydi.
+- Sessiya paytida komanda (masalan `/start`) yozilsa — murojaat bekor bo'ladi va komanda odatdagidek bajariladi. Adminga yetkazib bo'lmasa sessiya saqlanadi (qayta «Yuborish» mumkin).
+- `/paysupport` (Telegram to'lov qabul qiladigan botdan talab qiladi) faqat shu tugmani ochadi; matn argumenti yo'q.
+
+## Noto'g'ri yozilgan komandalar (`core/command_guard.py`)
+Hech bir handler'ga mos kelmagan komanda ("/vipchaatmode: on") avval AI'ga tushib, u "VIP yoqildi" deb **yolg'on** yozardi. Endi harf xatosi bo'lsa
+to'g'ri komanda taklif qilinadi va AI'ga yuborilmaydi; taklif faqat foydalanuvchi o'zi ishlata oladigan komandalardan (superadminga xos `/vipchatmode`
+oddiy userga ko'rsatilmaydi; oddiy userga u hamon jim). Boshqa botga mo'ljallangan (`/cmd@BoshqaBot`) komandalar jim yutiladi; hech narsaga o'xshamagan
+`/help` kabilar avvalgidek tegilmaydi. AI tizim ko'rsatmasiga ham "sozlamalarni o'zgartira olmaysiz, bajarilmagan amalni bajarilgan demang" qoidasi qo'shilgan.
 
 ## Panel orqali xabar yuborish (`core/admin_messaging.py`)
 - **Bitta foydalanuvchiga** (superadmin va adminlar): `/panel → Foydalanuvchilar → <user> → ✉️ Xabar yozish`, so'ng matnni yozasiz.

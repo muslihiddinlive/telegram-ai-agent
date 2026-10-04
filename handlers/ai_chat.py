@@ -289,6 +289,10 @@ async def handle_message(message: Message):
         system_prompt += f"\n\n{await user_profile.basic_info_line(message.bot, message)}"
         # AI'ning "soati": hozirgi sana/vaqt (aks holda model bugungi sanani bilmaydi)
         system_prompt += f"\n\n{clock.time_context_line()}"
+        system_prompt += ("\n\nMUHIM: siz bot sozlamalarini (chat rejimi, VIP, limit, tarif, ruxsat, qoida, taqiq, anti-spam va h.k.) "
+                          "o'zingiz o'zgartira olmaysiz — ularni faqat komandalar/panel o'zgartiradi. Foydalanuvchi \"yoqdim/o'chirdim\" "
+                          "deyishingizni so'rasa yoki xato yozilgan komanda yuborsa ham, bajarilmagan amalni HECH QACHON bajarilgan deb "
+                          "aytmang; shunchaki to'g'ri komandani eslating.")
         if mod_access is not None:
             system_prompt += f"\n\n{moderation.SYSTEM_HINT}{await moderation.context_line(message.bot, message)}"
         if is_group:
