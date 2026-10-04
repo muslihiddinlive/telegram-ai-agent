@@ -22,6 +22,7 @@ import core.bot_identity as bot_identity
 import core.roles as roles
 import core.stories as stories
 import core.story_caption as story_caption
+import core.tariffs as tariffs
 
 logger = logging.getLogger("profile")
 router = Router()
@@ -142,7 +143,8 @@ async def story_start(call: CallbackQuery):
     await _edit(
         call,
         "📸 Story uchun <b>rasm yoki video</b> yuboring.\n\n"
-        "• Izoh (caption) yozsangiz: oddiy matn bo'lsa — <b>aynan shunday</b> story matni bo'ladi; "
+        "• Story qo'yish hamma uchun cheksiz; izoh (caption) yozish esa Plus/Pro tarifida (/tarif).\n"
+        "• Izoh (caption) yozsangiz (Plus/Pro): oddiy matn bo'lsa — <b>aynan shunday</b> story matni bo'ladi; "
         "AI'ga buyruq bo'lsa (masalan «shunga jiddiy izoh yoz») — AI uni bajarib matnni <b>o'zi yozadi</b>.\n"
         "• Fayl 20 MB dan oshmasin (videoni bot o'zi Story formatiga o'tkazadi, eng ko'pi 60 soniya).\n"
         "• «Fayl sifatida» yuborsangiz ham bo'ladi.",
@@ -228,6 +230,12 @@ async def story_media(message: Message, bot: Bot):
 async def _apply_caption(bot: Bot, uid: int):
     """Izohni AI bilan hal qiladi (oddiy matn -> aynan shunday; buyruq -> AI yozadi) va holatga yozadi."""
     st = _waiting[uid]
+    if (st["orig_caption"] or "").strip() and not tariffs.can_caption(uid):
+        # Story qo'yish hamma uchun cheksiz, lekin IZOH (caption) faqat Plus/Pro (yoki admin) uchun: story izohsiz chiqadi
+        st["caption"], st["mode"], st["reason"], st["entities"] = None, story_caption.NONE, None, None
+        st["caption_locked"] = True
+        st["t"] = time.time()
+        return
     caption, mode, reason = await story_caption.resolve(
         bot, uid, st["orig_caption"], st["kind"], photo_path=st["src"], cache=st.setdefault("media_cache", {}),
     )
@@ -255,6 +263,9 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"⚠️ Izohni AI bilan tekshirib bo'lmadi ({why}), shuning uchun u <b>so'zma-so'z</b> qo'yiladi:\n"
             f"{shown}\nBuyruq yozgan bo'lsangiz — «AI bilan qayta tekshirish»ni bosing yoki bekor qiling."
         )
+    elif st.get("caption_locked"):
+        caption_line = ("🔒 Story <b>izohsiz</b> chiqadi: izoh (caption) qo'yish Plus yoki Pro tarifida. "
+                        "Tariflar: /tarif — story qo'yishning o'zi hamma uchun cheksiz.")
     else:
         caption_line = "📝 Story matnsiz chiqadi (izoh yozilmagan)."
     rows = [

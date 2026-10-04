@@ -8,9 +8,8 @@
   - blocked: superadmin qo'lda bloklagan user, botdan (shaxsiy chatda) foydalana olmaydi.
     (Eski "pending" yozuvlari ham approved sifatida qabul qilinadi.)
 
-StokerDownloader'dagi referral/stars-wallet/premium-sotib-olish qismlari
-QASDDAN OLIB TASHLANDI — bu yopiq (faqat taklif qilingan userlar) tizim,
-ochiq o'sish/pul ishlash kerak emas.
+StokerDownloader'dagi referral/stars-wallet qismlari QASDDAN OLIB TASHLANDI. Pullik TARIFLAR (Telegram Stars,
+oylik) keyinroq alohida qo'shildi — core/tariffs.py: faol tarif kunlik limitni oshiradi (_limit_of).
 """
 import datetime
 import config
@@ -156,9 +155,17 @@ def list_blocked_users() -> dict:
 FILE_GENERATION_WEIGHT = 3  # fayl/prezentatsiya/diagramma yaratish — 3x qimmatroq
 
 
+def _limit_of(user_id: int, rec: dict) -> int:
+    """Kunlik limit = max(foydalanuvchining o'z limiti, faol tarif limiti) — admin qo'lda bergan katta limit kamaymaydi."""
+    import core.tariffs as tariffs
+    return max(rec["daily_limit"], tariffs.tier_limit(user_id) or 0)
+
+
 def _reset_if_new_day(rec: dict):
     if rec.get("last_reset") != today_str():
         rec["requests_today"] = 0
+        rec["files_today"] = 0   # tarif kvotalari (core/tariffs.py): fayl yaratish / rasm o'qish — kunlik
+        rec["vision_today"] = 0
         rec["last_reset"] = today_str()
 
 
@@ -171,7 +178,7 @@ def can_make_request(user_id: int) -> bool:
         return False
     rec = _bucket(user_id)
     _reset_if_new_day(rec)
-    return rec["requests_today"] < rec["daily_limit"]
+    return rec["requests_today"] < _limit_of(user_id, rec)
 
 
 def can_use_in_group(user_id: int) -> bool:
@@ -185,14 +192,14 @@ def can_use_in_group(user_id: int) -> bool:
         return True
     rec = _bucket(user_id)  # avtomatik yaratadi (role="approved")
     _reset_if_new_day(rec)
-    return rec["requests_today"] < rec["daily_limit"]
+    return rec["requests_today"] < _limit_of(user_id, rec)
 
 
 def effective_daily_limit(user_id: int) -> int:
     """Superadmin/bot admini uchun ADMIN_DAILY_LIMIT (100), qolganlar uchun o'z limiti."""
     if get_role(user_id) in ("superadmin", "admin"):
         return ADMIN_DAILY_LIMIT
-    return _bucket(user_id)["daily_limit"]
+    return _limit_of(user_id, _bucket(user_id))
 
 
 def _quota_left(user_id: int) -> bool:
@@ -239,7 +246,7 @@ async def register_request(bot, user_id: int, weight: int = 1, force: bool = Fal
 def remaining_requests(user_id: int) -> int:
     rec = _bucket(user_id)
     _reset_if_new_day(rec)
-    return max(0, rec["daily_limit"] - rec["requests_today"])
+    return max(0, _limit_of(user_id, rec) - rec["requests_today"])
 
 
 def build_users_csv() -> str:

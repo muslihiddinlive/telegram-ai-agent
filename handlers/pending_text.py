@@ -13,7 +13,8 @@ import core.roles as roles
 import core.user_api_keys as user_api_keys
 import core.shared_keys as shared_keys
 import core.ai_persona as ai_persona
-from admin.panel import render_search_results
+from admin.panel import render_search_results, tariff_config_view
+import core.tariffs as tariffs
 import core.admin_messaging as admin_messaging
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -37,6 +38,25 @@ async def handle_pending(message: Message):
     action = state["action"]
     data = state["data"]
     text = message.text.strip()
+
+    # ── Tarif narxi/limitini o'zgartirish (FAQAT superadmin) ──
+    if action == "tariff_value":
+        if not roles.is_superadmin(user_id):
+            pending_input.clear(user_id)
+            await message.answer("Ruxsat yo'q.")
+            return
+        if text.startswith("/"):
+            pending_input.clear(user_id)
+            await message.answer("❌ Bekor qilindi.")
+            return
+        ok, reply = await tariffs.set_config(message.bot, data["tier"], data["field"], text)
+        if not ok:
+            await message.answer(f"⚠️ {reply} Qaytadan yozing yoki /panel bilan bekor qiling.")
+            return
+        pending_input.clear(user_id)
+        view_text, kb = tariff_config_view(data["tier"])
+        await message.answer(f"{reply}\n\n{view_text}", reply_markup=kb)
+        return
 
     # ── Admin panel: bitta foydalanuvchiga xabar (admin + superadmin) ──
     if action == "msg_user_text":

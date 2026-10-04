@@ -19,6 +19,7 @@ import tools.presentation_builder as ppt_builder
 import core.user_profile as user_profile
 import core.moderation as moderation
 import core.userbot_tools as userbot_tools
+import core.tariffs as tariffs
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -834,6 +835,20 @@ def _unstringify_json(value):
 
 
 async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
+    """Tool'ni bajaradi; fayl yaratish / rasm o'qish uchun TARIF KVOTASINI serverda majburlaydi (core/tariffs.py):
+    kvota tugagan bo'lsa tool BAJARILMAYDI; muvaffaqiyatli bajarilgandagina 1 ta sanaladi. ctx["quota_user"] —
+    hisobi ketadigan odam (guruhda chatmode egasi), ctx["quota_unlimited"] — VIP chatmode."""
+    q_user = ctx.get("quota_user")
+    kind = tariffs.quota_kind(name, is_file_tool(name)) if q_user is not None and not ctx.get("quota_unlimited") else None
+    if kind and not tariffs.quota_available(q_user, kind):
+        return {"error": tariffs.quota_denied_text(q_user, kind), "kvota_tugadi": kind}
+    result = await _dispatch_inner(name, user_id, args, ctx)
+    if kind and tariffs.counts_as_use(kind, result):
+        await tariffs.consume(ctx.get("bot"), q_user, kind)
+    return result
+
+
+async def _dispatch_inner(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     # Yuqoridagi izohga qarang — AI ba'zan array/object'ni JSON-string
     # sifatida yuboradi, buni avtomatik tuzatamiz.
     args = _unstringify_json(args)

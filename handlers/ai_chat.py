@@ -216,7 +216,8 @@ async def handle_message(message: Message):
             # Standart guruh: bloklash/tasdiqlash tekshirilmaydi —
             # faqat kunlik limit tekshiriladi (avtomatik 20/kun bilan boshlanadi)
             if not roles.can_use_in_group(user_id):
-                await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
+                await message.reply("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring yoki "
+                                    "limitni oshirish uchun botga shaxsiy chatda /tarif yozing.")
                 return
 
         user_text = _strip_bot_mention(raw_text, bot_username)
@@ -231,11 +232,16 @@ async def handle_message(message: Message):
             await message.answer("🚫 Sizga botdan foydalanish cheklangan.")
             return
         if not roles.can_make_request(user_id):
-            await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring.")
+            await message.answer("🚫 Bugungi so'rov limitingiz tugadi. Ertaga qayta urinib ko'ring yoki "
+                                 "limitni oshirish uchun /tarif ni bosing.")
             return
 
     mod_access = await moderation.get_access(message.bot, message.chat.id, user_id) if is_group else None
     ctx = {
+        # Tarif kvotalari (fayl yaratish / rasm o'qish) — ai_tools.dispatch serverda majburlaydi. Hisob so'rov limiti bilan bir xil
+        # odamdan ketadi (guruhda chatmode egasi); VIP chatmode — cheksiz.
+        "quota_user": requester_id_for_limit,
+        "quota_unlimited": charge_mode == "none",
         "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
         "is_group": is_group, "mod": mod_access, "message_id": message.message_id,
         # xabarda AYNAN BITTA muddat bo'lsa (masalan "14 daqiqaga") — moderatsiya tool'lariga majburan beriladi

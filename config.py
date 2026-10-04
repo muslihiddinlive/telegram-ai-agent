@@ -40,3 +40,9 @@ USERBOT_ACCESS = os.environ.get("USERBOT_ACCESS", "all").strip().lower()
 if USERBOT_ACCESS not in ("all", "admins"):
     USERBOT_ACCESS = "admins"  # noto'g'ri qiymatda xavfsizroq tomonga
 USERBOT_RATE_PER_HOUR = int(os.environ.get("USERBOT_RATE_PER_HOUR", 15))
+
+# ── Tariflar (Telegram Stars, oylik 30 kun) — core/tariffs.py. Narx/limitni env bilan o'zgartirish mumkin.
+TARIFF_PLUS_STARS = int(os.environ.get("TARIFF_PLUS_STARS", 150))
+TARIFF_PRO_STARS = int(os.environ.get("TARIFF_PRO_STARS", 400))
+TARIFF_PLUS_LIMIT = int(os.environ.get("TARIFF_PLUS_LIMIT", 100))
+TARIFF_PRO_LIMIT = int(os.environ.get("TARIFF_PRO_LIMIT", 300))
