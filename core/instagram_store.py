@@ -38,11 +38,43 @@ def store_dir() -> str:
     return os.getenv("IG_STORE_DIR") or os.path.join(os.path.dirname(__file__), "..", "data", "ig_scheduled")
 
 
-def state() -> dict:
-    st = _db().setdefault("instagram", {})
+def _key() -> str:
+    """Joriy akkaunt holati kaliti: egasi akkaunti (env) — eski `instagram` bo'limi (ma'lumot yo'qolmasin);
+    foydalanuvchi akkauntlari — `instagram_by_account[ig_id]` (bir-biridan to'liq ajratilgan)."""
+    import core.instagram_context as ictx
+    a = ictx.current()
+    if a is None or a.owner:
+        return ""
+    return a.ig_id
+
+
+def _fill(st: dict) -> dict:
     for key, default in (("scheduled", []), ("triggers", []), ("banned_words", []), ("seen", []), ("log", [])):
         st.setdefault(key, default)
     return st
+
+
+def state() -> dict:
+    k = _key()
+    if not k:
+        return _fill(_db().setdefault("instagram", {}))
+    return _fill(_db().setdefault("instagram_by_account", {}).setdefault(k, {}))
+
+
+def has_pending(ig_id: str) -> bool:
+    """Akkauntda kutayotgan/chiqayotgan reja bormi (scheduler har daqiqada behuda token ochmasin)."""
+    st = _db().get("instagram_by_account", {}).get(str(ig_id)) or {}
+    return any(e.get("status") in ("scheduled", "publishing") for e in st.get("scheduled", []))
+
+
+def drop_account_state(ig_id: str) -> None:
+    """Akkaunt uzilganda: rejalashtirilgan fayllar va butun holat o'chadi (maxfiylik)."""
+    by = _db().setdefault("instagram_by_account", {})
+    st = by.pop(str(ig_id), None)
+    if st:
+        for e in st.get("scheduled", []):
+            delete_files(e)
+        _dirty()
 
 
 def new_id() -> str:
@@ -152,9 +184,10 @@ def remove_trigger(trigger_id: str) -> bool:
     return False
 
 
-def match_trigger(text: str, media_id: Optional[str]) -> Optional[dict]:
+def match_trigger(text: str, media_id: Optional[str], limit: Optional[int] = None) -> Optional[dict]:
+    """limit — tarif chegarasi: faqat dastlabki `limit` ta qoida faol (tarif pasaysa ortig'i uxlaydi)."""
     low = text.lower()
-    for t in state()["triggers"]:
+    for t in (state()["triggers"] if limit is None else state()["triggers"][:limit]):
         if t["keyword"] in low and (not t.get("media_id") or t["media_id"] == media_id):
             return t
     return None
@@ -192,9 +225,10 @@ def remove_banned(word: str) -> bool:
     return False
 
 
-def match_banned(text: str) -> Optional[str]:
+def match_banned(text: str, limit: Optional[int] = None) -> Optional[str]:
     low = text.lower()
-    return next((w for w in state()["banned_words"] if w and w in low), None)
+    words = state()["banned_words"] if limit is None else state()["banned_words"][:limit]
+    return next((w for w in words if w and w in low), None)
 
 
 # ── Takroriy webhook'dan himoya ────────────────────────────────────────────────

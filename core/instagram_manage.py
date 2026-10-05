@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 
 import core.instagram_api as ig
 import core.instagram_common as common
+import core.instagram_context as ictx
+import core.instagram_plans as plans
 import core.instagram_media as media
 import core.instagram_scheduler as scheduler
 import core.instagram_store as store
@@ -52,7 +54,7 @@ def _post_row(m: dict) -> dict:
 
 # ── 1) Statistika ──────────────────────────────────────────────────────────────
 async def _insights(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "insights")):
         return err
     try:
         media_id = str(args.get("media_id") or "").strip()
@@ -75,7 +77,7 @@ async def _insights(user_id: int, args: dict, ctx: dict) -> dict:
 
 # ── 2) Izohlar ro'yxati ────────────────────────────────────────────────────────
 async def _comments(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "comments")):
         return err
     try:
         media_id = str(args.get("media_id") or "").strip()
@@ -96,7 +98,7 @@ async def _comments(user_id: int, args: dict, ctx: dict) -> dict:
 
 # ── 3) Izoh ustida amal ────────────────────────────────────────────────────────
 async def _comment_action(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "comments")):
         return err
     action = str(args.get("action", "")).lower()
     comment_id = str(args.get("comment_id") or "").strip()
@@ -142,7 +144,7 @@ def parse_when(raw: str) -> datetime:
 
 
 async def _schedule(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "schedule")):
         return err
     action = str(args.get("action", "")).lower()
 
@@ -176,6 +178,9 @@ async def _schedule(user_id: int, args: dict, ctx: dict) -> dict:
         return {"error": "90 kundan keyingi vaqtga rejalashtirib bo'lmaydi."}
     if store.pending_count() >= store.MAX_SCHEDULED_PENDING:
         return {"error": f"Kutayotgan rejalar {store.MAX_SCHEDULED_PENDING} tadan oshmasin. Avval bekor qiling."}
+    plan = ictx.current_plan()
+    if plan and plan.max_scheduled is not None and store.pending_count() >= plan.max_scheduled:
+        return {"error": plans.limit_text(plan, "kutayotgan rejalar", plan.max_scheduled)}
 
     preview = {"tur": kind, "fayllar": names, "caption": caption or None,
                "chiqish_vaqti": f"{when:%Y-%m-%d %H:%M} (Toshkent)", "hozir": f"{now:%Y-%m-%d %H:%M}"}
@@ -214,7 +219,7 @@ async def _schedule(user_id: int, args: dict, ctx: dict) -> dict:
 
 # ── 5) Avtomatlashtirish ───────────────────────────────────────────────────────
 async def _automation(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "automation")):
         return err
     action = str(args.get("action", "")).lower()
 
@@ -234,6 +239,9 @@ async def _automation(user_id: int, args: dict, ctx: dict) -> dict:
             return {"error": "DM matni 1-900 belgi bo'lishi kerak."}
         if len(store.list_triggers()) >= store.MAX_TRIGGERS:
             return {"error": f"Triggerlar {store.MAX_TRIGGERS} tadan oshmasin."}
+        plan = ictx.current_plan()
+        if plan and plan.max_triggers is not None and len(store.list_triggers()) >= plan.max_triggers:
+            return {"error": plans.limit_text(plan, "avtomatik qoidalar", plan.max_triggers)}
         preview = {"amal": f"Izohida «{keyword}» bo'lgan HAR KIMGA avtomatik DM yuboriladi",
                    "dm_matni": reply, "faqat_shu_post": media_id,
                    "ogohlantirish": None if webhook.enabled() else
@@ -260,6 +268,9 @@ async def _automation(user_id: int, args: dict, ctx: dict) -> dict:
             return {"error": "So'z 3-40 belgi bo'lishi kerak (qisqa so'z ko'p izohni yashirib yuboradi)."}
         if len(store.banned_words()) >= store.MAX_BANNED:
             return {"error": f"Ro'yxat {store.MAX_BANNED} tadan oshmasin."}
+        plan = ictx.current_plan()
+        if plan and plan.max_banned is not None and len(store.banned_words()) >= plan.max_banned:
+            return {"error": plans.limit_text(plan, "taqiqlangan so'zlar", plan.max_banned)}
         return {"status": "qo'shildi"} if store.add_banned(word) else {"error": "Bu so'z allaqachon bor."}
 
     return {"error": "action: list_triggers | add_trigger | remove_trigger | "

@@ -23,25 +23,50 @@ from typing import Any, Optional
 
 import httpx
 
+import core.instagram_context as ictx
+
 logger = logging.getLogger("instagram_api")
+
+# 190 (token yaroqsiz/bekor qilingan) bo'lganda chaqiriladi — akkaunt "qayta ulash kerak" deb belgilanadi
+auth_error_hook = None
 
 
 class InstagramAPIError(Exception):
     """Graph API xatosi yoki kutilmagan holat. Xabarda token HECH QACHON bo'lmaydi."""
 
 
+def env_account() -> Optional[ictx.Account]:
+    """env'dagi (IG_USER_ID / IG_ACCESS_TOKEN) egasi akkaunti — bo'lmasa None."""
+    uid, tok = os.getenv("IG_USER_ID"), os.getenv("IG_ACCESS_TOKEN")
+    if not (uid and tok):
+        return None
+    return ictx.Account(ig_id=uid, token=tok, host=os.getenv("IG_GRAPH_HOST", "graph.facebook.com"), owner=True)
+
+
 def is_configured() -> bool:
-    return bool(os.getenv("IG_USER_ID") and os.getenv("IG_ACCESS_TOKEN"))
+    """env'dagi egasi akkaunti sozlanganmi (foydalanuvchi akkauntlari bunga bog'liq emas)."""
+    return env_account() is not None
 
 
-def _base() -> str:
-    host = os.getenv("IG_GRAPH_HOST", "graph.facebook.com")
+def _acct() -> ictx.Account:
+    a = ictx.current()
+    if a is not None:
+        return a
+    if not ictx.multi_enabled():       # eski bitta-akkaunt rejimi
+        a = env_account()
+        if a:
+            return a
+    raise InstagramAPIError("Instagram akkaunti tanlanmagan (ichki xato).")
+
+
+def _base(host: Optional[str] = None) -> str:
+    host = host or _acct().host
     version = os.getenv("GRAPH_API_VERSION", "v25.0")
     return f"https://{host}/{version}"
 
 
 def _ig_id() -> str:
-    return os.environ["IG_USER_ID"]
+    return _acct().ig_id
 
 
 def _describe_error(method: str, path: str, resp: httpx.Response) -> str:
@@ -56,6 +81,13 @@ def _describe_error(method: str, path: str, resp: httpx.Response) -> str:
         return f"{method} {path} -> HTTP {resp.status_code}: {resp.text[:300]}"
 
 
+def _error_code(resp: httpx.Response) -> Optional[int]:
+    try:
+        return int((resp.json().get("error") or {}).get("code"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _request(
     method: str,
     path: str,
@@ -64,11 +96,17 @@ async def _request(
     json_body: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """path Graph API bazasiga nisbatan, masalan '/1784.../media'."""
-    url = f"{_base()}{path}"
-    headers = {"Authorization": f"Bearer {os.environ['IG_ACCESS_TOKEN']}"}
+    acct = _acct()
+    url = f"{_base(acct.host)}{path}"
+    headers = {"Authorization": f"Bearer {acct.token}"}
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.request(method, url, params=params, json=json_body, headers=headers)
     if resp.status_code >= 400:
+        if _error_code(resp) == 190 and acct.tg_user_id and not acct.owner and auth_error_hook:
+            try:
+                auth_error_hook(acct)     # token bekor qilingan/eskirgan — egasiga qayta ulashni aytamiz
+            except Exception:  # noqa: BLE001
+                logger.warning("auth_error_hook xatosi", exc_info=True)
         raise InstagramAPIError(_describe_error(method, path, resp))
     return resp.json() if resp.content else {}
 
@@ -259,12 +297,18 @@ async def send_private_reply(comment_id: str, message: str) -> dict[str, Any]:
 
 # ── Webhook imzosi ─────────────────────────────────────────────────────────────
 def verify_signature(payload: bytes, header: Optional[str]) -> bool:
-    """X-Hub-Signature-256 ni META_APP_SECRET bilan solishtiradi (doimiy vaqtli taqqoslash)."""
-    secret = os.getenv("META_APP_SECRET", "")
-    if not secret or not header or not header.startswith("sha256="):
+    """X-Hub-Signature-256 ni META_APP_SECRET yoki IG_APP_SECRET bilan solishtiradi (doimiy vaqtli taqqoslash)."""
+    secrets = [x for x in (os.getenv("META_APP_SECRET", ""), os.getenv("IG_APP_SECRET", "")) if x]
+    if not secrets or not header or not header.startswith("sha256="):
         return False
-    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header.split("=", 1)[1])
+    given = header.split("=", 1)[1]
+    return any(hmac.compare_digest(hmac.new(x.encode(), payload, hashlib.sha256).hexdigest(), given)
+               for x in secrets)
+
+
+async def subscribe_webhooks(fields: str = "comments,messages") -> dict:
+    """Joriy akkauntni ilovaning webhook'lariga yozadi (Instagram Login'da har akkaunt uchun alohida kerak)."""
+    return await _request("POST", f"/{_ig_id()}/subscribed_apps", params={"subscribed_fields": fields})
 
 
 # ── Direct (DM) ────────────────────────────────────────────────────────────────

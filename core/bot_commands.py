@@ -19,6 +19,11 @@ GROUP_COMMANDS = [
     BotCommand(command="antispam", description="🛡 Anti-spam: on/off (admin)"),
 ]
 
+def _ig_multi() -> bool:
+    import core.instagram_context as ictx
+    return ictx.multi_enabled()
+
+
 GENERAL_COMMANDS = [
     BotCommand(command="start", description="Botni ishga tushirish"),
     BotCommand(command="yangi_mavzu", description="🗂 Yangi mustaqil mavzu ochish"),
@@ -26,7 +31,7 @@ GENERAL_COMMANDS = [
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
     BotCommand(command="laqab", description="🏷 Guruhda ishlatiladigan taxallusingiz"),
-]
+] + ([BotCommand(command="instagram", description="📸 Instagram akkauntimni ulash")] if _ig_multi() else [])
 
 ADMIN_COMMANDS = GENERAL_COMMANDS + [
     BotCommand(command="panel", description="🛠 Boshqaruv paneli"),

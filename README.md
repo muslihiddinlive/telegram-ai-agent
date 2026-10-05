@@ -411,6 +411,38 @@ odam guruhda hali hech narsa yozmagan bo'lsa ham. Faqat odamlar (bot/kanal/guruh
 keshlanadi. Userbot ulanmagan bo'lsa — avvalgi xatti-harakat (reply qiling yoki odam bitta xabar yozsin). Nishon baribir shu
 guruh a'zosi bo'lishi shart (`target_error`), ruxsat qoidalari o'zgarmagan (faqat `can_restrict_members` huquqi bor admin).
 
+### Instagram: har foydalanuvchi o'z akkauntini ulaydi (`/instagram`)
+
+`IG_APP_ID` + `IG_APP_SECRET` berilsa, istalgan foydalanuvchi **o'z** Instagram Business/Creator akkauntini Meta'ning rasmiy
+kirish sahifasi orqali ulaydi (parol botga berilmaydi). Bot AI orqali uning nomidan post/karusel/reel/story joylaydi,
+statistika va izohlarni boshqaradi, rejalashtiradi, avtomatik javoblar va DM'da AI yuritadi. `IG_USER_ID`/`IG_ACCESS_TOKEN`
+(egasi akkaunti) avvalgidek ishlaydi.
+
+| Imkoniyat | Bepul (3 kun, 1 marta) | Plus | Pro |
+|---|---|---|---|
+| Joylash, statistika, izohlar | ✅ | ✅ cheksiz* | ✅ cheksiz* |
+| Rejalashtirish | ❌ | ≤10 ta | cheksiz |
+| Avtomatik qoidalar / spam yashirish | ❌ | ≤3 qoida, ≤10 so'z | cheksiz |
+| DM'da AI yordamchi | ❌ | kuniga ≤30 javob | cheksiz |
+
+\*Instagram'ning o'z limiti (API orqali sutkasiga 100 joylash) doim amal qiladi. Sinov birinchi ulanishdan boshlanadi va
+**qaytmaydi** (uzib-ulash, boshqa Instagram akkauntga o'tish yoki boshqa Telegram'dan o'sha akkauntni ulash — yangi sinov bermaydi).
+Tarif tugasa: avtomatik javoblar va rejalashtirilgan postlar to'xtaydi (post kechikib chiqib ketmaydi — aniq bekor qilinadi va
+egasiga xabar boradi). Plus chegaralari `IG_PLUS_*` env bilan o'zgaradi.
+
+**Meta'da sozlash:** Dashboard → Instagram → *API setup with Instagram login* → Business login settings: Instagram App ID/Secret'ni
+env'ga yozing; OAuth redirect URI = `https://<domen>/ig/callback`, Deauthorize = `/ig/deauth`, Data deletion = `/ig/data-deletion`,
+Privacy policy = `/ig/privacy` (hammasi bot o'zi beradi). Webhook'ga (izoh/DM) obuna ulanganda har akkaunt uchun avtomatik yoziladi.
+
+**Ruxsat darajasi (muhim):** Meta'da *Standard Access* bilan faqat ilovada **roli bor** akkauntlar (Roles → Instagram testers)
+ulana oladi. Hamma ulashi uchun *Advanced Access* kerak: App Review + Business Verification (maxfiylik siyosati va ekran yozuvlari).
+Privacy sahifasi matnini (`/ig/privacy`) yuridik jihatdan o'zingiz tekshiring.
+
+**Xavfsizlik:** tokenlar Fernet bilan shifrlanadi, 60 kunlik token tugashidan oldin avtomatik yangilanadi (bekor qilingan bo'lsa
+akkaunt «qayta ulash kerak» holatiga o'tadi va egasiga xabar boradi). Har so'rov faqat shu odamning O'Z akkauntida bajariladi
+(`contextvars`, akkaunt ID'ni AI tanlay olmaydi); triggerlar/rejalar/DM suhbatlari akkauntlar bo'yicha ajratilgan; «Uzish» barchasini
+o'chiradi. Ulash holatida `IG_APP_ID` bor bo'lsa, kontekstsiz chaqiruv egasi akkauntiga jimgina tushib ketmaydi (xato beradi).
+
 **Muhim:** (1) shu session'ni boshqa joyda bir vaqtda ishlatmang — Telegram uni bekor qiladi (AUTH_KEY_DUPLICATED); shunda funksiya
 o'zini o'chiradi, bot ishlashda davom etadi. (2) Render zero-downtime deploy paytida eski va yangi nusxa ozgina vaqt birga ishlashi mumkin
 — shunda ham shu xato chiqishi mumkin; kerak bo'lsa qayta deploy qiling. (3) Telegram'ni ommaviy yig'ish uchun ishlatmang: akkaunt limitga/ban'ga tushishi mumkin.

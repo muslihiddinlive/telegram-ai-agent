@@ -27,7 +27,15 @@ MAX_CAPTION = 2200
 MAX_HASHTAGS = 30
 CONFIRM_TTL = 600
 
-LOCK = asyncio.Lock()  # bir vaqtda bitta e'lon (qo'lda ham, rejali ham)
+_locks: dict[str, asyncio.Lock] = {}
+
+
+def lock() -> asyncio.Lock:
+    """Bir vaqtda bitta e'lon — HAR AKKAUNT uchun alohida (bir odamning uzun video e'loni boshqalarni kutdirmasin)."""
+    import core.instagram_context as ictx
+    a = ictx.current()
+    key = a.ig_id if a else "-"
+    return _locks.setdefault(key, asyncio.Lock())
 
 
 # ── Ruxsat ─────────────────────────────────────────────────────────────────────
@@ -48,14 +56,35 @@ def user_dir(user_id: int) -> str:
     return _ud(user_id)
 
 
-def require(user_id: int, ctx: dict) -> Optional[dict]:
-    """Xato dict yoki None (ruxsat bor)."""
-    if not ig.is_configured():
+def require(user_id: int, ctx: dict, feature: str = "publish") -> Optional[dict]:
+    """Xato dict yoki None (ruxsat bor). Ruxsat berilsa JORIY AKKAUNT va REJA kontekstga o'rnatiladi —
+    keyingi barcha ig.* chaqiruvlar shu odamning O'Z akkauntida ishlaydi."""
+    import core.instagram_accounts as accounts
+    import core.instagram_context as ictx
+    import core.instagram_plans as plans
+
+    if not (ig.is_configured() or ictx.multi_enabled()):
         return {"error": "Instagram ulanmagan (IG_USER_ID / IG_ACCESS_TOKEN o'rnatilmagan)."}
     if ctx.get("is_group"):
         return {"error": "Instagram amallari faqat shaxsiy chatda ishlaydi."}
-    if not allowed(user_id):
+
+    acct = None
+    if allowed(user_id) and ig.is_configured():
+        acct = ig.env_account()                      # bot egasi — env'dagi akkaunt
+    elif ictx.multi_enabled():
+        st = accounts.status(user_id)
+        if st == "none":
+            return {"error": "Instagram akkauntingiz ulanmagan. /instagram buyrug'i bilan ulang."}
+        if st == "reauth":
+            return {"error": "Instagram ulanishi eskirgan yoki bekor qilingan. /instagram orqali qayta ulang."}
+        acct = accounts.account_for(user_id)
+    if acct is None:
         return {"error": "Sizda Instagram huquqi yo'q."}
+
+    plan = plans.plan_for(user_id, acct)
+    if not plan.allows(feature):
+        return {"error": plans.deny_text(plan, feature)}
+    ictx.set_current(acct, plan)
     return None
 
 

@@ -161,7 +161,8 @@ TOOLS: list[dict] = [
         },
     },
     *FILE_TOOLS,  # ms-file-toolkit: docx/xlsx/pptx/pdf — 36 ta tool
-    *instagram_tools.TOOLS,  # Instagram: post/karusel/reel/story (IG_* env sozlangan bo'lsa)
+    # Instagram schema'lari bu yerda EMAS — ai_chat ularni faqat Instagram'i bor foydalanuvchiga qo'shadi
+    # (instagram_tools.schemas_for), shunda boshqalarning har so'rovi ~1800 token yengil bo'ladi.
     {
         "type": "function",
         "function": {

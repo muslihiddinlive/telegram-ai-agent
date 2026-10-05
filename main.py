@@ -11,6 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommandScopeDefault
 import core.bot_commands as bot_commands
 import core.instagram_media as instagram_media
+import core.instagram_oauth as instagram_oauth
 import core.instagram_scheduler as instagram_scheduler
 import core.instagram_webhook as instagram_webhook
 
@@ -27,6 +28,7 @@ from handlers.topics import router as topics_router
 from handlers.group_settings import router as group_settings_router
 from handlers.group_tools import router as group_tools_router
 from handlers.api_integration import router as api_integration_router
+from handlers.instagram import router as instagram_router
 from handlers.profile import router as profile_router
 from handlers.pending_text import router as pending_text_router
 from handlers.admin_terminal import router as admin_terminal_router
@@ -52,6 +54,7 @@ dp.include_router(panel_router)
 dp.include_router(start_router)
 dp.include_router(tariff_router)  # ai_chat'dan OLDIN: tariflar tugmasi, to'lov (pre_checkout/successful_payment) AI'ga ketib qolmasin
 dp.include_router(topics_router)
+dp.include_router(instagram_router)  # /instagram — ai_chat'dan OLDIN (komanda AI'ga ketib qolmasin)
 dp.include_router(group_settings_router)
 dp.include_router(group_tools_router)
 dp.include_router(api_integration_router)
@@ -119,6 +122,7 @@ def main():
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
     instagram_media.register(app)  # Instagram uchun vaqtinchalik media URL (/ig-media/...)
+    instagram_oauth.register(app, bot)  # foydalanuvchilar o'z Instagramini ulashi (IG_APP_ID/IG_APP_SECRET bo'lsa)
     instagram_webhook.register(app, bot)  # izoh webhook'i (faqat IG_WEBHOOK_ENABLED=1 bo'lsa)
 
     web.run_app(app, host="0.0.0.0", port=config.PORT)

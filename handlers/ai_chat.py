@@ -23,6 +23,7 @@ import core.group_wipe as group_wipe
 import core.token_usage as token_usage
 import core.tariffs as tariffs
 import core.userbot_tools as userbot_tools
+import core.instagram_tools as instagram_tools
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
@@ -301,6 +302,8 @@ async def handle_message(message: Message):
                           "aytmang; shunchaki to'g'ri komandani eslating.")
         if mod_access is not None:
             system_prompt += f"\n\n{moderation.SYSTEM_HINT}{await moderation.context_line(message.bot, message)}"
+        if not is_group and (ig_hint := instagram_tools.connect_hint(user_id, user_text)):
+            system_prompt += f"\n\n{ig_hint}"
         if is_group:
             system_prompt += group_rules.as_prompt_block(message.chat.id)
         if is_group:
@@ -352,6 +355,8 @@ async def handle_message(message: Message):
     active_tools = TOOLS
     if userbot.is_enabled():  # schema'lar faqat userbot ulangan bo'lsa (behuda token yemasin)
         active_tools = active_tools + userbot_tools.SCHEMAS
+    if not is_group:  # Instagram schema'lari faqat akkaunti ulangan foydalanuvchiga (har kimga ~1800 token yemasin)
+        active_tools = active_tools + instagram_tools.schemas_for(user_id)
     if mod_access is not None:
         recent_context = " ".join((m.get("content") or "") for m in history[-6:]) + " " + user_text
         if moderation.looks_like_mod_request(recent_context):

@@ -24,6 +24,8 @@ import tempfile
 
 import core.instagram_api as ig
 import core.instagram_common as common
+import core.instagram_accounts as accounts
+import core.instagram_context as ictx
 import core.instagram_dm as dm
 import core.instagram_manage as manage
 import core.instagram_media as media
@@ -53,7 +55,7 @@ async def _instagram_publish(user_id: int, args: dict, ctx: dict) -> dict:
                          _preview_for_publish(kind, names, caption))):
         return g
 
-    async with common.LOCK:
+    async with common.lock():
         tmp = tempfile.mkdtemp(prefix="ig_")
         urls: list[str] = []
         try:
@@ -86,7 +88,7 @@ async def _instagram_publish(user_id: int, args: dict, ctx: dict) -> dict:
 
 
 async def _instagram_quota(user_id: int, args: dict, ctx: dict) -> dict:
-    if (err := common.require(user_id, ctx)):
+    if (err := common.require(user_id, ctx, "publish")):
         return err
     try:
         return await ig.get_quota()
@@ -140,8 +142,32 @@ _TOOLS = [
     },
 ]
 
-# Sozlanmagan bo'lsa schema'lar AI'ga umuman berilmaydi (userbot_tools kabi).
-TOOLS: list[dict] = (_TOOLS + manage.TOOLS + dm.TOOLS) if ig.is_configured() else []
+ALL_TOOLS: list[dict] = _TOOLS + manage.TOOLS + dm.TOOLS
+# Eski nom (orqaga moslik): hech narsa sozlanmagan bo'lsa bo'sh.
+TOOLS: list[dict] = ALL_TOOLS if (ig.is_configured() or ictx.multi_enabled()) else []
+
+
+def schemas_for(user_id: int, is_group: bool = False) -> list[dict]:
+    """Schema'lar HAR BIR foydalanuvchiga emas, faqat Instagram'i bor odamga beriladi (har so'rovga ~1800 token
+    tejaladi). Bu faqat AI'ga ko'rsatish; haqiqiy ruxsat har chaqiruvda common.require() da tekshiriladi."""
+    if is_group:
+        return []
+    if ig.is_configured() and common.allowed(user_id):
+        return ALL_TOOLS
+    if ictx.multi_enabled() and accounts.status(user_id) == "ok":
+        return ALL_TOOLS
+    return []
+
+
+def connect_hint(user_id: int, text: str) -> str:
+    """Foydalanuvchi Instagram haqida yozsa-yu akkaunti ulanmagan bo'lsa — AI'ga yo'l ko'rsatadi."""
+    if not ictx.multi_enabled() or "insta" not in (text or "").lower():
+        return ""
+    if accounts.status(user_id) == "ok" or (ig.is_configured() and common.allowed(user_id)):
+        return ""
+    return ("Foydalanuvchi Instagram haqida so'ramoqda, lekin akkaunti ulanmagan yoki ulanishi eskirgan. "
+            "Unga /instagram buyrug'i orqali o'z akkauntini ulashini ayting (yangi foydalanuvchiga bepul 3 kunlik "
+            "sinov bor). Instagram tool'lari ulangandan keyin ishlaydi.")
 
 HANDLERS = {
     "instagram_publish": _instagram_publish,
