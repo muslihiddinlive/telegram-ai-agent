@@ -85,6 +85,28 @@ def _name(user_id: int, full_name: str | None, username: str | None = None) -> s
     return f"<b>{html.escape(label)}</b>"
 
 
+async def resolve_username(bot, chat_id: int, uname: str):
+    """@username -> (user_id, ism_html, None) yoki (None, None, xato_matni).
+    Tartib: botning o'z indeksi -> Bot API get_chat -> userbot (MTProto; odam botga hech narsa yozmagan bo'lsa ham)."""
+    found = group_memory.find_user_id(chat_id, uname)
+    if found:
+        return found[0], _name(found[0], found[1], uname), None
+    try:
+        chat = await bot.get_chat(f"@{uname}")
+        if chat.type == "private":
+            return chat.id, _name(chat.id, getattr(chat, "full_name", None), uname), None
+    except Exception:  # noqa: BLE001
+        pass
+    ub = await userbot.find_user_by_username(uname)
+    if ub:
+        return ub[0], _name(ub[0], ub[1], uname), None
+    if userbot.is_enabled():
+        return None, None, (f"@{html.escape(uname)} ni topa olmadim: bunday ochiq username yo'q, akkaunt yashirilgan "
+                            f"yoki bu odam emas (kanal/guruh/bot). Uning xabariga <b>reply</b> qilib yozing.")
+    return None, None, (f"@{html.escape(uname)} ni topa olmadim: bu odam guruhda hali hech narsa yozmagan va botga "
+                        f"ko'rinmagan. Uning xabariga <b>reply</b> qilib yozing yoki u bitta xabar yozsin.")
+
+
 async def _resolve_target(bot, message, text: str):
     """Nishon: (user_id, ism_html, None) yoki (None, None, xato_matni)."""
     chat_id = message.chat.id
@@ -98,31 +120,14 @@ async def _resolve_target(bot, message, text: str):
         if e.type == "text_mention" and e.user and not e.user.is_bot:
             return e.user.id, _name(e.user.id, e.user.full_name, e.user.username), None
 
-    # 2) @username — botning o'z indeksi (Bot API oddiy userni @username bo'yicha topa olmaydi)
+    # 2) @username — botning o'z indeksi -> get_chat -> userbot (resolve_username)
     for e in ents:
         if e.type != "mention":
             continue
         uname = e.extract_from(raw).lstrip("@")
         if uname.lower() == bot_un:
             continue  # botning o'zi tag qilingan — nishon emas
-        found = group_memory.find_user_id(chat_id, uname)
-        if found:
-            return found[0], _name(found[0], found[1], uname), None
-        try:
-            chat = await bot.get_chat(f"@{uname}")
-            if chat.type == "private":
-                return chat.id, _name(chat.id, getattr(chat, "full_name", None), uname), None
-        except Exception:  # noqa: BLE001
-            pass
-        # 3) Userbot (MTProto): ochiq @username'ni odam botga hech narsa yozmagan bo'lsa ham topadi
-        ub = await userbot.find_user_by_username(uname)
-        if ub:
-            return ub[0], _name(ub[0], ub[1], uname), None
-        if userbot.is_enabled():
-            return None, None, (f"@{html.escape(uname)} ni topa olmadim: bunday ochiq username yo'q, akkaunt yashirilgan "
-                                f"yoki bu odam emas (kanal/guruh/bot). Uning xabariga <b>reply</b> qilib yozing.")
-        return None, None, (f"@{html.escape(uname)} ni topa olmadim: bu odam guruhda hali hech narsa yozmagan va botga "
-                            f"ko'rinmagan. Uning xabariga <b>reply</b> qilib yozing yoki u bitta xabar yozsin.")
+        return await resolve_username(bot, chat_id, uname)
 
     # 3) Reply qilingan xabar muallifi
     r = message.reply_to_message

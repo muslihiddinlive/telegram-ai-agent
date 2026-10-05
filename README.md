@@ -493,6 +493,14 @@ Bot foydalanuvchining profiliga "chatbot" sifatida ulanadi va (Bot API 9.0 `post
 
 ## Moderatsiya: aniq buyruqlar va tekshiruv
 - **AI'siz yo'l** (`core/mod_commands.py`): `mute ber`, `14 daqiqaga mute`, `ban qil`, `kick`/`hayda`, `unmute`, `unban` kabi aniq buyruqlar kodda aniqlanadi — nishon (text_mention → `@username` → reply → ismi aytilgan yagona a'zo), muddat (`core/duration.py`) va amal — AI'siz, limit sarflamasdan, limiti tugagan admin ham ishlata oladi. Savol, inkor ("mute qilma") va o'tgan zamon ("qildim") buyruq hisoblanmaydi — ular AI'ga ketadi. Faqat guruh admini (yoki bot admini/superadmin) uchun.
+- **Nuqtali buyruqlar — botga tag SHART EMAS** (`handlers/group_mod.py` + `core/dot_mod.py`, sintaksis StokerDownloader'dan):
+  `.ban [@user|ID] [muddat] [sabab]`, `.unban`, `.kick`, `.mute [@user|ID] [muddat] [sabab]`, `.unmute`, `.del` (reply qilingan xabarni
+  o'chiradi), `.modhelp`. Nishon — xabarga **reply** yoki `@username`/ID; muddat `30m` `1h` `2k` `1hafta` (s soniya · m daqiqa · h soat ·
+  k/d kun · w hafta · o oy · y yil; muddat bo'lmasa — butunlay; Telegram chegarasi 366 kun). Nega alohida router: `ai_chat` guruhda botga
+  tag/reply qilinmagan xabarni e'tiborsiz qoldiradi, shuning uchun "reply + ban qil" yoki `.ban` botga yetib kelmasdi. Ruxsat — Telegram'dagi
+  HAR AMAL uchun alohida admin huquqi (ban/kick/mute/unban/unmute — «A'zolarni cheklash», `.del` — «Xabarlarni o'chirish»; Stoker'dagidek
+  "har qanday admin" emas); moderator bo'lmaganlarga bot jim turadi; bot egasi/adminlarini guruh moderatori ban/kick/mute qila olmaydi;
+  reply va `@user` turli odam bo'lsa — so'raydi; anonim admin (kim ekani noma'lum) rad etiladi. Bajarish mavjud tekshiruvli yadro orqali (quyida).
 - **Har bir amal tekshiriladi** (`core/moderation.py`): bajarishdan oldin botning o'z huquqi («A'zolarni cheklash») va nishon (admin/egasi/guruhda yo'q); bajarilgandan keyin natija `get_chat_member` bilan qayta o'qib TASDIQLANADI. Telegram "ok" desa-yu amal qo'llanmasa, bot buni ochiq aytadi.
 - **Qo'riqchi:** AI "mute qildim" deb yozsa-yu, hech bir moderatsiya tool'i muvaffaqiyatli bajarilmagan bo'lsa, yolg'on javob o'rniga ogohlantirish yuboriladi.
 - Cheklash faqat **supergroup**'da ishlaydi; bot admin bo'lishi va «Restrict members» huquqiga ega bo'lishi shart.
