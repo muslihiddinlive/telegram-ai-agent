@@ -20,6 +20,7 @@ import core.user_profile as user_profile
 import core.moderation as moderation
 import core.userbot_tools as userbot_tools
 import core.tariffs as tariffs
+import core.instagram_tools as instagram_tools
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -62,6 +63,8 @@ _TOOL_STATUS_LABELS = {
     "delete_message": "Xabar o'chirilmoqda", "pin_message": "Xabar mahkamlanmoqda",
     "lockdown_chat": "Guruh yopilmoqda", "unlock_chat": "Guruh ochilmoqda",
 }
+
+_TOOL_STATUS_LABELS.update(instagram_tools.STATUS_LABELS)
 
 _TOOL_STATUS_FORMAT_LABELS = [
     ("pptx", "PPTX"), ("docx", "Word hujjat"), ("xlsx", "Excel jadval"),
@@ -158,6 +161,7 @@ TOOLS: list[dict] = [
         },
     },
     *FILE_TOOLS,  # ms-file-toolkit: docx/xlsx/pptx/pdf — 36 ta tool
+    *instagram_tools.TOOLS,  # Instagram: post/karusel/reel/story (IG_* env sozlangan bo'lsa)
     {
         "type": "function",
         "function": {
@@ -801,6 +805,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     # Bing-fallback qo'shilgan versiyamiz bilan ALMASHTIRAMIZ (pastdagi
     # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).
     **userbot_tools.HANDLERS,  # userbot (core/userbot.py) — schema'lar faqat u ulangan bo'lsa AI'ga beriladi
+    **instagram_tools.HANDLERS,
 }
 
 

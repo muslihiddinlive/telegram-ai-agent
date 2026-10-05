@@ -10,6 +10,9 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommandScopeDefault
 import core.bot_commands as bot_commands
+import core.instagram_media as instagram_media
+import core.instagram_scheduler as instagram_scheduler
+import core.instagram_webhook as instagram_webhook
 
 import config
 import core.tgdb as tgdb
@@ -80,6 +83,7 @@ async def on_startup(bot: Bot):
     await nicknames.seed_defaults(bot)  # standart taxalluslar (masalan 8054272729 -> "Omirbayev aka")
     await userbot.start()  # sozlanmagan/xato bo'lsa bot yiqilmaydi — funksiya shunchaki o'chiq qoladi
     asyncio.create_task(scheduler.run_forever(bot))  # kunlik top-faollar (20:00) va tabriklar (09:00)
+    asyncio.create_task(instagram_scheduler.run_forever(bot))  # rejalashtirilgan Instagram postlari
 
 
 async def _register_commands(bot: Bot):
@@ -114,6 +118,8 @@ def main():
     app = web.Application()
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
+    instagram_media.register(app)  # Instagram uchun vaqtinchalik media URL (/ig-media/...)
+    instagram_webhook.register(app, bot)  # izoh webhook'i (faqat IG_WEBHOOK_ENABLED=1 bo'lsa)
 
     web.run_app(app, host="0.0.0.0", port=config.PORT)
 

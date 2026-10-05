@@ -7,3 +7,6 @@ data/db.json
 data/user_files/
 *.session
 *.session-journal
+
+# Instagram: rejalashtirilgan post fayllari (runtime)
+data/ig_scheduled/
