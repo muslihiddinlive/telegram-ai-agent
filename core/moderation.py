@@ -27,6 +27,7 @@ import config
 import core.bot_identity as bot_identity
 import core.tgdb as tgdb
 import core.group_memory as group_memory
+import core.userbot as userbot
 import core.duration as duration
 
 logger = logging.getLogger("moderation")
@@ -404,11 +405,18 @@ async def context_line(bot, message) -> str:
                     parts.append(f"Eslatilgan foydalanuvchi: ID={chat.id}, username=@{username}")
                 else:
                     parts.append(f"Eslatilgan '@{username}' — bu foydalanuvchi emas ({chat.type}), amal bajarilmasin")
+                continue
             except Exception:  # noqa: BLE001
-                parts.append(
-                    f"Eslatilgan '@{username}' — ID'sini aniqlab bo'lmadi: bu odam guruhda hali hech narsa yozmagan/"
-                    f"botga ko'rinmagan. Admin uning xabariga REPLY qilib so'rasin yoki odam bitta xabar yozsin."
-                )
+                pass
+            # 3) Userbot (MTProto): ochiq @username'ni odam botga hech narsa yozmagan bo'lsa ham topadi
+            ub = await userbot.find_user_by_username(username)
+            if ub:
+                parts.append(f"Eslatilgan foydalanuvchi: ID={ub[0]}, ism=\"{ub[1]}\", username=@{username}")
+                continue
+            parts.append(
+                f"Eslatilgan '@{username}' — ID'sini aniqlab bo'lmadi: bu odam guruhda hali hech narsa yozmagan/"
+                f"botga ko'rinmagan. Admin uning xabariga REPLY qilib so'rasin yoki odam bitta xabar yozsin."
+            )
 
     # Ism bilan aytilgan bo'lsa ("Jasurga mute ber") — guruh a'zolari orasidan mosini beramiz
     if not any(p.startswith("Eslatilgan foydalanuvchi") or p.startswith("Reply qilingan") for p in parts) \

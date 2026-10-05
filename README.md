@@ -405,6 +405,12 @@ Story egasiga "ko'rildi" bildirilmaydi. Telegram maxfiligi (yopiq bio/story, yas
 **Sozlamalar:** `USERBOT_ACCESS=all|admins` (standart `all`: hamma so'rashi mumkin; `admins`: faqat bot/guruh adminlari),
 `USERBOT_RATE_PER_HOUR=15` (oddiy foydalanuvchi uchun soatlik limit; adminlarga tegmaydi).
 
+**Moderatsiyada @username → ID:** `/mute @user`, `ban`, `kick` va AI orqali berilgan buyruqlarda nishon avval bot indeksidan,
+keyin `get_chat`dan qidiriladi; topilmasa **userbot** (MTProto) ochiq username'ni hal qiladi (`userbot.find_user_by_username`) —
+odam guruhda hali hech narsa yozmagan bo'lsa ham. Faqat odamlar (bot/kanal/guruh/o'chirilgan akkaunt emas), natija 10 daqiqa RAMda
+keshlanadi. Userbot ulanmagan bo'lsa — avvalgi xatti-harakat (reply qiling yoki odam bitta xabar yozsin). Nishon baribir shu
+guruh a'zosi bo'lishi shart (`target_error`), ruxsat qoidalari o'zgarmagan (faqat `can_restrict_members` huquqi bor admin).
+
 **Muhim:** (1) shu session'ni boshqa joyda bir vaqtda ishlatmang — Telegram uni bekor qiladi (AUTH_KEY_DUPLICATED); shunda funksiya
 o'zini o'chiradi, bot ishlashda davom etadi. (2) Render zero-downtime deploy paytida eski va yangi nusxa ozgina vaqt birga ishlashi mumkin
 — shunda ham shu xato chiqishi mumkin; kerak bo'lsa qayta deploy qiling. (3) Telegram'ni ommaviy yig'ish uchun ishlatmang: akkaunt limitga/ban'ga tushishi mumkin.

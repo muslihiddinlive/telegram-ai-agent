@@ -294,3 +294,54 @@ def test_unknown_user_gives_friendly_error(client):
 def test_all_tool_names_have_handlers_and_schemas():
     names = {s["function"]["name"] for s in tools.SCHEMAS}
     assert names == set(tools.HANDLERS) == set(tools._NAMES)
+
+
+# ── find_user_by_username (moderatsiya uchun @username -> ID) ────────────
+
+@pytest.fixture
+def username_client(client, monkeypatch):
+    client.users["botcha_bot"] = make_user(11, "Botcha", "botcha_bot", bot=True)
+    client.users["ketgan"] = make_user(12, "Ketgan", "ketgan", deleted=True)
+    client.lookups = []
+    orig = client.get_entity
+
+    async def counting(v):
+        client.lookups.append(v)
+        return await orig(v)
+
+    monkeypatch.setattr(client, "get_entity", counting)
+    ub._username_cache.clear()
+    return client
+
+
+def test_find_user_by_username_resolves_and_caches(username_client):
+    assert run(ub.find_user_by_username("@ali_bek")) == (10, "Ali")
+    assert run(ub.find_user_by_username("ALI_BEK")) == (10, "Ali")      # kichik/katta harf farqi yo'q, keshdan
+    assert username_client.lookups == ["ali_bek"]                         # Telegram'ga faqat bir marta murojaat
+
+
+def test_find_user_by_username_cache_expires(username_client):
+    assert run(ub.find_user_by_username("ali_bek", now=1000)) == (10, "Ali")
+    run(ub.find_user_by_username("ali_bek", now=1000 + ub.USERNAME_CACHE_TTL - 1))
+    assert len(username_client.lookups) == 1
+    run(ub.find_user_by_username("ali_bek", now=1000 + ub.USERNAME_CACHE_TTL + 1))
+    assert len(username_client.lookups) == 2                              # TTL o'tgach qayta so'raladi
+
+
+@pytest.mark.parametrize("target", ["yoq_odam", "kanal", "botcha_bot", "ketgan", "12345678", "", "@@"])
+def test_find_user_by_username_returns_none_for_non_humans(username_client, target):
+    # topilmagan, kanal, bot, o'chirilgan akkaunt, raqamli ID, bo'sh/yaroqsiz — hammasida None (xato emas)
+    assert run(ub.find_user_by_username(target)) is None
+    assert ub._username_cache == {}                                       # muvaffaqiyatsiz natija keshlanmaydi
+
+
+def test_find_user_by_username_none_when_userbot_disabled(username_client, monkeypatch):
+    monkeypatch.setattr(ub, "_client", None)
+    assert run(ub.find_user_by_username("ali_bek")) is None
+
+
+def test_find_user_by_username_swallows_flood_wait(username_client, monkeypatch):
+    async def flood(v):
+        raise errors.FloodWaitError(request=None, capture=999)           # MAX_FLOOD_SLEEP'dan uzun — kutilmaydi
+    monkeypatch.setattr(username_client, "get_entity", flood)
+    assert run(ub.find_user_by_username("ali_bek")) is None               # xato yutiladi, chaqiruvchi "topilmadi"ga tushadi

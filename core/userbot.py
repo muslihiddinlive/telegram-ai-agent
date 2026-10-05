@@ -36,6 +36,12 @@ _client = None
 _disabled_reason: str | None = None
 _rate: dict[int, deque] = defaultdict(deque)
 
+# @username -> (id, ism): qisqa muddatli xotira keshi. Username boshqa odamga o'tib ketishi mumkin,
+# shuning uchun TTL qisqa va kesh faqat RAMda (diskka/DB'ga yozilmaydi).
+USERNAME_CACHE_TTL = 600
+USERNAME_CACHE_MAX = 500
+_username_cache: dict[str, tuple[float, int, str]] = {}
+
 
 class UserbotError(Exception):
     """Foydalanuvchiga ko'rsatsa bo'ladigan, tushunarli xato."""
@@ -213,6 +219,46 @@ async def resolve_user(target: str, chat_id: int | None = None):
     if not isinstance(entity, types.User):
         raise UserbotError("Bu foydalanuvchi emas (kanal yoki guruh).")
     return entity
+
+
+async def find_user_by_username(username: str, now: float | None = None) -> tuple[int, str] | None:
+    """@username -> (user_id, ism). MTProto orqali OCHIQ username'ni topadi — odam botga/guruhga hali
+    hech narsa yozmagan bo'lsa ham (Bot API buni qila olmaydi). Moderatsiya (mute/ban) uchun nishonni
+    aniqlashda zaxira yo'l sifatida ishlatiladi.
+
+    None qaytaradi: userbot o'chiq/ulanmagan, username yo'q yoki yashirin, yoki u odam emas
+    (kanal, guruh, bot, o'chirilgan akkaunt). Xatolar (FloodWait va h.k.) bu yerda yutiladi —
+    chaqiruvchi shunchaki «topilmadi» yo'liga tushadi.
+    """
+    if not is_enabled():
+        return None
+    try:
+        value = parse_target(username)
+    except UserbotError:
+        return None
+    if not isinstance(value, str):  # raqamli ID — bu funksiya faqat username uchun
+        return None
+
+    now = time.time() if now is None else now
+    key = value.lower()
+    hit = _username_cache.get(key)
+    if hit and now - hit[0] < USERNAME_CACHE_TTL:
+        return hit[1], hit[2]
+
+    try:
+        user = await resolve_user(value)
+    except UserbotError as e:
+        logger.info("Username topilmadi (@%s): %s", value, e)
+        return None
+    if getattr(user, "bot", False) or getattr(user, "deleted", False):
+        return None
+
+    name = display_name(user)
+    if len(_username_cache) >= USERNAME_CACHE_MAX:
+        for k, _ in sorted(_username_cache.items(), key=lambda kv: kv[1][0])[: USERNAME_CACHE_MAX // 5]:
+            _username_cache.pop(k, None)
+    _username_cache[key] = (now, user.id, name)
+    return user.id, name
 
 
 # ── o'qish funksiyalari ──────────────────────────────────────────────────

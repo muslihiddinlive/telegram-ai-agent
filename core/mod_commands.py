@@ -15,6 +15,7 @@ import re
 import core.bot_identity as bot_identity
 import core.duration as duration
 import core.group_memory as group_memory
+import core.userbot as userbot
 import core.moderation as moderation
 
 logger = logging.getLogger("mod_commands")
@@ -113,6 +114,13 @@ async def _resolve_target(bot, message, text: str):
                 return chat.id, _name(chat.id, getattr(chat, "full_name", None), uname), None
         except Exception:  # noqa: BLE001
             pass
+        # 3) Userbot (MTProto): ochiq @username'ni odam botga hech narsa yozmagan bo'lsa ham topadi
+        ub = await userbot.find_user_by_username(uname)
+        if ub:
+            return ub[0], _name(ub[0], ub[1], uname), None
+        if userbot.is_enabled():
+            return None, None, (f"@{html.escape(uname)} ni topa olmadim: bunday ochiq username yo'q, akkaunt yashirilgan "
+                                f"yoki bu odam emas (kanal/guruh/bot). Uning xabariga <b>reply</b> qilib yozing.")
         return None, None, (f"@{html.escape(uname)} ni topa olmadim: bu odam guruhda hali hech narsa yozmagan va botga "
                             f"ko'rinmagan. Uning xabariga <b>reply</b> qilib yozing yoki u bitta xabar yozsin.")
 
