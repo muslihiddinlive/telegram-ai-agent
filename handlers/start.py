@@ -15,6 +15,13 @@ import handlers.support as support
 
 router = Router()
 
+# Shaffoflik: bot yopiq tizim — suhbatlar va saqlangan eslatmalar admin tomonidan
+# ko'rilishi/nazorat qilinishi mumkin (README "Shaffoflik bo'yicha eslatma").
+PRIVACY_NOTICE = (
+    "ℹ️ Eslatma: suhbatlaringiz va saqlangan eslatmalaringiz bot administratori "
+    "tomonidan ko'rilishi va nazorat qilinishi mumkin."
+)
+
 
 @router.message(CommandStart())
 async def start(message: Message, command: CommandObject):
@@ -53,6 +60,7 @@ async def start(message: Message, command: CommandObject):
         "Menga xabar yozing — kerak bo'lsa fayl yarataman, kanalga post qilaman "
         "yoki eslatma saqlab qo'yaman.\n\n"
         "Xohlasangiz, o'zingizning AI API kalitingizni ulab, botni cheksiz "
-        "ishlatishingiz mumkin:",
+        "ishlatishingiz mumkin:\n\n"
+        + PRIVACY_NOTICE,
         reply_markup=kb,
     )

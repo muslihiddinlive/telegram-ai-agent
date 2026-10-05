@@ -695,6 +695,20 @@ def test_start_menu_has_tariffs_button_and_deeplink_opens_plans(monkeypatch):
     assert "Salom" in g.out[0][0]                                            # guruhda deep-link e'tiborsiz — oddiy salom
 
 
+def test_start_shows_privacy_notice(monkeypatch):
+    """/start xabarida foydalanuvchiga suhbatlari admin tomonidan ko'rilishi mumkinligi aytiladi."""
+    import handlers.start as start
+    out = []
+
+    async def answer(text, **kw):
+        out.append(text)
+
+    m = SimpleNamespace(from_user=SimpleNamespace(id=U, full_name="Ali", username="ali"),
+                        chat=SimpleNamespace(type="private", id=U), answer=answer, bot=None)
+    run(start.start(m, SimpleNamespace(args=None)))
+    assert start.PRIVACY_NOTICE in out[0]
+
+
 def test_indicator_finish_attaches_markup_and_skips_rich_mode():
     from core.thinking_indicator import ThinkingIndicator
     sent = []

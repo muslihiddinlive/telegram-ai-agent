@@ -16,12 +16,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
+# Root bo'lmagan foydalanuvchi: konteyner buzilsa (masalan superadmin `exec:` orqali)
+# tizim darajasidagi zarar kamayadi. HOME — LibreOffice profili uchun yoziladigan papka kerak.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app
+
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# requirements.lock — aniq (pinned) versiyalar: build har safar bir xil natija beradi.
+# Yangilash: uv pip compile requirements.txt --python-version 3.11 --python-platform linux --no-header -o requirements.lock
+COPY requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
 
-COPY . .
+# data/ (db.json, user_files) ilova tomonidan yoziladi — egasi `app` bo'lishi shart.
+COPY --chown=app:app . .
+RUN mkdir -p /app/data && chown -R app:app /app/data
+
+USER app
+ENV HOME=/home/app
 
 EXPOSE 8080
 

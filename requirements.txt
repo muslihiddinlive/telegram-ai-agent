@@ -1,3 +1,5 @@
+# Manba ro'yxat. Docker build requirements.lock'dan o'rnatadi (aniq versiyalar).
+# Bu faylni o'zgartirgach lock'ni qayta yarating (buyruq Dockerfile ichida yozilgan).
 aiogram>=3.31,<4.0
 aiohttp>=3.9
 cryptography>=42.0
