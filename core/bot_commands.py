@@ -4,7 +4,7 @@ main.py (ishga tushishda) va handlers/pending_text.py (yangi admin
 qo'shilganda, darhol) ikkalasi ham shu yerdan foydalanadi.
 """
 from aiogram import Bot
-from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeAllGroupChats
+from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeAllGroupChats, BotCommandScopeDefault
 
 GROUP_COMMANDS = [
     BotCommand(command="guruh_ruxsat", description="🔒 Bot javobini tanlangan userlarga cheklash"),
@@ -24,23 +24,46 @@ def _ig_multi() -> bool:
     return ictx.multi_enabled()
 
 
-GENERAL_COMMANDS = [
+_BASE_COMMANDS = [
     BotCommand(command="start", description="Botni ishga tushirish"),
     BotCommand(command="yangi_mavzu", description="🗂 Yangi mustaqil mavzu ochish"),
     BotCommand(command="mavzular", description="🗂 Mavzularim ro'yxati"),
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
     BotCommand(command="laqab", description="🏷 Guruhda ishlatiladigan taxallusingiz"),
-] + ([BotCommand(command="instagram", description="📸 Instagram akkauntimni ulash")] if _ig_multi() else [])
-
-ADMIN_COMMANDS = GENERAL_COMMANDS + [
-    BotCommand(command="panel", description="🛠 Boshqaruv paneli"),
 ]
+_IG_COMMAND = BotCommand(command="instagram", description="📸 Instagram akkauntimni ulash")
+
+
+def general_commands() -> list:
+    """Hamma uchun menyu. /instagram faqat Instagram ulash yoqilgan bo'lsa (paneldan keyin yoqilishi mumkin)."""
+    return _BASE_COMMANDS + ([_IG_COMMAND] if _ig_multi() else [])
+
+
+def admin_commands() -> list:
+    return general_commands() + [BotCommand(command="panel", description="🛠 Boshqaruv paneli")]
+
+
+# Orqaga moslik (ishga tushish payti surati); dinamik variantlar — general_commands()/admin_commands()
+GENERAL_COMMANDS = general_commands()
+ADMIN_COMMANDS = admin_commands()
+
+
+async def refresh_commands(bot: Bot) -> None:
+    """Menyuni hozirgi holatga moslaydi (masalan, superadmin paneldan Instagram'ni yoqqach /instagram paydo bo'ladi)."""
+    import config
+    import core.roles as roles
+    await bot.set_my_commands(general_commands(), scope=BotCommandScopeDefault())
+    for admin_id in {config.SUPERADMIN_ID} | {int(u) for u in roles.list_admins()}:
+        try:
+            await register_admin_commands(bot, admin_id)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def register_admin_commands(bot: Bot, chat_id: int):
     """Bitta admin/superadmin uchun /panel'ni ularning shaxsiy '/'' menyusiga qo'shadi."""
-    await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=chat_id))
+    await bot.set_my_commands(admin_commands(), scope=BotCommandScopeChat(chat_id=chat_id))
 
 
 async def unregister_admin_commands(bot: Bot, chat_id: int):

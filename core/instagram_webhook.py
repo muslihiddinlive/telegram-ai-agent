@@ -27,6 +27,7 @@ import core.instagram_api as ig
 import core.instagram_context as ictx
 import core.instagram_dm as dm
 import core.instagram_scheduler as scheduler
+import core.instagram_settings as settings
 import core.instagram_store as store
 
 logger = logging.getLogger("instagram_webhook")
@@ -39,7 +40,7 @@ _limit_notified: dict[str, float] = {}
 
 def enabled() -> bool:
     flag = os.getenv("IG_WEBHOOK_ENABLED", "").lower() in ("1", "true", "yes")
-    return flag and bool(os.getenv("META_APP_SECRET") or os.getenv("IG_APP_SECRET")) and bool(os.getenv("WEBHOOK_VERIFY_TOKEN")) \
+    return flag and bool(os.getenv("META_APP_SECRET") or settings.app_secret()) and bool(os.getenv("WEBHOOK_VERIFY_TOKEN")) \
         and (ig.is_configured() or ictx.multi_enabled())
 
 

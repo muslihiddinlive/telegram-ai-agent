@@ -59,11 +59,13 @@ class OAuthError(Exception):
 
 # ── sozlama ────────────────────────────────────────────────────────────────────
 def _app_id() -> str:
-    return os.getenv("IG_APP_ID", "")
+    import core.instagram_settings as settings
+    return settings.app_id()
 
 
 def _app_secret() -> str:
-    return os.getenv("IG_APP_SECRET", "")
+    import core.instagram_settings as settings
+    return settings.app_secret()
 
 
 def redirect_uri() -> str:
@@ -357,14 +359,22 @@ to perform the actions you request on your own account and is never sold. Discon
 remove the app in Instagram settings, and everything is deleted. Contact: {contact}.</p>""")
 
 
+def _guarded(handler):
+    """Yo'l har doim ro'yxatda (kalitlar keyin paneldan kiritilsa qayta deploy kerak bo'lmasin), lekin kalitlar
+    yo'q paytda hech narsa bajarmaydi."""
+    async def wrapper(request: web.Request) -> web.Response:
+        if not ictx.multi_enabled():
+            return _page("Instagram ulash o'chiq", "<p>Bu funksiya hozircha yoqilmagan.</p>", 404)
+        return await handler(request)
+    return wrapper
+
+
 def register(app: web.Application, bot) -> bool:
-    if not ictx.multi_enabled():
-        logger.info("Instagram ulash (OAuth) o'chiq — IG_APP_ID / IG_APP_SECRET yo'q")
-        return False
-    app.router.add_get(CALLBACK_PATH, _make_callback(bot))
-    app.router.add_post(DEAUTH_PATH, _make_deauth(bot))
-    app.router.add_post(DELETE_PATH, _make_delete(bot))
+    app.router.add_get(CALLBACK_PATH, _guarded(_make_callback(bot)))
+    app.router.add_post(DEAUTH_PATH, _guarded(_make_deauth(bot)))
+    app.router.add_post(DELETE_PATH, _guarded(_make_delete(bot)))
     app.router.add_get(DELETE_STATUS_PATH, _delete_status)
     app.router.add_get(PRIVACY_PATH, _privacy)
-    logger.info("Instagram OAuth ulandi: %s", CALLBACK_PATH)
+    logger.info("Instagram OAuth yo'llari ulandi (%s) — %s", CALLBACK_PATH,
+                "YOQILGAN" if ictx.multi_enabled() else "kalitlar kiritilgunicha o'chiq")
     return True

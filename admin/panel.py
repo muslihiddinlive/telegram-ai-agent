@@ -22,6 +22,9 @@ import core.ai_persona as ai_persona
 import core.global_blacklist as global_blacklist
 import core.admin_messaging as admin_messaging
 import core.tariffs as tariffs
+import core.instagram_accounts as ig_accounts
+import core.instagram_media as ig_media
+import core.instagram_settings as ig_settings
 import core.token_usage as token_usage
 import datetime as dt
 
@@ -37,6 +40,7 @@ def main_menu_kb(user_id: int) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(text="🌐 Global qora ro'yxat", callback_data="panel:qora")])
         rows.append([InlineKeyboardButton(text="📢 Hammaga xabar (broadcast)", callback_data="panel:bc")])
         rows.append([InlineKeyboardButton(text="💳 Tariflar", callback_data="panel:tariffs")])
+        rows.append([InlineKeyboardButton(text="📸 Instagram ulash", callback_data="panel:ig")])
         rows.append([InlineKeyboardButton(text="📊 Token hisoboti", callback_data="panel:tokens:today")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -937,6 +941,101 @@ async def add_admin_start(call: CallbackQuery):
     pending_input.set(call.from_user.id, "add_admin_wait_id")
     await call.message.answer("Yangi admin qilinadigan foydalanuvchi ID'sini yuboring:")
     await call.answer()
+
+
+# ── 📸 Instagram ulash: Meta ilovasi kalitlari (faqat superadmin) ──
+def ig_view() -> tuple[str, InlineKeyboardMarkup]:
+    """Holat + Meta'ga kiritiladigan manzillar. Sirlar OCHILMAYDI (faqat niqoblangan)."""
+    st = ig_settings.status()
+    src = {"panel": "panel", "env": "Render env"}.get(st["source"], "")
+    lines = ["📸 <b>Instagram ulash</b>",
+             "Foydalanuvchilar o'z Instagram akkauntini ulashi uchun Meta'dagi <b>Instagram ilovasining</b> kalitlari kerak "
+             "(Meta → Instagram → «API setup with Instagram login»; Facebook ilovasining ID/Secret'i emas).\n"]
+    lines.append("Holat: " + (f"✅ yoqilgan (manba: {src})" if st["configured"] else "⚪️ o'chiq — kalitlar kiritilmagan"))
+    lines.append("App ID: " + (f"<code>{html.escape(st['app_id'])}</code>" if st["app_id"] else
+                               ("✅ panelda kiritilgan (Secret kutilmoqda)" if st["panel_id"] else "—")))
+    lines.append("App Secret: " + (f"✅ kiritilgan (<code>{html.escape(st['secret'])}</code>)" if st["secret"] else
+                                   ("✅ panelda kiritilgan" if st["panel_secret"] else "—")))
+    if st["panel_id"] != st["panel_secret"]:
+        lines.append("⚠️ Panelda juftlik to'liq emas — ikkalasi ham kiritilguncha panel qiymatlari ishlatilmaydi.")
+    n = ig_accounts.count()
+    lines.append(f"Ulangan akkauntlar: <b>{n}</b>" + (" — ⚠️ boshqa ilovaga o'tsangiz ularning tokenlari ishlamay qoladi, "
+                                                      "qayta ulashlari kerak bo'ladi." if n else ""))
+    try:
+        base = ig_media.public_base()
+        lines.append("\n<b>Meta'ga kiritiladigan manzillar:</b>\n"
+                     f"OAuth redirect URI:\n<code>{html.escape(base)}/ig/callback</code>\n"
+                     f"Deauthorize callback:\n<code>{html.escape(base)}/ig/deauth</code>\n"
+                     f"Data deletion request:\n<code>{html.escape(base)}/ig/data-deletion</code>\n"
+                     f"Privacy policy URL:\n<code>{html.escape(base)}/ig/privacy</code>")
+    except Exception:  # noqa: BLE001
+        lines.append("\n⚠️ Ommaviy manzil aniqlanmadi — Render env'ga <code>IG_PUBLIC_BASE_URL=https://domeningiz</code> qo'ying.")
+    rows = [[InlineKeyboardButton(text="✏️ App ID kiritish", callback_data="panel:ig_id"),
+             InlineKeyboardButton(text="🔐 App Secret kiritish", callback_data="panel:ig_secret")]]
+    if st["panel_id"] or st["panel_secret"]:
+        rows.append([InlineKeyboardButton(text="🗑 Panel qiymatlarini tozalash", callback_data="panel:ig_clear")])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data="panel:main")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ig_guard(call: CallbackQuery) -> bool:
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return False
+    return True
+
+
+@router.callback_query(F.data == "panel:ig")
+async def ig_open(call: CallbackQuery):
+    if not await _ig_guard(call):
+        return
+    pending_input.clear(call.from_user.id)
+    text, kb = ig_view()
+    await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:ig_id")
+async def ig_ask_id(call: CallbackQuery):
+    if not await _ig_guard(call):
+        return
+    pending_input.set(call.from_user.id, "ig_set_app_id")
+    await call.message.answer("Instagram <b>App ID</b> ni yuboring (faqat raqamlar). Bekor qilish: /panel")
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:ig_secret")
+async def ig_ask_secret(call: CallbackQuery):
+    if not await _ig_guard(call):
+        return
+    pending_input.set(call.from_user.id, "ig_set_app_secret")
+    await call.message.answer("Instagram <b>App Secret</b> ni yuboring. Xavfsizlik uchun xabaringizni bot darhol o'chiradi. "
+                              "Bekor qilish: /panel")
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:ig_clear")
+async def ig_clear_ask(call: CallbackQuery):
+    if not await _ig_guard(call):
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Ha, tozalash", callback_data="panel:ig_clear_yes"),
+        InlineKeyboardButton(text="↩️ Bekor", callback_data="panel:ig")]])
+    still = "Render env'dagi kalitlar bo'lsa, ular ishlayveradi." if ig_settings.status()["env"] else \
+            "Env'da kalit yo'q — Instagram ulash O'CHADI (foydalanuvchilarning ulangan akkauntlari saqlanadi, lekin to'xtatiladi)."
+    await call.message.edit_text(f"Panelda kiritilgan Instagram kalitlari o'chiriladi.\n{still}", reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:ig_clear_yes")
+async def ig_clear_do(call: CallbackQuery, bot: Bot):
+    if not await _ig_guard(call):
+        return
+    await ig_settings.clear(bot)
+    await bot_commands.refresh_commands(bot)
+    text, kb = ig_view()
+    await call.message.edit_text(text, reply_markup=kb)
+    await call.answer("Tozalandi 🗑")
 
 
 @router.callback_query(F.data == "panel:main")

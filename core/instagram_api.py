@@ -298,7 +298,8 @@ async def send_private_reply(comment_id: str, message: str) -> dict[str, Any]:
 # ── Webhook imzosi ─────────────────────────────────────────────────────────────
 def verify_signature(payload: bytes, header: Optional[str]) -> bool:
     """X-Hub-Signature-256 ni META_APP_SECRET yoki IG_APP_SECRET bilan solishtiradi (doimiy vaqtli taqqoslash)."""
-    secrets = [x for x in (os.getenv("META_APP_SECRET", ""), os.getenv("IG_APP_SECRET", "")) if x]
+    import core.instagram_settings as settings
+    secrets = [x for x in (os.getenv("META_APP_SECRET", ""), settings.app_secret()) if x]
     if not secrets or not header or not header.startswith("sha256="):
         return False
     given = header.split("=", 1)[1]

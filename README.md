@@ -430,6 +430,12 @@ statistika va izohlarni boshqaradi, rejalashtiradi, avtomatik javoblar va DM'da 
 Tarif tugasa: avtomatik javoblar va rejalashtirilgan postlar to'xtaydi (post kechikib chiqib ketmaydi — aniq bekor qilinadi va
 egasiga xabar boradi). Plus chegaralari `IG_PLUS_*` env bilan o'zgaradi.
 
+**Kalitlarni paneldan kiritish (qayta deploy shart emas):** superadmin `/panel` → **📸 Instagram ulash** → App ID va App Secret kiritadi.
+Secret Fernet bilan shifrlanib saqlanadi va yuborilgan xabar darhol o'chiriladi; panel Meta'ga kiritiladigan manzillarni ham ko'rsatadi.
+Panel qiymatlari env'dan **ustun**, lekin faqat JUFT bo'lib ishlatiladi (panelning App ID'si env'ning Secret'i bilan aralashmaydi). Boshqa
+ilovaga o'tilsa eski Secret o'chadi va ulangan akkauntlar tokenlari qayta ulanishni talab qiladi. Env (`IG_APP_ID`/`IG_APP_SECRET`) ham ishlayveradi.
+Webhook sozlamalari (`IG_WEBHOOK_ENABLED`, `WEBHOOK_VERIFY_TOKEN`) hozircha faqat env'da.
+
 **Meta'da sozlash:** Dashboard → Instagram → *API setup with Instagram login* → Business login settings: Instagram App ID/Secret'ni
 env'ga yozing; OAuth redirect URI = `https://<domen>/ig/callback`, Deauthorize = `/ig/deauth`, Data deletion = `/ig/data-deletion`,
 Privacy policy = `/ig/privacy` (hammasi bot o'zi beradi). Webhook'ga (izoh/DM) obuna ulanganda har akkaunt uchun avtomatik yoziladi.

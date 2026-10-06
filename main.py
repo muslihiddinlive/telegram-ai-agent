@@ -98,7 +98,7 @@ async def _register_commands(bot: Bot):
     yozib bilishi shart bo'lib qolardi (masalan /yangi_mavzu — Topics
     funksiyasi "yo'q" deb ko'rinishining asosiy sababi shu edi).
     """
-    await bot.set_my_commands(bot_commands.GENERAL_COMMANDS, scope=BotCommandScopeDefault())
+    await bot.set_my_commands(bot_commands.general_commands(), scope=BotCommandScopeDefault())
     await bot_commands.register_group_commands(bot)
 
     # Superadmin va barcha adminlarga qo'shimcha /panel komandasi — faqat

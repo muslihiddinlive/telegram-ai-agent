@@ -7,7 +7,7 @@ contextvars asyncio task'lariga xos (bir-biriga aralashmaydi), shuning uchun bir
 turli foydalanuvchilarning chaqiruvlari bir-birining tokenini ko'rmaydi. Akkauntni FAQAT server belgilaydi
 (common.require / webhook / scheduler) — AI tool argumentlaridan hech qachon olinmaydi.
 
-Ko'p-akkauntli rejim (IG_APP_ID + IG_APP_SECRET berilgan) YOQILGANDA kontekstsiz chaqiruv xato beradi
+Ko'p-akkauntli rejim (IG_APP_ID + IG_APP_SECRET berilgan — paneldan yoki env'dan) YOQILGANDA kontekstsiz chaqiruv xato beradi
 (env'dagi egasi akkauntiga jimgina tushib ketmaydi). O'chiq rejimda (eski, bitta akkaunt) env ishlatiladi.
 """
 from __future__ import annotations
@@ -34,8 +34,9 @@ _plan: contextvars.ContextVar = contextvars.ContextVar("ig_plan", default=None)
 
 
 def multi_enabled() -> bool:
-    """Foydalanuvchilar o'z akkauntini ulashi yoqilganmi (Meta Instagram ilovasi sozlangan)."""
-    return bool(os.getenv("IG_APP_ID") and os.getenv("IG_APP_SECRET"))
+    """Foydalanuvchilar o'z akkauntini ulashi yoqilganmi (Meta Instagram ilovasi kalitlari: paneldan yoki env'dan)."""
+    import core.instagram_settings as settings
+    return settings.configured()
 
 
 def current() -> Optional[Account]:

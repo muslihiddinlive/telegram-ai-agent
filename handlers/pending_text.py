@@ -5,6 +5,8 @@ pending_input holatidagi matn xabarlarni ushlab, tegishli oqimga yo'naltiradi
 MUHIM: bu router main.py'da handlers.ai_chat'dan OLDIN ro'yxatdan o'tishi
 kerak — aks holda bu xabarlar oddiy AI-suhbat sifatida ketib qoladi.
 """
+import logging
+
 from aiogram import Router, F
 from aiogram.types import Message
 
@@ -13,7 +15,9 @@ import core.roles as roles
 import core.user_api_keys as user_api_keys
 import core.shared_keys as shared_keys
 import core.ai_persona as ai_persona
-from admin.panel import render_search_results, tariff_config_view
+from admin.panel import render_search_results, tariff_config_view, ig_view
+import core.instagram_settings as ig_settings
+import core.bot_commands as bot_commands_mod   # (handle_pending ichida `bot_commands` lokal import bor — nom to'qnashmasin)
 import core.tariffs as tariffs
 import core.admin_messaging as admin_messaging
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -178,6 +182,30 @@ async def handle_pending(message: Message):
                 f"❌ Kalit ishlamadi: {error}\n\nQaytadan {label} kalitingizni yuboring, "
                 f"yoki /apikalit bilan bekor qiling."
             )
+
+    # ── Superadmin: Instagram ilovasi kalitlari (paneldan) ──
+    elif action in ("ig_set_app_id", "ig_set_app_secret"):
+        if action == "ig_set_app_secret":
+            try:
+                await message.delete()      # Secret chatda qolib ketmasin (to'g'ri yoki noto'g'ri bo'lishidan qat'i nazar)
+            except Exception:  # noqa: BLE001
+                pass
+        if not roles.is_superadmin(user_id):
+            pending_input.clear(user_id)
+            await message.answer("Ruxsat yo'q.")
+            return
+        setter = ig_settings.set_app_id if action == "ig_set_app_id" else ig_settings.set_app_secret
+        ok, err = await setter(message.bot, text)
+        if not ok:
+            await message.answer(f"❌ {err}\n\nQaytadan yuboring yoki /panel bilan bekor qiling.")
+            return
+        pending_input.clear(user_id)
+        try:
+            await bot_commands_mod.refresh_commands(message.bot)  # /instagram menyuda paydo bo'ladi/yo'qoladi
+        except Exception:  # noqa: BLE001
+            logging.getLogger("pending_text").warning("Buyruq menyusi yangilanmadi", exc_info=True)
+        view_text, kb = ig_view()
+        await message.answer("✅ Saqlandi.\n\n" + view_text, reply_markup=kb)
 
     # ── Superadmin: umumiy (bot egasiga tegishli) AI kalit qo'shish ──
     elif action == "add_shared_key":

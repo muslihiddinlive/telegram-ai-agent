@@ -106,6 +106,11 @@ def all_accounts() -> list[ictx.Account]:
     return out
 
 
+def count() -> int:
+    """Ulangan akkauntlar soni (token shifri ochilmaydi)."""
+    return len(_accounts())
+
+
 def iter_accounts(only_with_work: bool = False) -> list[tuple[int, ictx.Account, bool]]:
     """Barcha ulangan akkauntlar: (tg_uid, Account, token_yaroqli). Scheduler uchun."""
     import core.instagram_store as store

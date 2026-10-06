@@ -160,14 +160,13 @@ async def tick(bot, now: Optional[datetime] = None) -> None:
 
 
 async def run_forever(bot) -> None:
-    if not (ig.is_configured() or ictx.multi_enabled()):
-        logger.info("Instagram sozlanmagan — scheduler ishga tushmadi")
-        return
+    # Sozlanmagan bo'lsa ham aylanaveradi (arzon): superadmin keyin paneldan yoqsa, qayta deploy kerak bo'lmasin.
     logger.info("Instagram scheduler ishga tushdi")
     last_refresh = 0.0
     while True:
         try:
-            await tick(bot)
+            if ig.is_configured() or ictx.multi_enabled():
+                await tick(bot)
             if ictx.multi_enabled():
                 import time as _t
                 import core.instagram_oauth as oauth
