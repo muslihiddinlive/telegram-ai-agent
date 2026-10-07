@@ -250,6 +250,8 @@ async def handle_message(message: Message):
         # odamdan ketadi (guruhda chatmode egasi); VIP chatmode — cheksiz.
         "quota_user": requester_id_for_limit,
         "quota_unlimited": charge_mode == "none",
+        # chatmode egasi to'layotgan bo'lsa-yu, uning rasm/fayl kvotasi tugagan bo'lsa — yozuvchining o'zidan yechiladi
+        "quota_fallback": user_id if charge_mode == "owner" else None,
         "bot": message.bot, "chat_id": message.chat.id, "thread_id": message.message_thread_id,
         "is_group": is_group, "mod": mod_access, "message_id": message.message_id,
         # xabarda AYNAN BITTA muddat bo'lsa (masalan "14 daqiqaga") — moderatsiya tool'lariga majburan beriladi

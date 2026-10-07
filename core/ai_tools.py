@@ -843,15 +843,36 @@ def _unstringify_json(value):
 async def dispatch(name: str, user_id: int, args: dict, ctx: dict) -> dict:
     """Tool'ni bajaradi; fayl yaratish / rasm o'qish uchun TARIF KVOTASINI serverda majburlaydi (core/tariffs.py):
     kvota tugagan bo'lsa tool BAJARILMAYDI; muvaffaqiyatli bajarilgandagina 1 ta sanaladi. ctx["quota_user"] —
-    hisobi ketadigan odam (guruhda chatmode egasi), ctx["quota_unlimited"] — VIP chatmode."""
+    hisobi ketadigan odam (guruhda chatmode egasi), ctx["quota_unlimited"] — VIP chatmode, ctx["quota_fallback"] —
+    chatmode egasi to'layotgan paytda xabarni YOZGAN odam: egasining kvotasi tugagan bo'lsa, hisob yozuvchining o'zidan
+    ketadi (so'rov limiti bilan bir xil: egasi -> yozuvchi -> ikkalasi ham tugagan bo'lsa rad)."""
     q_user = ctx.get("quota_user")
     kind = tariffs.quota_kind(name, is_file_tool(name)) if q_user is not None and not ctx.get("quota_unlimited") else None
-    if kind and not tariffs.quota_available(q_user, kind):
-        return {"error": tariffs.quota_denied_text(q_user, kind), "kvota_tugadi": kind}
+    payer = None
+    if kind:
+        payer = _quota_payer(ctx, kind)
+        if payer is None:
+            writer = ctx.get("quota_fallback")
+            both = writer is not None and writer != q_user
+            text = tariffs.quota_denied_text(writer if both else q_user, kind)
+            if both:
+                text += " (Bu guruh chat rejimi egasining ham, foydalanuvchining ham kunlik limiti tugagan.)"
+            return {"error": text, "kvota_tugadi": kind}
     result = await _dispatch_inner(name, user_id, args, ctx)
     if kind and tariffs.counts_as_use(kind, result):
-        await tariffs.consume(ctx.get("bot"), q_user, kind)
+        await tariffs.consume(ctx.get("bot"), payer, kind)       # tekshirilgan to'lovchidan — aynan o'sha odamdan
     return result
+
+
+def _quota_payer(ctx: dict, kind: str):
+    """Kvota kimdan yechiladi: avval ctx["quota_user"]; uniki tugagan bo'lsa — ctx["quota_fallback"] (yozuvchi); ikkalasi
+    ham tugagan bo'lsa None."""
+    q_user, writer = ctx.get("quota_user"), ctx.get("quota_fallback")
+    if tariffs.quota_available(q_user, kind):
+        return q_user
+    if writer is not None and writer != q_user and tariffs.quota_available(writer, kind):
+        return writer
+    return None
 
 
 async def _dispatch_inner(name: str, user_id: int, args: dict, ctx: dict) -> dict:

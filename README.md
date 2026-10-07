@@ -203,7 +203,7 @@ Hamma tarifda fayl/hujjat yaratish va rasm o'qish bor — farq **kunlik kvotada*
 - **"Fayl yaratish"** = AI tool fayl chiqarsa (docx/xlsx/pptx/pdf/html/py/csv/rasm/arxiv, taqdimot, diagramma...): har bir shunday tool chaqiruvi 1 ta.
   Faqat o'qish/qidirish tool'lari (`read_*`, `get_*`, `list_*`, `search_*`, `fetch_*`...) sanalmaydi. **"Rasm o'qish"** = `look_at_image` muvaffaqiyatli chaqiruvi.
   Xato bilan tugagan tool kvotadan ayirilmaydi. Kvota tugasa tool **umuman ishga tushmaydi** (serverda, `ai_tools.dispatch`), AI foydalanuvchiga aytadi.
-  Kvota kun almashganda (Toshkent) yangilanadi. Admin va VIP chatmode — cheksiz. Guruhda kvota hisobi to'layotgan odamdan (chatmode egasi) ketadi.
+  Kvota kun almashganda (Toshkent) yangilanadi. Admin va VIP chatmode — cheksiz. Guruhda kvota hisobi to'layotgan odamdan (chatmode egasi) ketadi; **egasining kvotasi tugagan bo'lsa — xabarni yozgan odamning o'z kvotasidan** (so'rov limiti bilan bir xil: egasi → yozuvchi → ikkalasi ham tugagan bo'lsa rad), shunda bepul egasining 2 ta rasmi butun guruhni to'xtatib qo'ymaydi. Har yozuvchi faqat o'z kvotasini sarflaydi.
 - **Story:** story qo'yish tarifga bog'liq emas (hamma uchun cheksiz); faqat story **izohi (caption)** Plus/Pro (yoki admin) uchun.
   Bepul foydalanuvchi izoh yozsa, story izohsiz chiqadi va buning sababi ko'rsatiladi.
 - **Eslatma:** tarif tugashiga 3 kun va 1 kun qolganda hamda tugagach (7 kun ichida) foydalanuvchiga xabar boradi — har biri bir martadan,

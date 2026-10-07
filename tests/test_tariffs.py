@@ -236,6 +236,90 @@ def test_quota_charged_to_payer_not_writer(monkeypatch, tmp_path):
     assert "error" not in ok and tariffs.quota_used(8, "files") == 1 and tariffs.quota_used(U, "files") == 4
 
 
+# ── chatmode: egasining kvotasi tugasa — yozuvchining o'zidan (so'rov limiti bilan bir xil) ──────────────
+
+OWNER, WRITER = 40, 41
+
+
+def chat_ctx(owner=OWNER, writer=WRITER):
+    """ai_chat'dagi chatmode-egasi-to'laydi holati: quota_user=egasi, quota_fallback=yozuvchi."""
+    return {"quota_user": owner, "quota_fallback": writer, "quota_unlimited": False, "bot": None}
+
+
+def test_owner_pays_first_while_owner_has_quota(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER); fresh_user(WRITER)
+    assert "error" not in run(ai_tools.dispatch("look_at_image", WRITER, {}, chat_ctx()))
+    assert tariffs.quota_used(OWNER, "vision") == 1 and tariffs.quota_used(WRITER, "vision") == 0
+
+
+def test_exhausted_owner_falls_back_to_writers_own_quota(monkeypatch, tmp_path):
+    calls = stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["vision_today"] = 2                                   # bepul egasi: 2/2 tugagan
+    fresh_user(WRITER)
+    for _ in range(2):                                                      # yozuvchining o'z 2 ta bepul kvotasi
+        assert "error" not in run(ai_tools.dispatch("look_at_image", WRITER, {}, chat_ctx()))
+    assert tariffs.quota_used(WRITER, "vision") == 2 and tariffs.quota_used(OWNER, "vision") == 2
+    res = run(ai_tools.dispatch("look_at_image", WRITER, {}, chat_ctx()))   # endi ikkalasi ham tugagan
+    assert res["kvota_tugadi"] == "vision" and "egasining ham" in res["error"] and "2/2" in res["error"]
+    assert calls.count("see") == 2                                          # 3-chi marta tool UMUMAN ishga tushmadi
+
+
+def test_each_writer_gets_own_quota_when_owner_is_exhausted(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["vision_today"] = 2
+    fresh_user(WRITER); fresh_user(42)
+    for w in (WRITER, 42):                                                  # bitta yozuvchi boshqasining kvotasini yemaydi
+        assert "error" not in run(ai_tools.dispatch("look_at_image", w, {}, chat_ctx(writer=w)))
+    assert tariffs.quota_used(WRITER, "vision") == 1 and tariffs.quota_used(42, "vision") == 1
+
+
+def test_files_quota_falls_back_too(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["files_today"] = 4
+    fresh_user(WRITER)
+    assert "error" not in run(ai_tools.dispatch("create_diagram", WRITER, {}, chat_ctx()))
+    assert tariffs.quota_used(WRITER, "files") == 1 and tariffs.quota_used(OWNER, "files") == 4
+
+
+def test_failed_tool_consumes_nobody_even_on_fallback(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["files_today"] = 4
+    fresh_user(WRITER)
+    assert run(ai_tools.dispatch("create_presentation", WRITER, {}, chat_ctx())) == {"error": "xato"}
+    assert tariffs.quota_used(WRITER, "files") == 0 and tariffs.quota_used(OWNER, "files") == 4
+
+
+def test_staff_writer_is_unlimited_when_owner_exhausted(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["vision_today"] = 2
+    for _ in range(5):
+        assert "error" not in run(ai_tools.dispatch("look_at_image", SUPER, {}, chat_ctx(writer=SUPER)))
+
+
+def test_owner_writing_own_message_is_not_double_counted(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["vision_today"] = 2
+    res = run(ai_tools.dispatch("look_at_image", OWNER, {}, chat_ctx(writer=OWNER)))     # yozuvchi == egasi
+    assert res["kvota_tugadi"] == "vision" and "egasining ham" not in res["error"]
+
+
+def test_vip_chatmode_still_unlimited_and_no_fallback_means_old_behaviour(monkeypatch, tmp_path):
+    stub_tools(monkeypatch, tmp_path)
+    fresh_user(OWNER)["vision_today"] = 999
+    vip = dict(chat_ctx(), quota_unlimited=True)
+    assert "error" not in run(ai_tools.dispatch("look_at_image", WRITER, {}, vip))
+    fresh_user(WRITER)
+    old = {"quota_user": OWNER, "quota_unlimited": False, "bot": None}                   # quota_fallback yo'q — avvalgidek
+    assert run(ai_tools.dispatch("look_at_image", WRITER, {}, old))["kvota_tugadi"] == "vision"
+    assert tariffs.quota_used(WRITER, "vision") == 0
+
+
+def test_ai_chat_passes_writer_only_when_chatmode_owner_pays():
+    src = open("handlers/ai_chat.py", encoding="utf-8").read()
+    assert '"quota_fallback": user_id if charge_mode == "owner" else None' in src
+
+
 # ── superadmin narx va limitlarni tahrirlaydi ────────────────────────────
 
 @pytest.mark.parametrize("tier,field,raw,why", [
