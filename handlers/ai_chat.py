@@ -308,6 +308,7 @@ async def handle_message(message: Message):
             system_prompt += f"\n\n{ig_hint}"
         if is_group:
             system_prompt += group_rules.as_prompt_block(message.chat.id)
+            system_prompt += group_memory.roster_block(message.chat.id, group_mem_thread)  # "kim kim" — aralashib ketmasin
         if is_group:
             # Guruhda uzun javoblar chatni "to'ldirib" tashlaydi — QISQA yozish
             # kerak. Fayl/hujjat/kod so'ralganda esa bu cheklov qo'llanilmaydi
@@ -316,7 +317,8 @@ async def handle_message(message: Message):
                 "\n\nGURUH SUHBATI: guruhda bir nechta odam yozadi. Xabarlar 'Ism (@username): matn' "
                 "ko'rinishida keladi — kim nima degani shundan bilinadi; sizga murojaat qilinmagan xabarlar "
                 "ham kontekst uchun berilgan. Javobingizni shu prefikssiz, oddiy matn qilib yozing va "
-                "suhbat mavzusini (oldingi xabarlardan) yodda tuting.\n\n"
+                "suhbat mavzusini (oldingi xabarlardan) yodda tuting. Har bir xabar ALOHIDA odamniki: bir odam aytgan narsani "
+                "(so'rov, laqab, vazifa) boshqasiga bog'lamang.\n\n"
                 "MUHIM (guruh chati): javobingiz QISQA bo'lsin — odatda 1-4 gap "
                 "yetarli. Faqat foydalanuvchi ANIQ batafsil tushuntirish so'rasa, "
                 "yoki hujjat/fayl/kod yaratish kabi vazifa uzunroq matn talab qilsa, "

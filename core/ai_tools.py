@@ -39,6 +39,7 @@ _TOOL_STATUS_LABELS = {
     "set_daily_top_active": "Kunlik sozlama o'zgartirilmoqda",
     "wipe_group_memory": "Guruh xotirasi tozalanmoqda",
     "remember_note": "Eslatma saqlanmoqda",
+    "forget_note": "Xotiradan o'chirilmoqda",
     "set_my_nickname": "Laqab saqlanmoqda",
     "post_story": "Story tayyorlanib, profilga qo'yilmoqda",
     "look_at_image": "Rasm ko'rilmoqda",
@@ -148,8 +149,10 @@ TOOLS: list[dict] = [
                 "eslatma KEYINGI BARCHA suhbatlarga (hatto boshqa topic/kunlarda "
                 "ham) avtomatik qo'shiladi — vaqtinchalik suhbat tarixidan farqli "
                 "o'laroq (u faqat ~20 xabardan keyin unutiladi), bu DOIMIY saqlanadi. "
-                "Foydalanuvchi 'eslab qol', 'meni ... deb chaqir', 'har doim ... qil' "
-                "kabi so'zlar bilan iltimos qilganda shu tool'ni chaqiring."
+                "Foydalanuvchi 'eslab qol', 'har doim ... qil' kabi so'zlar bilan iltimos qilganda shu tool'ni "
+                "chaqiring. 'UNUT' / 'o'chir' / 'bekor qil' / 'endi kerak emas' iltimosi uchun BU TOOL EMAS — u hech "
+                "narsani o'chirmaydi, faqat yangi eslatma qo'shadi (\"unutishim kerak\" deb yozib qo'yish xato!); "
+                "bunda forget_note'ni ishlating."
             ),
             "parameters": {
                 "type": "object",
@@ -157,6 +160,29 @@ TOOLS: list[dict] = [
                     "note": {"type": "string", "description": "Eslab qolinadigan matn, foydalanuvchining o'z so'zlari bilan"},
                 },
                 "required": ["note"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_note",
+            "description": (
+                "Foydalanuvchi avval aytgan/saqlatgan narsani UNUTISHNI so'rasa ('buni unut', 'falon ishni esdan chiqar', "
+                "'o'chirib tashla', 'endi kerak emas', 'bekor qildim') — shu narsani xotiradan HAQIQATAN O'CHIRADI: "
+                "doimiy eslatmalardan ham, shu odamning o'z suhbat izlaridan ham (guruhda faqat uning O'Z xabarlari — "
+                "boshqalarniki emas). 'Unut' desa remember_note'ga 'unutish kerak' deb YOZMANG — o'sha xato; faqat shu "
+                "tool. query — unutilishi kerak narsaning KALIT SO'ZLARI (masalan 'maktab sayti HTML'), 'unut' so'zi "
+                "emas. 'Hamma eslatmalarni unut' desa all=true. Natijani (nima o'chirilgani) foydalanuvchiga qisqa "
+                "ayting; 'topilmadi' qaytsa — mavjud eslatmalarni ko'rib, aniqlashtiring yoki boshqa kalit so'z bilan "
+                "qayta urining."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Unutilishi kerak narsaning kalit so'zlari (o'zbekcha qo'shimchalar muhim emas)"},
+                    "all": {"type": "boolean", "description": "true — shu odamning BARCHA doimiy eslatmalarini o'chirish (suhbat tarixiga tegmaydi)"},
+                },
             },
         },
     },
@@ -570,8 +596,20 @@ async def _set_my_nickname(user_id: int, args: dict, ctx: dict) -> dict:
 MAX_NOTES_PER_USER = 30  # foydalanuvchi boshiga eng ko'pi (eskirgan/keraksiz to'planib ketmasin)
 
 
+async def _forget_note(user_id: int, args: dict, ctx: dict) -> dict:
+    import core.note_forget as note_forget
+    # user_id — SERVER bergan (xabar egasi): AI boshqa odamning xotirasini o'chira olmaydi (parametr yo'q).
+    return await note_forget.forget(ctx["bot"], user_id, ctx["chat_id"] if ctx.get("is_group") else None,
+                                    query=str(args.get("query") or ""), all_notes=bool(args.get("all")))
+
+
 async def _remember_note(user_id: int, args: dict, ctx: dict) -> dict:
+    import core.note_forget as note_forget
     import core.tgdb as tgdb
+    if note_forget.looks_like_forget_request(str(args.get("note") or "")):
+        # Aynan shu xato edi: "unut" iltimosi yangi "unutishim kerak" eslatmasi bo'lib saqlanardi va hech narsa o'chmasdi.
+        return {"error": "Bu 'unut/o'chir' iltimosi — YANGI eslatma yozilmaydi. forget_note tool'ini chaqiring "
+                         "(query — unutilishi kerak narsaning kalit so'zlari)."}
     db = tgdb.get()
     if ctx.get("is_group"):
         # GURUHDA aytilgan narsa FAQAT shu guruhga tegishli (db["group_notes"][chat][user]) — aks holda u
@@ -792,6 +830,7 @@ def _search_bing(query: str, max_results: int, timeout: int = 15) -> dict:
 
 DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     "remember_note": _remember_note,
+    "forget_note": _forget_note,
     "set_my_nickname": _set_my_nickname,
     "post_story": _post_story,
     "look_at_image": _look_at_image,

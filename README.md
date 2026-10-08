@@ -42,6 +42,17 @@ mafia_host_bot):
   shaxsiy chatda aytilgani esa guruhlarga chiqmaydi
   (`handlers/ai_chat.py` — system prompt'ga qo'shiladi). Test qilindi:
   saqlash, qaytarish, foydalanuvchilar orasida aralashmaslik — barchasi to'g'ri.
+  (Ism/laqab uchun alohida `set_my_nickname` tool'i bor; `remember_note` unga ishlatilmaydi.)
+- **`forget_note` tool — UNUTISH** (`core/note_forget.py`): foydalanuvchi "buni unut / o'chir / endi kerak emas" desa, AI yangi
+  "unutishim kerak" eslatmasi YOZMAYDI (`remember_note` bunday matnni rad etadi), balki xotiradan **haqiqatan o'chiradi**:
+  doimiy eslatmalar + shu odamning o'z suhbat izlari (shaxsiy chatda barcha mavzulardagi mos xabarlar va eski xulosadagi mos gaplar;
+  guruhda faqat uning O'Z xabarlari — boshqa odamlarniki, bot javoblari va umumiy guruh xulosasiga tegilmaydi). Moslik: so'rov
+  so'zlarining **yarmidan ko'pi** mos kelishi kerak (o'zbekcha qo'shimchalarga chidamli); aniq bo'lmasa hech narsa o'chmaydi, mavjud
+  eslatmalar ro'yxati qaytadi. `all=true` — faqat doimiy eslatmalarni hammasini o'chiradi. Odam faqat O'ZINING xotirasini o'chira
+  oladi (user_id serverdan, AI bera olmaydi).
+- **Guruhda odamlar aralashmasligi:** guruh logi xulosalanganda **guruh rejimidagi** prompt ishlatiladi (har gap/so'rov AYNAN kim
+  aytgani bilan; ism/laqab so'rovlari xulosaga kirmaydi), tizim ko'rsatmasiga yaqinda yozganlar ro'yxati («kim kim», laqabi va
+  haqiqiy ismi bilan) va "ikki odamning laqabini birlashtirmang" qoidasi qo'shiladi, joriy yozuvchining o'z laqabi alohida ko'rsatiladi.
 
 **Superadmin/admin nazorati (xavfsizlik va maxfiylik uchun):**
 `/panel → Foydalanuvchilar → <user> → 🧠 Xotirani ko'rish` — har bir

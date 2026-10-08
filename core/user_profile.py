@@ -31,7 +31,16 @@ async def basic_info_line(bot: Bot, message) -> str:
     if bio:
         parts.append(f"bio=\"{bio}\"")
 
-    return "Xabar yuboruvchi haqida: " + ", ".join(parts)
+    line = "Xabar yuboruvchi haqida: " + ", ".join(parts)
+    try:
+        import core.nicknames as nicknames
+        nick = nicknames.get(u.id)
+    except Exception:  # noqa: BLE001 — DB hali yuklanmagan va h.k.: laqabsiz davom
+        nick = None
+    if nick:
+        line += (f". Bu odam o'zini «{nick}» deb chaqirishni so'ragan — uni FAQAT shunday chaqiring "
+                 f"(boshqa odamlarning laqablarini unga bermang)")
+    return line
 
 
 async def get_bio(bot: Bot, user_id: int) -> str | None:

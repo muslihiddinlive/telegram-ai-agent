@@ -125,7 +125,7 @@ async def maybe_fold(bot, chat_id: int, thread_id: int | None):
     overflow = mem["log"][: len(mem["log"]) - MAX_LOG]
     mem["log"] = mem["log"][len(overflow):]
     with token_usage.scope(chat_id=chat_id, chat_type="supergroup", purpose="summary"):
-        mem["summary"] = await history_summarizer.summarize(mem["summary"], _as_messages(overflow))
+        mem["summary"] = await history_summarizer.summarize(mem["summary"], _as_messages(overflow), group=True)
     await tgdb.save(bot)
 
 
@@ -144,6 +144,35 @@ def tag_current(message, text: str, bot_id: int | None) -> str:
         q = " ".join((r.text or r.caption).split())[:200]
         quote = f"(reply → {who}: «{q}») "
     return f"{speaker}: {quote}{text}"
+
+
+def roster(chat_id: int, thread_id: int | None, limit: int = 8) -> list[str]:
+    """Yaqinda yozgan ODAMLAR ('kim kim'), eng yangisi birinchi: 'Laqab (@user) [haqiqiy ismi: ...]'. Bot shundan
+    har kimni FAQAT o'z ismi/laqabi bilan chaqirishi va ikki odamni aralashtirmasligi uchun."""
+    seen: dict = {}
+    for e in reversed(_mem(chat_id, thread_id)["log"][-MAX_LOG:]):
+        if e.get("r") != "u":
+            continue
+        uid = e.get("i")
+        if uid in seen:
+            continue
+        real = clean_name(e.get("n"))
+        nick = nicknames.get(uid) if uid else None
+        extra = f" [haqiqiy ismi: {real}]" if nick and real and nick != real else ""
+        seen[uid] = label(e.get("n"), e.get("u"), uid) + extra
+        if len(seen) >= limit:
+            break
+    return list(seen.values())
+
+
+def roster_block(chat_id: int, thread_id: int | None) -> str:
+    people = roster(chat_id, thread_id)
+    if not people:
+        return ""
+    return ("\n\nGURUHDA YAQINDA YOZGANLAR (har biri ALOHIDA odam):\n" + "\n".join(f"- {p}" for p in people) +
+            "\nHar bir odamni FAQAT o'z ismi/laqabi bilan chaqiring. Ikki odamning laqabini HECH QACHON birlashtirmang "
+            "(masalan 'Aka opa' demang) va bir odamga boshqasining laqabini bermang. Javobingiz hozirgi xabar "
+            "muallifiga qaratilgan.")
 
 
 # ────────────────────────── a'zolar indeksi ──────────────────────────
