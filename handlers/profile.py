@@ -21,7 +21,9 @@ from aiogram.types import BusinessConnection, CallbackQuery, InlineKeyboardButto
 import core.bot_identity as bot_identity
 import core.roles as roles
 import core.stories as stories
+import core.story_areas as story_areas
 import core.story_caption as story_caption
+import core.story_edit as story_edit
 import core.tariffs as tariffs
 
 logger = logging.getLogger("profile")
@@ -44,7 +46,8 @@ def _state(user_id: int) -> dict | None:
 def _drop(user_id: int):
     st = _waiting.pop(user_id, None)
     if st:
-        stories.cleanup(st.get("path"), st.get("src"))
+        # path (joriy), orig_path (tahrirsiz asl tayyor fayl), src (yuklab olingan asl), preview/edited (tahrir natijalari)
+        stories.cleanup(*{p for p in (st.get("path"), st.get("orig_path"), st.get("src"), st.get("preview"), st.get("edited")) if p})
 
 
 def _kb(*rows: list[tuple[str, str]]) -> InlineKeyboardMarkup:
@@ -74,7 +77,7 @@ def _menu(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if st == "ready":
         return (
             "👤 <b>Profil boshqaruvi</b>\n✅ Bot profilingizga ulangan, story qo'yish yoqilgan.",
-            _kb([("📸 Story qo'yish", "profile:story")], [back]),
+            _kb([("📸 Story qo'yish", "profile:story")], [("🗂 Story'larim", "profile:mine")], [back]),
         )
     if st == "no_rights":
         return (
@@ -146,6 +149,8 @@ async def story_start(call: CallbackQuery):
         "• Story qo'yish hamma uchun cheksiz; izoh (caption) yozish esa Plus/Pro tarifida («💳 Tariflar» — /start menyusida).\n"
         "• Izoh (caption) yozsangiz (Plus/Pro): oddiy matn bo'lsa — <b>aynan shunday</b> story matni bo'ladi; "
         "AI'ga buyruq bo'lsa (masalan «shunga jiddiy izoh yoz») — AI uni bajarib matnni <b>o'zi yozadi</b>.\n"
+        "• Tayyor bo'lgach 🎨 <b>tahrirlash</b> (filtr, matn, ramka, kesish; Plus/Pro — oddiy so'z bilan AI-tahrir) va "
+        "⚙️ <b>sozlamalar</b> (himoya, havola, reaksiya) bor.\n"
         "• Fayl 20 MB dan oshmasin (videoni bot o'zi Story formatiga o'tkazadi, eng ko'pi 60 soniya).\n"
         "• «Fayl sifatida» yuborsangiz ham bo'ladi.",
         _kb([("❌ Bekor qilish", "profile:menu")]),
@@ -271,6 +276,7 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
         [("⚡ 24 soat (tavsiya)", "profile:post:24")],
         [("6 soat", "profile:post:6"), ("12 soat", "profile:post:12"), ("48 soat", "profile:post:48")],
+        [("🎨 Tahrirlash", "profile:edit"), ("⚙️ Qo'shimcha", "profile:opts")],
     ]
     if st.get("regen", 0) < MAX_REGEN:
         if mode == story_caption.AI:
@@ -280,9 +286,25 @@ def _period_view(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     if st.get("caption_locked"):
         rows.append([(tariffs.PLANS_BUTTON_TEXT, tariffs.PLANS_CALLBACK)])
     rows.append([("❌ Bekor qilish", "profile:menu")])
+    extras = []
+    if st.get("spec") and not story_edit.is_noop(st["spec"], st["kind"]):
+        extras.append("🎨 Tahrir: " + html.escape(story_edit.describe(st["spec"])))
+    o = st.get("opts") or {}
+    bits = []
+    if o.get("protect"):
+        bits.append("🔒 himoyalangan")
+    if o.get("page", True) is False:
+        bits.append("profilda saqlanmaydi")
+    areas = story_areas.summary(o.get("links", []), o.get("reactions", []))
+    if areas:
+        bits.append(areas)
+    if bits:
+        extras.append("⚙️ " + " · ".join(bits))
+    keep = ("<i>Muddati tugagach ham profilingizda saqlanib qoladi (o'zingiz o'chirmaguningizcha).</i>"
+            if o.get("page", True) else "<i>Muddati tugagach story yo'qoladi (profilda saqlanmaydi).</i>")
     text = (
         "✅ Tayyor. Story qancha vaqt <b>hammaga ko'rinib</b> turadi?\n\n"
-        f"{caption_line}\n\n<i>Muddati tugagach ham profilingizda saqlanib qoladi (o'zingiz o'chirmaguningizcha).</i>"
+        f"{caption_line}\n" + ("\n".join(extras) + "\n" if extras else "") + f"\n{keep}"
     )
     return text, _kb(*rows)
 
@@ -315,20 +337,27 @@ async def story_post(call: CallbackQuery, bot: Bot):
     hours = int(call.data.split(":")[-1])
     await call.answer("Joylanmoqda…")
     await _edit(call, "⏳ Story joylanmoqda…", None)
+    o = st.get("opts") or {}
     try:
         story = await stories.post(
             bot, uid, st["kind"], st["path"], hours=hours, caption=st["caption"],
             entities=st["entities"], duration=st["duration"], is_animation=st["anim"],
+            protect_content=bool(o.get("protect")), post_to_chat_page=o.get("page", True),
+            areas=story_areas.build(o.get("links", []), o.get("reactions", [])),
         )
     except stories.StoryError as e:
         _drop(uid)
         await _edit(call, f"❌ Story qo'yilmadi:\n{html.escape(str(e))}", _kb([("🔙 Profil boshqaruvi", "profile:menu")]))
         return
     _drop(uid)
+    kept = ("• Undan keyin ham profilingizdagi story'lar bo'limida qoladi (o'zingiz o'chirmaguningizcha)."
+            if o.get("page", True) else "• Muddati tugagach story yo'qoladi (profilda saqlanmaydi).")
+    extra = ("\n• 🔒 Saqlash va forward taqiqlangan." if o.get("protect") else "") + \
+            (f"\n• {story_areas.summary(o.get('links', []), o.get('reactions', []))}"
+             if story_areas.summary(o.get("links", []), o.get("reactions", [])) else "")
     await _edit(
         call,
-        f"✅ Story profilingizga qo'yildi.\n• {hours} soat hammaga ko'rinib turadi.\n"
-        "• Undan keyin ham profilingizdagi story'lar bo'limida qoladi (o'zingiz o'chirmaguningizcha).",
+        f"✅ Story profilingizga qo'yildi.\n• {hours} soat hammaga ko'rinib turadi.\n{kept}{extra}",
         _kb([("🗑 O'chirish", f"profile:del:{story.id}")], [("📸 Yana story", "profile:story")], [("🔙 Profil boshqaruvi", "profile:menu")]),
     )
 

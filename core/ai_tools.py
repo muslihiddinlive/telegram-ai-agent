@@ -434,6 +434,17 @@ TOOLS: list[dict] = [
                     "file_name": {"type": "string", "description": "Foydalanuvchining mavjud fayllaridan AYNAN bittasining nomi (rasm yoki video)"},
                     "caption": {"type": "string", "description": "Story matni (ixtiyoriy). Foydalanuvchi matnni o'zi aytgan bo'lsa — AYNAN shuni bering. 'Izohini o'zing yoz' desa — foydalanuvchi so'roviga mos qisqa matnni o'zingiz yozib bering (buyruqning o'zini matnga kiritmang). Media mazmunini ko'rmagan bo'lsangiz, o'ylab topmang."},
                     "hours": {"type": "integer", "enum": [6, 12, 24, 48], "description": "Story necha soat turadi (standart 24)"},
+                    "edit": {"type": "object", "description": (
+                        "Media tahriri (ixtiyoriy; Plus/Pro). Faqat kerakli maydonlarni bering: filter (none|bw|sepia|vintage|warm|cool|"
+                        "fade|vivid|noir|pastel), brightness/contrast/saturation/warmth (-1..1), sharpness/blur/vignette/grain (0..1), "
+                        "rotate (0|90|180|270), flip (none|h|v), zoom (1..3), fit (blur|fill|black|white|color), frame {width 0..10, color}, "
+                        "texts [{text, pos top|center|bottom (yoki x,y 0..1), size 2..14, color, style plain|shadow|outline|box, "
+                        "font sans|serif|mono}] (<=5 ta, emoji yo'q), video {speed 0.5..2, start, end, mute, fade_in, fade_out}. "
+                        "Tahrir berilsa avval KO'RIB CHIQISH yuboriladi — joylash uchun foydalanuvchi tasdig'i kerak.")},
+                    "confirmed": {"type": "boolean", "description": "FAQAT foydalanuvchi ko'rib chiqishni ko'rib 'joyla/ha' degandan keyin, AYNAN o'sha edit/file_name bilan true"},
+                    "protect_content": {"type": "boolean", "description": "true — storyni saqlash va forward qilish taqiqlanadi"},
+                    "links": {"type": "array", "items": {"type": "string"}, "description": "Story ustidagi bosiladigan havolalar (eng ko'pi 3 ta, http/https)"},
+                    "reactions": {"type": "array", "items": {"type": "string"}, "description": "Tavsiya etilgan reaksiya emojilari (eng ko'pi 5 ta: ❤ 🔥 👍 😍 🎉 🤩 😁 👏)"},
                 },
                 "required": ["file_name"],
             },
@@ -444,10 +455,22 @@ TOOLS: list[dict] = [
 ]
 
 
+_STORY_PENDING: dict[int, tuple[str, object, float]] = {}   # user_id -> (tahrir raqami, ko'rib chiqish xabari, vaqt)
+_STORY_CONFIRM_TTL = 15 * 60
+
+
 async def _post_story(user_id: int, args: dict, ctx: dict) -> dict:
-    """Foydalanuvchi yuborgan rasm/videoni uning profiliga story qilib qo'yadi (core/stories.py)."""
+    """Foydalanuvchi yuborgan rasm/videoni uning profiliga story qilib qo'yadi (core/stories.py).
+    Izoh va tahrir — Plus/Pro (UI bilan bir xil qoida). Tahrir berilsa: avval KO'RIB CHIQISH, joylash — foydalanuvchining
+    keyingi xabaridagi tasdig'idan so'ng (server tekshiradi; AI o'zi tasdiqlab yubora olmaydi)."""
+    import hashlib
+    import json
     import os
+    import time
     import core.stories as stories
+    import core.story_areas as story_areas
+    import core.story_edit as story_edit
+    import core.tariffs as tariffs
     from tools.file_tools import user_dir
 
     if ctx.get("is_group"):
@@ -462,20 +485,61 @@ async def _post_story(user_id: int, args: dict, ctx: dict) -> dict:
     hours = args.get("hours")
     hours = hours if hours in stories.PERIODS else stories.DEFAULT_HOURS
 
+    raw_edit = args.get("edit")
+    spec = story_edit.normalize(raw_edit, kind) if isinstance(raw_edit, dict) and raw_edit else None
+    edited = spec is not None and not story_edit.is_noop(spec, kind)
+    caption = (args.get("caption") or "").strip() or None
+    if (caption or edited) and not tariffs.can_caption(user_id):
+        return {"error": "Story izohi va media tahriri faqat Plus/Pro tarifida (story qo'yishning o'zi hamma uchun bepul). "
+                         "Foydalanuvchiga ayting va izohsiz/tahrirsiz qo'yishni taklif qiling yoki «💳 Tariflar» ni eslating."}
+
+    links = []
+    for raw in (args.get("links") or [])[:story_areas.MAX_LINKS]:
+        url = story_areas.clean_url(str(raw))
+        if not url:
+            return {"error": f"Havola yaroqsiz: {str(raw)[:80]!r}. To'g'ri http/https havola so'rang."}
+        links.append(url)
+    reactions = [r for r in (args.get("reactions") or []) if r in story_areas.REACTIONS][:story_areas.MAX_REACTIONS]
+
     wd = stories.work_dir(user_id)
-    prepared = None
+    prepared = preview = None
     try:
         if stories.status(user_id) != "ready":
             return {"error": "Bot hali profilga ulanmagan yoki story ruxsati yo'q. Foydalanuvchiga /profil orqali "
                              "ulash yo'riqnomasini ko'rishni ayting."}
-        prepared, duration = await stories.prepare(kind, src, wd)
-        story = await stories.post(ctx["bot"], user_id, kind, prepared, hours=hours,
-                                   caption=args.get("caption"), duration=duration)
+        if edited:
+            digest = hashlib.sha1(json.dumps([name, spec], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            pend = _STORY_PENDING.get(user_id)
+            confirmed = (args.get("confirmed") is True and pend is not None and pend[0] == digest
+                         and pend[1] != ctx.get("message_id") and time.time() - pend[2] < _STORY_CONFIRM_TTL)
+            if not confirmed:                       # 1-bosqich: faqat ko'rib chiqish (hech narsa joylanmaydi)
+                from aiogram.types import FSInputFile
+                preview = os.path.join(wd, f"preview_{int(time.time() * 1000)}.jpg")
+                await story_edit.render_preview(kind, src, spec, preview)
+                await ctx["bot"].send_photo(ctx["chat_id"], FSInputFile(preview),
+                                            caption=f"🎨 Ko'rib chiqish: {story_edit.describe(spec)}"[:1000])
+                _STORY_PENDING[user_id] = (digest, ctx.get("message_id"), time.time())
+                return {"status": "ko'rib chiqish yuborildi, story HALI joylanmadi",
+                        "eslatma": "Foydalanuvchining javobini kuting. 'Joyla/ha' desa — AYNAN shu file_name va edit bilan "
+                                   "confirmed=true qo'yib qayta chaqiring; o'zgartirmoqchi bo'lsa edit'ni yangilab yana chaqiring "
+                                   "(yangi ko'rib chiqish chiqadi). Tasdiqsiz joylamang."}
+            if kind == "photo":
+                prepared, duration = os.path.join(wd, f"edited_{int(time.time())}.jpg"), None
+                await story_edit.render_photo(src, spec, prepared)
+            else:
+                prepared = os.path.join(wd, f"edited_{int(time.time())}.mp4")
+                duration = await story_edit.render_video(src, spec, prepared)
+        else:
+            prepared, duration = await stories.prepare(kind, src, wd)
+        story = await stories.post(ctx["bot"], user_id, kind, prepared, hours=hours, caption=caption, duration=duration,
+                                   protect_content=bool(args.get("protect_content")),
+                                   areas=story_areas.build(links, reactions))
+        _STORY_PENDING.pop(user_id, None)
         return {"status": "story qo'yildi", "story_id": story.id, "hours": hours}
     except stories.StoryError as e:
         return {"error": str(e)}
     finally:
-        stories.cleanup(prepared)
+        stories.cleanup(prepared, preview)
 
 
 _VISION_CALLS: dict[int, list[float]] = {}  # user_id -> oxirgi chaqiruv vaqtlari (daqiqada eng ko'pi 10 ta)

@@ -193,8 +193,11 @@ def _friendly(e: Exception) -> str:
 
 async def post(bot, user_id: int, kind: str, path: str, hours: int = DEFAULT_HOURS,
                caption: str | None = None, entities=None, duration: float | None = None,
-               is_animation: bool = False):
-    """Tayyor faylni foydalanuvchi profiliga story qilib joylaydi. Story obyektini qaytaradi."""
+               is_animation: bool = False, protect_content: bool = False, post_to_chat_page: bool = True,
+               areas=None):
+    """Tayyor faylni foydalanuvchi profiliga story qilib joylaydi. Story obyektini qaytaradi.
+    protect_content — storyni saqlash/forward qilishni taqiqlaydi; post_to_chat_page — muddat tugagach profilda qoladimi;
+    areas — bosiladigan maydonlar (havola/reaksiya, core/story_areas)."""
     st = status(user_id)
     if st != "ready":
         raise StoryError({
@@ -217,14 +220,57 @@ async def post(bot, user_id: int, kind: str, path: str, hours: int = DEFAULT_HOU
         caption, entities = caption[:MAX_CAPTION], None  # kesilsa entity ofsetlari buzilishi mumkin
 
     try:
-        return await bot.post_story(
+        story = await bot.post_story(
             business_connection_id=conn["id"], content=content, active_period=period,
             caption=caption, caption_entities=entities if caption else None,
-            parse_mode=None, post_to_chat_page=True,
+            parse_mode=None, post_to_chat_page=post_to_chat_page,
+            protect_content=True if protect_content else None, areas=areas or None,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("post_story xato (user %s): %s", user_id, e)
         raise StoryError(_friendly(e)) from e
+    remember_post(user_id, getattr(story, "id", None), kind, caption, hours)
+    return story
+
+
+# ── Joylangan storylar tarixi (Bot API storylar ro'yxatini bermaydi: o'zimiz yozib boramiz) ──
+HISTORY_LIMIT = 20
+
+
+def remember_post(user_id: int, story_id, kind: str, caption: str | None, hours: int) -> None:
+    """Yangi story yozuvi (eng yangisi birinchi). DB yo'q/xato bo'lsa — jim o'tadi (joylash bunga bog'liq emas)."""
+    if story_id is None:
+        return
+    try:
+        import core.tgdb as tgdb
+        import time
+        lst = tgdb.get().setdefault("story_posts", {}).setdefault(str(user_id), [])
+        lst.insert(0, {"id": int(story_id), "t": int(time.time()), "h": hours, "k": kind, "c": (caption or "")[:60]})
+        del lst[HISTORY_LIMIT:]
+        tgdb.mark_dirty()
+    except Exception:  # noqa: BLE001
+        logger.warning("Story tarixiga yozib bo'lmadi", exc_info=True)
+
+
+def list_posts(user_id: int) -> list[dict]:
+    """Hali faol (muddati tugamagan) storylar, eng yangisi birinchi."""
+    try:
+        import core.tgdb as tgdb
+        import time
+        now = time.time()
+        return [p for p in tgdb.get().get("story_posts", {}).get(str(user_id), []) if p["t"] + p["h"] * 3600 > now]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def forget_post(user_id: int, story_id: int) -> None:
+    try:
+        import core.tgdb as tgdb
+        lst = tgdb.get().get("story_posts", {}).get(str(user_id), [])
+        lst[:] = [p for p in lst if p["id"] != story_id]
+        tgdb.mark_dirty()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def delete(bot, user_id: int, story_id: int):
@@ -235,6 +281,7 @@ async def delete(bot, user_id: int, story_id: int):
         await bot.delete_story(business_connection_id=conn["id"], story_id=story_id)
     except Exception as e:  # noqa: BLE001
         raise StoryError(_friendly(e)) from e
+    forget_post(user_id, story_id)
 
 
 def cleanup(*paths: str | None):

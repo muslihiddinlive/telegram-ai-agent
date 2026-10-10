@@ -31,6 +31,7 @@ from handlers.api_integration import router as api_integration_router
 from handlers.instagram import router as instagram_router
 from handlers.group_mod import router as group_mod_router
 from handlers.profile import router as profile_router
+from handlers.story_tools import router as story_tools_router
 from handlers.pending_text import router as pending_text_router
 from handlers.admin_terminal import router as admin_terminal_router
 from handlers.ai_chat import router as ai_chat_router
@@ -60,6 +61,7 @@ dp.include_router(instagram_router)  # /instagram — ai_chat'dan OLDIN (komanda
 dp.include_router(group_settings_router)
 dp.include_router(group_tools_router)
 dp.include_router(api_integration_router)
+dp.include_router(story_tools_router)  # story tahriri/sozlamalari — profile_router bilan birga, ai_chat'dan oldin
 dp.include_router(profile_router)  # ai_chat'dan OLDIN — story uchun yuborilgan rasm/video AI-suhbatga ketib qolmasin
 dp.include_router(admin_terminal_router)  # ai_chat'dan OLDIN — "exec:" AI'ga ketmasin
 dp.include_router(slide_preview_router)
