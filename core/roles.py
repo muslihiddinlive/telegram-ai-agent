@@ -19,12 +19,23 @@ DEFAULT_DAILY_LIMIT = 20
 ADMIN_DAILY_LIMIT = getattr(config, "ADMIN_DAILY_LIMIT", 100)  # bot adminlari + superadmin (chatmode hisobi)
 
 
+def default_daily_limit() -> int:
+    """Yangi foydalanuvchi uchun boshlang'ich kunlik limit: superadmin /panel → Tariflar → Bepul → So'rov/kun
+    orqali o'zgartirsa o'sha, aks holda DEFAULT_DAILY_LIMIT."""
+    import core.tariffs as tariffs
+    return tariffs.free_default_limit() or DEFAULT_DAILY_LIMIT
+
+
 def _bucket(user_id: int) -> dict:
     db = tgdb.get()
-    return db["users"].setdefault(str(user_id), {
+    users = db["users"]
+    key = str(user_id)
+    if key in users:
+        return users[key]
+    return users.setdefault(key, {
         "role": "approved",      # approved | blocked  (avto-tasdiq: admin kutilmaydi)
         "approved_by": "auto",
-        "daily_limit": DEFAULT_DAILY_LIMIT,
+        "daily_limit": default_daily_limit(),
         "requests_today": 0,
         "last_reset": today_str(),
         "name": None,
@@ -135,10 +146,40 @@ async def revoke_user(bot, user_id: int):
     await tgdb.save(bot, force=True)
 
 
-async def set_user_limit(bot, user_id: int, daily_limit: int):
+async def set_user_limit(bot, user_id: int, daily_limit: int, exact: bool = False):
+    """exact=False — eski qoida: tarif limitidan KICHIK qiymat tarif ostida kuchga kirmaydi (max).
+    exact=True (faqat superadmin) — aniq shaxsiy limit: tarifdan qat'i nazar aynan shu son amal qiladi."""
     rec = _bucket(user_id)
     rec["daily_limit"] = daily_limit
+    if exact:
+        rec["limit_override"] = daily_limit
+    else:
+        rec.pop("limit_override", None)   # oddiy tahrir aniq override'ni bekor qiladi — chalkashlik bo'lmasin
     await tgdb.save(bot, force=True)
+
+
+async def reset_user_limits(bot, user_id: int):
+    """Foydalanuvchining barcha shaxsiy limit/kvota override'larini o'chiradi va so'rov limitini standartga qaytaradi."""
+    rec = _bucket(user_id)
+    for k in ("limit_override", "files_override", "vision_override"):
+        rec.pop(k, None)
+    rec["daily_limit"] = default_daily_limit()
+    await tgdb.save(bot, force=True)
+
+
+def free_limit_targets() -> list[str]:
+    """Bepul tarif limitini 'hammaga qo'llash' ta'sir qiladigan foydalanuvchilar: bloklanmagan va aniq override'siz."""
+    return [uid for uid, rec in tgdb.get()["users"].items()
+            if rec.get("role") != "blocked" and rec.get("limit_override") is None]
+
+
+async def apply_free_limit_to_all(bot, value: int) -> int:
+    n = 0
+    for uid in free_limit_targets():
+        tgdb.get()["users"][uid]["daily_limit"] = value
+        n += 1
+    await tgdb.save(bot, force=True)
+    return n
 
 
 def list_approved_users() -> dict:
@@ -165,7 +206,9 @@ FILE_GENERATION_WEIGHT = 3  # fayl/prezentatsiya/diagramma yaratish — 3x qimma
 def _limit_of(user_id: int, rec: dict) -> int:
     """Kunlik limit = max(foydalanuvchining o'z limiti, faol tarif limiti) — admin qo'lda bergan katta limit kamaymaydi."""
     import core.tariffs as tariffs
-    return max(rec["daily_limit"], tariffs.tier_limit(user_id) or 0)
+    if rec.get("limit_override") is not None:      # superadmin qo'ygan aniq limit — tarifdan ustun (pasaytirish ham mumkin)
+        return int(rec["limit_override"])
+    return max(rec.get("daily_limit", DEFAULT_DAILY_LIMIT), tariffs.tier_limit(user_id) or 0)
 
 
 def _reset_if_new_day(rec: dict):

@@ -325,7 +325,7 @@ def test_ai_chat_passes_writer_only_when_chatmode_owner_pays():
 @pytest.mark.parametrize("tier,field,raw,why", [
     ("plus", "files", "abc", "son"), ("plus", "files", "-5", "son"), ("plus", "files", "1.5", "son"),
     ("plus", "files", "100001", "gacha"), ("plus", "stars", "0", "gacha"), ("plus", "stars", "10001", "gacha"),
-    ("free", "stars", "100", "Bepul"), ("free", "daily_limit", "50", "Bepul"),
+    ("free", "stars", "100", "Bepul"), ("plus", "files", "²", "son"), ("plus", "files", "٣", "son"),
     ("gold", "files", "5", "tarif yo'q"), ("plus", "nope", "5", "maydon yo'q"),
 ])
 def test_set_config_rejects_bad_input(tier, field, raw, why):

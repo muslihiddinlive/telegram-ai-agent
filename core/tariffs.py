@@ -52,7 +52,7 @@ EXPIRED_REMIND_WINDOW = 7 * 86400
 # Tahrirlanadigan maydonlar: (min, max, faqat pullik tariflar uchunmi)
 FIELDS = {
     "stars": (1, 10000, True),
-    "daily_limit": (1, 100000, True),
+    "daily_limit": (1, 100000, False),   # bepul tarifda: YANGI foydalanuvchilar uchun boshlang'ich so'rov limiti
     "files": (0, 100000, False),
     "vision": (0, 100000, False),
 }
@@ -135,9 +135,9 @@ def validate_value(tier_id: str, field: str, raw) -> tuple[int | None, str | Non
         return None, "Bunday maydon yo'q."
     lo, hi, paid_only = FIELDS[field]
     if paid_only and tier_id == "free":
-        return None, "Bepul tarifda bu maydon yo'q (so'rov limiti har bir foydalanuvchi uchun alohida)."
+        return None, "Bepul tarifda bu maydon yo'q."
     s = str(raw).strip()
-    if not s.isdigit():
+    if not (s.isascii() and s.isdigit()):      # '²', '٣' kabi belgilar isdigit() da True, lekin int() yiqiladi
         return None, "Faqat butun musbat son yozing."
     value = int(s)
     if not lo <= value <= hi:
@@ -189,7 +189,13 @@ def until_ts(user_id: int) -> int:
 
 
 def tier_limit(user_id: int) -> int | None:
-    return active_tier(user_id).daily_limit
+    t = active_tier(user_id)
+    return None if t.id == "free" else t.daily_limit   # bepulda daily_limit — faqat yangi userlar uchun boshlang'ich qiymat, "pol" emas
+
+
+def free_default_limit() -> int | None:
+    """Superadmin bepul tarifga qo'ygan so'rov limiti (None — o'zgartirilmagan)."""
+    return tiers()["free"].daily_limit
 
 
 def can_caption(user_id: int) -> bool:
@@ -211,7 +217,29 @@ def quota_limit(user_id: int, kind: str) -> int | None:
     """Kunlik kvota; None — cheksiz (admin)."""
     if _is_staff(user_id):
         return None
+    ov = user_quota_override(user_id, kind)
+    if ov is not None:                      # superadmin shu foydalanuvchi uchun qo'ygan aniq kvota
+        return ov
     return getattr(active_tier(user_id), kind)
+
+
+def user_quota_override(user_id: int, kind: str) -> int | None:
+    rec = tgdb.get()["users"].get(str(user_id))
+    v = rec.get(f"{kind}_override") if rec else None
+    return int(v) if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+async def set_user_quota(bot, user_id: int, kind: str, value: int | None) -> None:
+    """Superadmin: bitta foydalanuvchining fayl/rasm kvotasini aniq qo'yadi (None — override'ni o'chiradi)."""
+    import core.roles as roles
+    if kind not in KINDS:
+        raise ValueError(kind)
+    rec = roles._bucket(user_id)
+    if value is None:
+        rec.pop(f"{kind}_override", None)
+    else:
+        rec[f"{kind}_override"] = int(value)
+    await tgdb.save(bot, force=True)
 
 
 def quota_used(user_id: int, kind: str) -> int:

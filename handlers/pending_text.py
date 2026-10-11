@@ -101,14 +101,36 @@ async def handle_pending(message: Message):
         return
 
     # ── Foydalanuvchi limitini o'zgartirish (admin/superadmin) ──
-    if action == "set_user_limit":
-        if not text.isdigit():
-            await message.answer("Faqat raqam kiriting:")
+    if action in ("set_user_limit", "set_user_quota"):
+        if not (roles.is_superadmin(user_id) or roles.is_admin(user_id)) or \
+                (action == "set_user_quota" and not roles.is_superadmin(user_id)):
+            pending_input.clear(user_id)          # kiritish paytida ruxsat qayta tekshiriladi (admin huquqi olingan bo'lishi mumkin)
+            await message.answer("Ruxsat yo'q.")
             return
-        target_uid = int(data["target_uid"])
-        await roles.set_user_limit(message.bot, target_uid, int(text))
+        if text.startswith("/"):
+            pending_input.clear(user_id)
+            await message.answer("❌ Bekor qilindi.")
+            return
+        # str.isdigit() '²' yoki '٣' kabi belgilarni ham qabul qiladi (int() esa yiqiladi) — faqat ASCII raqam
+        if not (text.isascii() and text.isdigit()) or not 0 <= int(text) <= 100000:
+            await message.answer("Faqat 0 dan 100000 gacha butun son kiriting (yoki /panel — bekor qilish):")
+            return
+        target_uid, value = int(data["target_uid"]), int(text)
         pending_input.clear(user_id)
-        await message.answer(f"✅ Foydalanuvchi {target_uid} uchun kunlik limit {text} ga o'rnatildi.")
+        if action == "set_user_limit":
+            exact = roles.is_superadmin(user_id)
+            await roles.set_user_limit(message.bot, target_uid, value, exact=exact)
+            note = ""
+            if exact and value < (tariffs.tier_limit(target_uid) or 0):
+                note = " (⚠️ foydalanuvchi tarifidagi limitdan kam — baribir aynan shu son amal qiladi)"
+            await message.answer(f"✅ Foydalanuvchi {target_uid} uchun kunlik limit {value} ga o'rnatildi"
+                                 f"{' (aniq)' if exact else ''}.{note}")
+        else:
+            kind = data["kind"]
+            await tariffs.set_user_quota(message.bot, target_uid, kind, value)
+            label = "Fayl yaratish" if kind == tariffs.KIND_FILES else "Rasm o'qish"
+            await message.answer(f"✅ Foydalanuvchi {target_uid}: {label} kvotasi {value}/kun (aniq).")
+        return
 
     # ── Yangi admin qo'shish (faqat superadmin) ──
     elif action == "add_admin_wait_id":

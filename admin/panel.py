@@ -106,10 +106,12 @@ async def user_detail(call: CallbackQuery):
     rec = db["users"].get(uid, {})
     role = "🚫 Bloklangan" if rec.get("role") == "blocked" else "✅ Faol"
     notes_count = len(rec.get("notes", []))
+    eff = roles.effective_daily_limit(int(uid)) if uid.lstrip("-").isdigit() and uid in db["users"] else rec.get("daily_limit")
+    ov_mark = " (aniq, superadmin)" if rec.get("limit_override") is not None else ""
     text = (
         f"👤 {rec.get('name') or uid} (ID: <code>{uid}</code>)\n"
         f"Holat: {role}\n"
-        f"Kunlik limit: {rec.get('daily_limit')}\n"
+        f"Kunlik limit: {eff}{ov_mark}\n"
         f"Bugun ishlatilgan: {rec.get('requests_today', 0)}\n"
         f"🧠 Eslab qolingan narsalar: {notes_count} ta\n"
         f"💳 Tarif: {_tariff_line(int(uid)) if uid.lstrip('-').isdigit() else '-'}\n"
@@ -125,6 +127,12 @@ async def user_detail(call: CallbackQuery):
     else:
         kb_rows.append([InlineKeyboardButton(text="✅ Blokdan chiqarish", callback_data=f"panel:approve:{uid}")])
     kb_rows.append([InlineKeyboardButton(text="✉️ Xabar yozish", callback_data=f"panel:msg:{uid}")])
+    if roles.is_superadmin(caller) and rec.get("role") != "blocked":  # aniq kvotalar — faqat superadmin
+        kb_rows.append([
+            InlineKeyboardButton(text="✏️ Fayl kvotasi", callback_data=f"panel:setquota:files:{uid}"),
+            InlineKeyboardButton(text="✏️ Rasm kvotasi", callback_data=f"panel:setquota:vision:{uid}"),
+        ])
+        kb_rows.append([InlineKeyboardButton(text="♻️ Limitlarni standartga qaytarish", callback_data=f"panel:limreset:{uid}")])
     if roles.is_superadmin(caller):  # tarifni faqat superadmin boshqaradi
         kb_rows.append([
             InlineKeyboardButton(text="🎁 Plus 30 kun", callback_data=f"panel:tgrant:plus:{uid}"),
@@ -209,9 +217,47 @@ async def set_limit_start(call: CallbackQuery):
         await call.answer("Ruxsat yo'q", show_alert=True)
         return
     uid = call.data.split(":")[-1]
+    if not uid.lstrip("-").isascii() or not uid.lstrip("-").isdigit():
+        await call.answer("Noto'g'ri ID", show_alert=True)
+        return
     pending_input.set(caller, "set_user_limit", {"target_uid": uid})
-    await call.message.answer(f"Foydalanuvchi {uid} uchun yangi kunlik limitni yuboring (raqam):")
+    hint = ("\n(Siz superadminsiz: limit ANIQ qo'yiladi — tarif limitidan kichik bo'lsa ham shu son amal qiladi.)"
+            if roles.is_superadmin(caller) else "")
+    await call.message.answer(f"Foydalanuvchi {uid} uchun yangi kunlik limitni yuboring (0–100000). Bekor qilish: /panel{hint}")
     await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:setquota:"))
+async def set_quota_start(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    try:
+        _, _, kind, uid = call.data.split(":")
+    except ValueError:
+        await call.answer("Noto'g'ri so'rov", show_alert=True)
+        return
+    if kind not in tariffs.KINDS or not uid.isascii() or not uid.lstrip("-").isdigit():
+        await call.answer("Noto'g'ri so'rov", show_alert=True)
+        return
+    label = "fayl yaratish" if kind == tariffs.KIND_FILES else "rasm o'qish"
+    pending_input.set(call.from_user.id, "set_user_quota", {"target_uid": uid, "kind": kind})
+    await call.message.answer(f"Foydalanuvchi {uid} uchun kunlik <b>{label}</b> kvotasini yuboring (0–100000). "
+                              f"Bekor qilish: /panel")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("panel:limreset:"))
+async def limits_reset(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    uid = call.data.split(":")[-1]
+    if not uid.isascii() or not uid.lstrip("-").isdigit():
+        await call.answer("Noto'g'ri ID", show_alert=True)
+        return
+    await roles.reset_user_limits(bot, int(uid))
+    await call.answer("♻️ Standart limitlar tiklandi")
 
 
 def _usage_text(uid: int) -> str:
@@ -281,10 +327,15 @@ def tariff_config_view(tier_id: str) -> tuple[str, InlineKeyboardMarkup]:
     for field, (_, _, paid_only) in tariffs.FIELDS.items():
         if paid_only and tier_id == "free":
             continue
-        lines.append(f"{tariffs.FIELD_LABELS[field]}: <b>{getattr(t, field)}</b>{mark(field)}")
+        value = getattr(t, field)
+        if tier_id == "free" and field == "daily_limit":
+            value = roles.default_daily_limit()   # None bo'lsa — amaldagi standart ko'rsatiladi
+        lines.append(f"{tariffs.FIELD_LABELS[field]}: <b>{value}</b>{mark(field)}")
         rows.append([InlineKeyboardButton(text=f"✏️ {tariffs.FIELD_LABELS[field]}", callback_data=f"panel:tset:{tier_id}:{field}")])
     if tier_id == "free":
-        lines.append("So'rov/kun: har bir foydalanuvchi uchun alohida (Foydalanuvchilar → Limitni o'zgartirish).")
+        lines.append("So'rov/kun (bepul) — YANGI foydalanuvchilar uchun boshlang'ich limit. Mavjudlarga qo'llash: pastdagi tugma. "
+                     "Bitta odam uchun: Foydalanuvchilar → Limitni o'zgartirish (superadmin aniq limit/kvota qo'ya oladi).")
+        rows.append([InlineKeyboardButton(text="♻️ So'rov limitini mavjud foydalanuvchilarga qo'llash", callback_data="panel:freeapply")])
     lines.append("\n✱ — standart qiymatdan o'zgartirilgan. O'zgarish hammaga darhol amal qiladi; mavjud obunachilarning "
                  "muddati va to'lagan narxi o'zgarmaydi.")
     if over:
@@ -322,6 +373,31 @@ async def tariff_config_ask(call: CallbackQuery):
     pending_input.set(caller, "tariff_value", {"tier": tier_id, "field": field})
     await call.message.answer(f"✏️ {tariffs.tiers()[tier_id].name} — <b>{tariffs.FIELD_LABELS[field]}</b>: yangi qiymatni "
                               f"yozing ({lo}–{hi}). Bekor qilish: /panel")
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:freeapply")
+async def free_apply_ask(call: CallbackQuery):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    n, v = len(roles.free_limit_targets()), roles.default_daily_limit()
+    await call.message.answer(
+        f"⚠️ {n} ta foydalanuvchining kunlik so'rov limiti <b>{v}</b> ga o'rnatiladi "
+        f"(aniq shaxsiy limiti borlar va bloklanganlar tegilmaydi; tarif limiti baribir pol bo'lib qoladi). Tasdiqlaysizmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Ha, qo'llash", callback_data="panel:freeapply_yes"),
+            InlineKeyboardButton(text="❌ Bekor", callback_data="panel:tcfg:free")]]))
+    await call.answer()
+
+
+@router.callback_query(F.data == "panel:freeapply_yes")
+async def free_apply_do(call: CallbackQuery, bot: Bot):
+    if not roles.is_superadmin(call.from_user.id):
+        await call.answer("Faqat superadmin", show_alert=True)
+        return
+    n = await roles.apply_free_limit_to_all(bot, roles.default_daily_limit())
+    await call.message.edit_text(f"✅ {n} ta foydalanuvchiga qo'llandi.")
     await call.answer()
 
 
