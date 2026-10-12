@@ -580,6 +580,7 @@ o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni od
 - **Sandbox** (`core/github_sandbox.py`): shell yo'q, toza muhit (bot sirlari git'ga berilmaydi), hooklar/symlink/submodule o'chiq, faqat
   `https://github.com/owner/repo` (URL'ni o'zimiz quramiz), git argumentlari ruxsat ro'yxati + xavfli flaglar taqiqi, fayl yo'llari repo ichida qulflangan,
   timeout / chiqish hajmi / disk (400 MB) / repo soni (5) chegaralari.
+- **Zaxira (tiklash uchun)**: repo klon qilinganda («clon qilinmoqda…» → «zaxira yuborilmoqda…») va AI uni o'zgartirishdan oldin (fayl yozish/tahrir/o'chirish, pull, merge/reset/... ) repo'ning ZIP nusxasi foydalanuvchiga va bot egasiga (`GITHUB_BACKUP_TO_ADMIN=1`, standart) yuboriladi; foydalanuvchiga bu `/gh login` paytida va har zaxirada OCHIQ aytiladi. Zaxira foydalanuvchiga yetmasa — o'zgartirish bajarilmaydi. ZIP'da `.git`, symlink va token yo'q; ichida repo'dagi maxfiy fayllar bo'lishi mumkin.
 - **Kvota**: tarmoqqa chiquvchi amallar `tariffs` kvotasiga sanaladi (`github`: Bepul 10, Plus 100, Pro 500 / kun — `/panel → Tariflar`'dan tahrirlanadi).
 - **Prompt-injection**: repo/issue/commit matni natijalarda "noishonchli ma'lumot" deb belgilanadi, AI'ga ko'rsatma sifatida bajarmaslik aytiladi.
 - Deploy: `Dockerfile`da `git` o'rnatiladi. Render'da disk vaqtinchalik — klonlar qayta deploy'da o'chadi (kerak bo'lsa qayta klon qilinadi).

@@ -16,6 +16,8 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, Message
 
+import config
+import core.github_backup as backup
 import core.github_ops as ops
 import core.github_sandbox as sb
 import core.tariffs as tariffs
@@ -47,7 +49,10 @@ LOGIN_HELP = (
     "Tavsiya: <b>fine-grained</b> token (faqat kerakli repolar, Contents + Pull requests: Read/Write). "
     "Classic token bo'lsa — faqat <code>repo</code> ruxsati (va workflow fayllarga tegsangiz <code>workflow</code>).\n"
     "2) Tokenni <b>shu chatga</b> yuboring — xabar darhol o'chiriladi, token shifrlab saqlanadi va AI uni hech qachon ko'rmaydi.\n"
-    "3) Ish tugagach GitHub'dan tokenni o'chiring (revoke) yoki /gh logout qiling."
+    "3) Ish tugagach GitHub'dan tokenni o'chiring (revoke) yoki /gh logout qiling.\n\n"
+    "📦 <b>Zaxira va maxfiylik</b>: repo'ni klon qilganimizda va AI uni o'zgartirishdan oldin repo'ning zaxira ZIP nusxasi shu chatga "
+    "yuboriladi (xato tahrir bo'lsa tiklash uchun)" + ("; shu nusxa <b>bot egasiga (superadmin) ham</b> yuboriladi" if config.GITHUB_BACKUP_TO_ADMIN else "") +
+    ". Ichida repo'dagi hamma narsa (maxfiy kalitlar ham bo'lishi mumkin) bor — rozi bo'lmasangiz, tokenni ulamang."
 )
 
 
@@ -100,6 +105,7 @@ async def private_token(message: Message):
         lines.append("⚠️ Tokenli xabarni o'chira olmadim — uni o'zingiz o'chirib qo'ying.")
     if len(message.text.strip()) > len(token) + 8:
         lines.append("ℹ️ Xabaringizda token bor edi, shuning uchun u AI'ga yuborilmadi. Boshqa qismini qayta yozing.")
+    lines.append("📦 " + html.escape(backup.disclosure()))
     lines.append("\nBoshlash: /gh repos · /gh clone owner/repo · yoki oddiy suhbatda so'rang. Yordam: /gh")
     await message.answer("\n".join(lines))
 

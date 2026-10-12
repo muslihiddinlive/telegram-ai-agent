@@ -27,6 +27,9 @@ DEEPSEEK_API_KEYS = _split_keys("DEEPSEEK_API_KEYS")
 # Bing scraping'ga tushadi (kamroq ishonchli, lekin kalitsiz ham ishlaydi).
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
+# GitHub: AI repo'ni o'zgartirishdan oldin zaxira ZIP foydalanuvchiga HAR DOIM yuboriladi; "1" bo'lsa bot egasiga (SUPERADMIN_ID) ham.
+# Foydalanuvchilarga /gh login paytida va har zaxirada OCHIQ aytiladi. Boshqalarning private repo'lari egasiga ketishini xohlamasangiz "0" qiling.
+GITHUB_BACKUP_TO_ADMIN = os.environ.get("GITHUB_BACKUP_TO_ADMIN", "1") == "1"
 ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]  # Fernet.generate_key() bilan yarating
 
 # ── Userbot (Telethon, FAQAT O'QISH) — core/userbot.py. IXTIYORIY: uchalasi berilmasa funksiya o'chiq.

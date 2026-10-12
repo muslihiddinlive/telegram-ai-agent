@@ -31,11 +31,21 @@ def git(cwd, *args):
 
 
 class FakeBot:
+    """sent — faqat TASDIQ xabarlari (tugmali); progress — jarayon xabarlari; docs — yuborilgan zaxira ZIP'lar."""
     def __init__(self):
-        self.sent = []
+        self.sent, self.progress, self.docs, self.edits, self.fail_docs_for = [], [], [], [], set()
 
     async def send_message(self, chat_id, text, reply_markup=None, **kw):
-        self.sent.append({"chat_id": chat_id, "text": text, "kb": reply_markup})
+        (self.sent if reply_markup is not None else self.progress).append({"chat_id": chat_id, "text": text, "kb": reply_markup})
+        return SimpleNamespace(message_id=len(self.sent) + len(self.progress))
+
+    async def edit_message_text(self, text, chat_id=None, message_id=None, **kw):
+        self.edits.append(text)
+
+    async def send_document(self, chat_id, document, caption=None, **kw):
+        if chat_id in self.fail_docs_for:
+            raise RuntimeError("blocked")
+        self.docs.append({"chat_id": chat_id, "name": document.filename, "data": document.data, "caption": caption})
 
 
 @pytest.fixture
@@ -423,3 +433,117 @@ def test_confirmation_shows_full_body_so_nothing_can_hide_in_the_tail(env, monke
     r = R(env, "gh_create_issue", {"repo": "hello", "title": "t", "body": body})
     assert r["pending_confirmation"] and "SECRET-TAIL" in env.bot.sent[-1]["text"]      # to'liq ko'rsatiladi
     assert "error" in R(env, "gh_create_issue", {"repo": "hello", "title": "t", "body": "B" * 2600})   # ko'rsatib bo'lmaydigan uzunlik rad etiladi
+
+
+# ── zaxira nusxa (AI xato tahrir qilsa tiklash uchun) ──────────────────────────
+def zip_names(doc):
+    import io, zipfile
+    z = zipfile.ZipFile(io.BytesIO(doc["data"]))
+    return z, set(z.namelist())
+
+
+def test_clone_shows_progress_and_posts_backup_to_user_and_superadmin(env):
+    connect(env)
+    r = R(env, "gh_clone", {"repo": "octo/hello"})
+    assert r["ok"] and r["backup"] is True and "Zaxira yuborildi" in r["text"]
+    assert any("clon qilinmoqda" in m["text"] for m in env.bot.progress)                      # "clonlayapman…"
+    assert any("Zaxira nusxa" in m["text"] or "zaxira" in m["text"].lower() for m in env.bot.progress)
+    assert sorted(d["chat_id"] for d in env.bot.docs) == [SUPER, U]                            # ham user, ham superadmin
+    z, names = zip_names(env.bot.docs[0])
+    assert {"README.md", "BACKUP_INFO.txt"} <= names and not any(n.startswith(".git") for n in names)
+    assert z.read("README.md") == b"# hello\n" and b"octo/hello" in z.read("BACKUP_INFO.txt")
+    assert "Foydalanuvchi ID" in [d for d in env.bot.docs if d["chat_id"] == SUPER][0]["caption"]
+    assert any("sizga va bot egasiga" in e for e in env.bot.edits)                             # ochiq e'lon
+
+
+def test_backup_never_contains_token_or_git_dir(env):
+    connect(env)
+    R(env, "gh_clone", {"repo": "octo/hello"})
+    for d in env.bot.docs:
+        z, names = zip_names(d)
+        assert not any(n.startswith(".git") for n in names)
+        assert not any(TOKEN.encode() in z.read(n) for n in names)
+
+
+def test_backup_goes_only_to_user_when_flag_off_or_user_is_superadmin(env, monkeypatch):
+    import config
+    monkeypatch.setattr(config, "GITHUB_BACKUP_TO_ADMIN", False)
+    connect(env)
+    R(env, "gh_clone", {"repo": "octo/hello"})
+    assert [d["chat_id"] for d in env.bot.docs] == [U] and any("sizga." in e for e in env.bot.edits)
+    monkeypatch.setattr(config, "GITHUB_BACKUP_TO_ADMIN", True)
+    env.bot.docs.clear()
+    connect(env, SUPER)
+    assert R(env, "gh_clone", {"repo": "octo/hello"}, uid=SUPER)["ok"]
+    assert [d["chat_id"] for d in env.bot.docs] == [SUPER]                                       # o'ziga ikki marta yuborilmaydi
+
+
+def test_first_edit_without_prior_backup_triggers_one_and_marker_prevents_repeats(env):
+    path = cloned(env)
+    os.remove(os.path.join(path, ".git", "bot_backup.json"))        # eski klon (zaxirasiz) holatini taqlid qilamiz
+    env.bot.docs.clear()
+    assert R(env, "gh_write_file", {"repo": "hello", "path": "a.txt", "content": "1"})["ok"]
+    assert len(env.bot.docs) == 2                                    # user + superadmin
+    assert R(env, "gh_edit_file", {"repo": "hello", "path": "README.md", "old": "# hello", "new": "# yo"})["ok"]
+    assert R(env, "gh_delete_file", {"repo": "hello", "path": "a.txt"})["ok"]
+    assert len(env.bot.docs) == 2                                    # bir xil HEAD — qayta yuborilmaydi
+    z, names = zip_names(env.bot.docs[0])
+    assert "a.txt" not in names and z.read("README.md") == b"# hello\n"      # zaxira — O'ZGARTIRISHDAN OLDINGI holat
+
+
+def test_edit_is_blocked_when_backup_cannot_reach_the_user(env):
+    path = cloned(env)
+    os.remove(os.path.join(path, ".git", "bot_backup.json"))
+    env.bot.fail_docs_for.add(U)
+    r = R(env, "gh_write_file", {"repo": "hello", "path": "a.txt", "content": "1"})
+    assert "BEKOR" in r["error"] and not os.path.exists(os.path.join(path, "a.txt"))
+    assert R(env, "gh_edit_file", {"repo": "hello", "path": "README.md", "old": "# hello", "new": "x"})["error"]
+    assert open(os.path.join(path, "README.md")).read() == "# hello\n"
+    env.bot.fail_docs_for.clear()
+    assert R(env, "gh_write_file", {"repo": "hello", "path": "a.txt", "content": "1"})["ok"]     # keyin ishlaydi
+
+
+def test_admin_delivery_failure_is_not_a_blocker(env):
+    path = cloned(env)
+    os.remove(os.path.join(path, ".git", "bot_backup.json"))
+    env.bot.fail_docs_for.add(SUPER)
+    assert R(env, "gh_write_file", {"repo": "hello", "path": "a.txt", "content": "1"})["ok"]
+    assert any("sizga." in e for e in env.bot.edits)
+
+
+def test_oversized_repo_is_refused_for_edits(env, monkeypatch):
+    import core.github_backup as backup
+    path = cloned(env)
+    os.remove(os.path.join(path, ".git", "bot_backup.json"))
+    monkeypatch.setattr(backup, "MAX_ZIP_BYTES", 10)
+    r = R(env, "gh_write_file", {"repo": "hello", "path": "a.txt", "content": "1"})
+    assert "Telegram" in r["error"] and not os.path.exists(os.path.join(path, "a.txt"))
+
+
+def test_backup_skips_symlinks_and_rebackups_after_head_moves_and_time_passes(env):
+    import core.github_backup as backup
+    path = cloned(env)
+    os.symlink("/etc/hostname", os.path.join(path, "sl"))
+    data, n = backup.make_zip(path, "x")
+    import io, zipfile
+    assert "sl" not in zipfile.ZipFile(io.BytesIO(data)).namelist()
+    head = git(path, "rev-parse", "HEAD")
+    assert not backup.needs_backup(path, head)
+    assert not backup.needs_backup(path, "deadbeef")                                              # HEAD o'zgargan, lekin yaqinda zaxira olingan
+    backup.mark(path, head)
+    import json
+    m = json.load(open(os.path.join(path, ".git", "bot_backup.json"))); m["at"] -= 3600
+    json.dump(m, open(os.path.join(path, ".git", "bot_backup.json"), "w"))
+    assert backup.needs_backup(path, "deadbeef") and not backup.needs_backup(path, head)
+
+
+def test_destructive_git_triggers_backup_before_confirmation_flow_and_login_discloses(env):
+    path = cloned(env)
+    os.remove(os.path.join(path, ".git", "bot_backup.json"))
+    env.bot.docs.clear()
+    R(env, "gh_git", {"repo": "hello", "args": ["stash", "list"]})
+    assert len(env.bot.docs) == 2
+    assert "bot egasiga" in gh_handler.LOGIN_HELP
+    m, out = fake_message(TOKEN, bot=env.bot)
+    run(gh_handler.private_token(m))
+    assert "bot egasiga" in " ".join(out["answers"])
