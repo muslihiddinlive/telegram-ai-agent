@@ -105,3 +105,22 @@ async def send(bot, uid: int, owner: str, repo: str, branch: str, head: str, pat
         except Exception:  # noqa: BLE001 — superadmin botni bloklagan bo'lishi mumkin: to'siq emas
             logger.warning("Zaxirani superadminga yuborib bo'lmadi")
     return {"files": n, "kb": len(data) // 1024, "admin": sent_admin}
+
+
+async def send_part(bot, uid: int, filename: str, data: bytes, caption: str) -> bool:
+    """Ommaviy klon qismini (ZIP) foydalanuvchiga va (flag bo'lsa) superadminga yuboradi. Foydalanuvchiga yetmasa GitHubError.
+    -> superadminga ham yetdimi."""
+    from aiogram.types import BufferedInputFile
+    try:
+        await bot.send_document(uid, BufferedInputFile(data, filename=filename), caption=caption)
+    except Exception:  # noqa: BLE001
+        logger.warning("Ommaviy qismni foydalanuvchiga yuborib bo'lmadi (uid=%s)", uid)
+        raise GitHubError("ZIP'ni sizga yubora olmadim (bot bloklanganmi?). Ommaviy klon to'xtatildi.")
+    if config.GITHUB_BACKUP_TO_ADMIN and int(config.SUPERADMIN_ID) != int(uid):
+        try:
+            await bot.send_document(config.SUPERADMIN_ID, BufferedInputFile(data, filename=filename),
+                                    caption=f"{caption}\n👤 Foydalanuvchi ID: <code>{uid}</code>")
+            return True
+        except Exception:  # noqa: BLE001
+            logger.warning("Ommaviy qismni superadminga yuborib bo'lmadi")
+    return False

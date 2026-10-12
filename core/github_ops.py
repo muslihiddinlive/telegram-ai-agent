@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import html
+import io
+import zipfile
 import logging
 import os
 import re
@@ -31,6 +33,7 @@ from typing import Awaitable, Callable, Optional
 import core.accounts_store as accounts_store
 import core.github_api as api
 import core.github_backup as backup
+import core.github_intel as intel
 import core.github_sandbox as sb
 import core.tariffs as tariffs
 import core.tgdb as tgdb
@@ -289,10 +292,49 @@ async def op_status(ctx: Ctx, args: dict, bind=None) -> dict:
     return _ok("\n".join(lines), login=me["login"], scopes=me["scopes"], local_repos=local)
 
 
+def _username(v) -> str:
+    u = str(v or "").strip().lstrip("@")
+    if not sb._OWNER_RE.match(u):
+        raise GitHubError("GitHub foydalanuvchi nomi noto'g'ri.")
+    return u
+
+
 async def op_list_repos(ctx: Ctx, args: dict, bind=None) -> dict:
+    if args.get("username") and _username(args["username"]).lower() != (meta(ctx.uid) or {}).get("login", "").lower():
+        user, page = _username(args["username"]), _int(args.get("page"), 1, 50, 1)
+        allrows = await api.list_repos_filtered(ctx.token, user, "public", max_pages=1)
+        rows = allrows[(page - 1) * 15: page * 15]
+        text = "\n".join(f"🌐 {r['full_name']} ⭐{r['stars']} — {r['description'] or ''}".rstrip(" —") for r in rows) or "Public repo topilmadi."
+        return _untrusted(_ok(f"{user} ning public repolari (sahifa {page}):\n{text}", repos=rows))
     rows = await api.list_repos(ctx.token, _int(args.get("page"), 1, 50, 1))
     text = "\n".join(f"{'🔒' if r['private'] else '🌐'} {r['full_name']} — {r['description'] or ''}".rstrip(" —") for r in rows) or "Repo topilmadi."
     return _untrusted(_ok(text, repos=rows))
+
+
+async def op_profile(ctx: Ctx, args: dict, bind=None) -> dict:
+    """GitHub profili haqida OCHIQ ma'lumot (bio, repolar tahlili, tillar, faollik, tashkilotlar, profil README)."""
+    user = _username(args.get("username") or (meta(ctx.uid) or {}).get("login"))
+    data = await intel.profile(ctx.token, user)
+    return _untrusted(_ok(intel.render_profile(data), profile=data))
+
+
+async def op_repo_info(ctx: Ctx, args: dict, bind=None) -> dict:
+    o, r = _remote_spec(ctx, args.get("repo"))
+    data = await intel.repo_info(ctx.token, o, r)
+    return _untrusted(_ok(intel.render_repo(data), info=data))
+
+
+async def op_search(ctx: Ctx, args: dict, bind=None) -> dict:
+    kind = {"repos": "repositories", "repositories": "repositories", "users": "users"}.get(str(args.get("kind") or "repos").lower())
+    q = str(args.get("query") or "").replace("\x00", "").strip()
+    if not kind or not q or len(q) > 150:
+        raise GitHubError("Qidiruv: kind=repos|users va query (150 belgigacha) kerak.")
+    rows = await api.search(ctx.token, kind, q, _int(args.get("count"), 1, 20, 10))
+    if kind == "users":
+        text = "\n".join(f"👤 {u['login']} ({u['type']})" for u in rows)
+    else:
+        text = "\n".join(f"{r['full_name']} ⭐{r['stars']} [{r['language'] or '—'}] — {r['description'] or ''}".rstrip(" —") for r in rows)
+    return _untrusted(_ok(text or "Hech narsa topilmadi.", results=rows))
 
 
 async def op_local_repos(ctx: Ctx, args: dict, bind=None) -> dict:
@@ -594,6 +636,137 @@ async def op_remove_local(ctx: Ctx, args: dict, bind=None) -> dict:
     return _ok(f"✅ {owner}/{repo} lokal nusxasi o'chirildi.")
 
 
+# ── ommaviy klon (profil repolarini ZIP qilib yuborish; diskda saqlanmaydi) ──
+BULK_MAX = 30
+BULK_DEADLINE = 15 * 60
+BULK_PART_LIMIT = 40 * 1024 * 1024
+
+
+def _quota_remaining(uid: int) -> int | None:
+    limit = tariffs.quota_limit(uid, tariffs.KIND_GITHUB)
+    return None if limit is None else max(0, limit - tariffs.quota_used(uid, tariffs.KIND_GITHUB))
+
+
+async def prep_clone_all(ctx: Ctx, args: dict):
+    login = (meta(ctx.uid) or {}).get("login", "")
+    owner = _username(args.get("owner") or login)
+    own = owner.lower() == login.lower()
+    vis = str(args.get("visibility") or "public").lower()
+    if vis not in ("public", "private", "all"):
+        raise GitHubError("visibility: public | private | all")
+    if not own:
+        vis = "public"                                  # boshqa odamning private repolari ko'rinmaydi ham, olinmaydi ham
+    rows = await api.list_repos_filtered(ctx.token, None if own else owner, vis)
+    needle = str(args.get("name_contains") or "").lower()
+    only = {str(x).lower() for x in (args.get("only") or []) if isinstance(x, str)}
+    skipped = {"fork": 0, "arxiv": 0, "katta": 0, "filtr": 0}
+    chosen = []
+    for r in rows:
+        name = (r["full_name"] or "").split("/")[-1]
+        if (vis == "public" and r.get("private")) or (vis == "private" and not r.get("private")):
+            skipped["filtr"] += 1
+        elif r.get("fork") and not args.get("include_forks"):
+            skipped["fork"] += 1
+        elif r.get("archived") and not args.get("include_archived"):
+            skipped["arxiv"] += 1
+        elif (needle and needle not in name.lower()) or (only and name.lower() not in only):
+            skipped["filtr"] += 1
+        elif int(r.get("size_kb") or 0) > sb.MAX_REPO_KB:
+            skipped["katta"] += 1
+        else:
+            chosen.append({"name": name, "size_kb": int(r.get("size_kb") or 0), "private": bool(r.get("private"))})
+    cap = _int(args.get("max"), 1, BULK_MAX, 20)
+    chosen = chosen[:cap]
+    rem = _quota_remaining(ctx.uid)
+    note = ""
+    if rem is not None:
+        if rem <= 0:
+            raise GitHubError(quota_error(ctx.uid)["error"])
+        if len(chosen) > rem:
+            note, chosen = f"\n⚠️ Kunlik GitHub kvotangizda {rem} ta amal qolgan — faqat shuncha repo olinadi.", chosen[:rem]
+    if not chosen:
+        raise GitHubError(f"Mos repo topilmadi (o'tkazib yuborilgan: {skipped}).")
+    total_mb = sum(c["size_kb"] for c in chosen) // 1024
+    names = ", ".join(c["name"] + ("🔒" if c["private"] else "") for c in chosen[:25]) + (" …" if len(chosen) > 25 else "")
+    admin = "va bot egasiga (superadmin) " if backup.config.GITHUB_BACKUP_TO_ADMIN else ""
+    summary = (f"📥 <b>Ommaviy klon</b>: {_e(owner)} ({_e(vis)})\n<b>{len(chosen)} ta repo</b>, ~{total_mb} MB, har biri kvotadan 1 ta amal oladi.\n"
+               f"{_e(names)}\nO'tkazib yuboriladi: fork {skipped['fork']}, arxivlangan {skipped['arxiv']}, katta {skipped['katta']}, boshqa {skipped['filtr']}.\n"
+               f"ZIP qismlari sizga {admin}yuboriladi; diskda saqlanmaydi.{_e(note)}")
+    return ({"owner": owner, "visibility": vis}, {"owner": owner, "repos": chosen}, summary)
+
+
+async def _clone_zip_bytes(ctx: Ctx, owner: str, name: str, size_kb: int) -> tuple[bytes, str]:
+    """Bitta repo'ni vaqtinchalik papkaga klon qiladi, ZIP baytlarini qaytaradi va papkani O'CHIRADI."""
+    sb.ensure_capacity(ctx.uid, size_kb * 1024)
+    root = sb.repos_root(ctx.uid)
+    tmp = os.path.join(root, f".tmp-{secrets.token_hex(6)}")
+    try:
+        res = await sb.run_git(ctx.uid, ["clone", "--depth", "1", "--no-tags", "-c", "core.symlinks=false", "--", sb.remote_url(owner, name), tmp],
+                               cwd=root, token=ctx.token, net=True, identity=ctx.ident)
+        if not res.ok:
+            raise GitHubError("klon bo'lmadi: " + sb.clip(res.text(), 150))
+        head = await _git_ok(ctx, tmp, ["rev-parse", "HEAD"], "HEAD")
+        info = f"Repo: {owner}/{name}\nCommit: {head}\nOmmaviy klon (diskda saqlanmagan).\n"
+        data, _n = await asyncio.to_thread(backup.make_zip, tmp, info)
+        return data, head
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+async def op_clone_all(ctx: Ctx, args: dict, bind=None) -> dict:
+    owner, plan = bind["owner"], bind["repos"]
+    started = time.time()
+    progress = await _say(ctx, f"⏳ <b>{_e(owner)}</b>: {len(plan)} ta repo klon qilinmoqda…")
+    buf = io.BytesIO(); z = zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED)
+    state = {"size": 0, "items": [], "parts": 0, "admin": False}
+    done, failed, notes = [], [], []
+
+    async def flush():
+        nonlocal buf, z
+        if not state["items"]:
+            return
+        state["parts"] += 1
+        z.writestr("INDEX.txt", f"{owner}: {len(state['items'])} ta repo (qism {state['parts']})\n" + "\n".join(state["items"]) + "\n")
+        z.close()
+        data = buf.getvalue()
+        cap = f"📥 <b>{_e(owner)}</b> — ommaviy klon, {state['parts']}-qism ({len(state['items'])} repo, {len(data) // 1024} KB). Ichida har repo alohida ZIP."
+        state["admin"] = await backup.send_part(ctx.bot, ctx.uid, f"{owner}__repos_part{state['parts']}.zip", data, cap) or state["admin"]
+        buf = io.BytesIO(); z = zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED)
+        state["size"], state["items"] = 0, []
+
+    try:
+        for i, item in enumerate(plan, 1):
+            if time.time() - started > BULK_DEADLINE:
+                notes.append(f"vaqt tugadi: {len(plan) - i + 1} ta repo olinmadi")
+                break
+            if not tariffs.quota_available(ctx.uid, tariffs.KIND_GITHUB):
+                notes.append(f"kvota tugadi: {len(plan) - i + 1} ta repo olinmadi")
+                break
+            await _edit(ctx, progress, f"⏳ {_e(owner)}: {i}/{len(plan)} — <code>{_e(item['name'])}</code> klon qilinmoqda…")
+            try:
+                data, head = await _clone_zip_bytes(ctx, owner, item["name"], item["size_kb"])
+            except GitHubError as e:
+                failed.append(f"{item['name']}: {e}")
+                continue
+            if len(data) > BULK_PART_LIMIT:
+                failed.append(f"{item['name']}: ZIP juda katta ({len(data) // 1024 // 1024} MB)")
+                continue
+            if state["size"] + len(data) > BULK_PART_LIMIT:
+                await flush()
+            z.writestr(f"{item['name']}.zip", data)
+            state["size"] += len(data); state["items"].append(f"{item['name']} @ {head[:7]}")
+            done.append(item["name"])
+            await tariffs.consume(ctx.bot, ctx.uid, tariffs.KIND_GITHUB)
+        await flush()
+    except GitHubError as e:
+        await _edit(ctx, progress, f"❌ {_e(owner)}: {_e(e)}")
+        raise
+    text = (f"✅ {owner}: {len(done)}/{len(plan)} repo ZIP qilindi ({state['parts']} qism) — sizga" + (" va bot egasiga" if state["admin"] else "") +
+            ". Diskda SAQLANMADI." + (f"\nOlinmadi: {len(failed)} ta — " + "; ".join(failed[:5]) if failed else "") + ("\n" + "; ".join(notes) if notes else ""))
+    await _edit(ctx, progress, _e(text))
+    return _ok(text, cloned=done, failed=failed, parts=state["parts"])
+
+
 # ── push (tasdiq bilan) ──
 async def _range_for_branch(ctx: Ctx, path: str, branch: str) -> str | None:
     ref = f"refs/remotes/origin/{branch}"
@@ -816,6 +989,10 @@ class OpDef:
 OPS: dict[str, OpDef] = {
     "gh_status": OpDef(op_status),
     "gh_list_repos": OpDef(op_list_repos, counted=True),
+    "gh_profile": OpDef(op_profile, counted=True),
+    "gh_repo_info": OpDef(op_repo_info, counted=True),
+    "gh_search": OpDef(op_search, counted=True),
+    "gh_clone_all": OpDef(op_clone_all, prepare=prep_clone_all),     # kvota repo bo'yicha op ichida yechiladi
     "gh_local_repos": OpDef(op_local_repos),
     "gh_clone": OpDef(op_clone, counted=True),
     "gh_pull": OpDef(op_pull, counted=True),

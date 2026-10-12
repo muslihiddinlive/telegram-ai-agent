@@ -7,6 +7,7 @@ Hamma xatolar `GitHubError` ga o'giriladi (matnida token bo'lmaydi). Transport `
 from __future__ import annotations
 
 import logging
+import base64
 from urllib.parse import quote
 
 import httpx
@@ -78,9 +79,13 @@ async def whoami(token: str) -> dict:
 
 # ── repolar ────────────────────────────────────────────────────────────────────
 def _repo_row(r: dict) -> dict:
+    lic = r.get("license") or {}
     return {"full_name": r.get("full_name"), "private": r.get("private"), "default_branch": r.get("default_branch"),
-            "description": (r.get("description") or "")[:120], "size_kb": r.get("size"), "fork": r.get("fork"),
-            "pushed_at": r.get("pushed_at"), "archived": r.get("archived"), "html_url": r.get("html_url")}
+            "description": (r.get("description") or "")[:200], "size_kb": r.get("size"), "fork": r.get("fork"),
+            "pushed_at": r.get("pushed_at"), "archived": r.get("archived"), "html_url": r.get("html_url"),
+            "stars": r.get("stargazers_count"), "forks": r.get("forks_count"), "language": r.get("language"),
+            "topics": (r.get("topics") or [])[:10], "created_at": r.get("created_at"), "open_issues": r.get("open_issues_count"),
+            "license": lic.get("spdx_id") if isinstance(lic, dict) else None, "homepage": (r.get("homepage") or "")[:200]}
 
 
 async def list_repos(token: str, page: int = 1, per_page: int = 15) -> list[dict]:
@@ -171,3 +176,82 @@ async def list_runs(token: str, owner: str, repo: str, branch: str | None = None
     runs = (data or {}).get("workflow_runs", []) if isinstance(data, dict) else []
     return [{"name": r.get("name"), "status": r.get("status"), "conclusion": r.get("conclusion"), "branch": r.get("head_branch"),
              "event": r.get("event"), "html_url": r.get("html_url"), "created_at": r.get("created_at")} for r in runs]
+
+
+# ── Ochiq ma'lumot olish (profil / repo / qidiruv) — faqat rasmiy API, faqat PUBLIC maydonlar ───────────────────────
+def _user_row(u: dict) -> dict:
+    return {"login": u.get("login"), "type": u.get("type"), "name": u.get("name"), "bio": (u.get("bio") or "")[:300],
+            "company": u.get("company"), "location": u.get("location"), "blog": (u.get("blog") or "")[:200],
+            "twitter": u.get("twitter_username"), "email_public": u.get("email"), "hireable": u.get("hireable"),
+            "followers": u.get("followers"), "following": u.get("following"), "public_repos": u.get("public_repos"),
+            "public_gists": u.get("public_gists"), "created_at": u.get("created_at"), "html_url": u.get("html_url")}
+
+
+async def get_user(token: str, username: str) -> dict:
+    data, _ = await call(token, "GET", f"/users/{_q(username)}")
+    return _user_row(data)
+
+
+async def list_repos_filtered(token: str, owner: str | None, visibility: str = "public", max_pages: int = 3) -> list[dict]:
+    """owner=None — token egasining O'Z repolari (visibility: public|private|all); aks holda boshqa foydalanuvchining PUBLIC repolari."""
+    rows: list[dict] = []
+    for page in range(1, max_pages + 1):
+        if owner is None:
+            params = {"per_page": 100, "page": page, "sort": "pushed", "affiliation": "owner", "visibility": visibility}
+            data, _ = await call(token, "GET", "/user/repos", params=params)
+        else:
+            data, _ = await call(token, "GET", f"/users/{_q(owner)}/repos", params={"per_page": 100, "page": page, "sort": "pushed", "type": "owner"})
+        chunk = data if isinstance(data, list) else []
+        rows += [_repo_row(r) for r in chunk]
+        if len(chunk) < 100:
+            break
+    return rows
+
+
+async def user_orgs(token: str, username: str) -> list[str]:
+    try:
+        data, _ = await call(token, "GET", f"/users/{_q(username)}/orgs", params={"per_page": 30})
+    except GitHubError:
+        return []
+    return [o.get("login") for o in (data if isinstance(data, list) else []) if isinstance(o, dict)]
+
+
+async def user_events(token: str, username: str) -> list[dict]:
+    try:
+        data, _ = await call(token, "GET", f"/users/{_q(username)}/events/public", params={"per_page": 30})
+    except GitHubError:
+        return []
+    return [{"type": e.get("type"), "repo": (e.get("repo") or {}).get("name"), "at": e.get("created_at")}
+            for e in (data if isinstance(data, list) else []) if isinstance(e, dict)]
+
+
+async def get_readme(token: str, owner: str, repo: str, limit: int = 6000) -> str | None:
+    status, data, _ = await _send(token, "GET", f"/repos/{_q(owner)}/{_q(repo)}/readme", None, None)
+    if status == 404:
+        return None
+    if status != 200:
+        raise _fail(status, data, token)
+    try:
+        raw = base64.b64decode((data or {}).get("content", ""), validate=False)
+    except Exception:  # noqa: BLE001
+        return None
+    return redact(raw[:limit * 3].decode("utf-8", "replace"), token)[:limit]
+
+
+async def repo_languages(token: str, owner: str, repo: str) -> dict:
+    try:
+        data, _ = await call(token, "GET", f"/repos/{_q(owner)}/{_q(repo)}/languages")
+    except GitHubError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+async def search(token: str, kind: str, query: str, per_page: int = 10) -> list[dict]:
+    if kind not in ("repositories", "users"):
+        raise GitHubError("Qidiruv turi: repos | users")
+    data, _ = await call(token, "GET", f"/search/{kind}", params={"q": query, "per_page": max(1, min(per_page, 20)),
+                                                                  **({"sort": "stars"} if kind == "repositories" else {})})
+    items = (data or {}).get("items", []) if isinstance(data, dict) else []
+    if kind == "repositories":
+        return [_repo_row(r) for r in items]
+    return [{"login": u.get("login"), "type": u.get("type"), "html_url": u.get("html_url")} for u in items]

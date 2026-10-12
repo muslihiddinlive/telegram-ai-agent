@@ -32,7 +32,9 @@ HELP = (
     "🐙 <b>GitHub</b> (faqat shaxsiy chatda)\n\n"
     "<b>Ulash</b>\n/gh login — tokenni ulash (xabar darhol o'chiriladi)\n/gh whoami — holat, token ruxsatlari, kvota\n"
     "/gh logout — tokenni va lokal repolarni o'chirish\n\n"
-    "<b>Repolar</b>\n/gh repos [sahifa]\n/gh clone owner/repo [branch] — ZIP yuboriladi, diskda saqlanmaydi\n"
+    "<b>Ma'lumot</b>\n/gh repos [sahifa] [username] · /gh profile [username] · /gh info owner/repo · /gh search repos|users so'rov\n\n"
+    "<b>Repolar</b>\n/gh cloneall [username] [--private|--all] [--forks] [--max N]* — profildagi hamma repo ZIP qismlarda\n"
+    "/gh clone owner/repo [branch] — ZIP yuboriladi, diskda saqlanmaydi\n"
     "/gh clone owner/repo [branch] --work — vaqtincha ish nusxasi (~20 daqiqa), AI/buyruqlar fayllarni o'qishi va tahrirlashi uchun\n"
     "/gh ls — ish nusxalari · /gh rm repo — ish nusxasini o'chirish*\n\n"
     "<b>Ko'rish</b>\n/gh st repo\n/gh log repo [soni]\n/gh diff repo [fayl]\n/gh files repo [papka]\n/gh cat repo fayl\n\n"
@@ -164,7 +166,24 @@ async def _dispatch(message: Message, uid: int, sub: str, a: list[str]) -> None:
     elif sub in ("whoami", "status", "holat"):
         await _exec(message, "gh_status", {})
     elif sub == "repos":
-        await _exec(message, "gh_list_repos", {"page": a[0] if a else 1})
+        page = a[0] if a and a[0].isdigit() else 1
+        user = next((x for x in a if not x.isdigit()), None)
+        await _exec(message, "gh_list_repos", {"page": page, "username": user})
+    elif sub in ("profile", "user"):
+        await _exec(message, "gh_profile", {"username": a[0] if a else None})
+    elif sub == "info":
+        need(1, "/gh info owner/repo")
+        await _exec(message, "gh_repo_info", {"repo": a[0]})
+    elif sub == "search":
+        need(2, "/gh search repos|users so'rov")
+        await _exec(message, "gh_search", {"kind": a[0], "query": " ".join(a[1:])})
+    elif sub in ("cloneall", "clone-all"):
+        priv, a = _flag(a, "--private")
+        allv, a = _flag(a, "--all")
+        forks, a = _flag(a, "--forks")
+        mx, a = _flag(a, "--max", True)
+        await _exec(message, "gh_clone_all", {"owner": a[0] if a else None, "visibility": "private" if priv else ("all" if allv else "public"),
+                                              "include_forks": forks, "max": mx or 20})
     elif sub == "clone":
         work, a = _flag(a, "--work")
         need(1, "/gh clone owner/repo [branch] [--work]")
