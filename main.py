@@ -81,7 +81,8 @@ async def on_startup(bot: Bot):
     bot_identity.set_id(me.id)  # guruhda "botga reply qilinganmi?" tekshiruvi uchun
 
     file_cleanup.cleanup_stale_files(USER_FILES_ROOT)  # oldingi sessiyadan qolgan qoldiqlar
-    github_sandbox.cleanup_stale()  # uzoq tegilmagan GitHub klonlari (disk to'lib ketmasin)
+    github_sandbox.cleanup_idle(0)  # restartdan qolgan GitHub ish nusxalari/yarim klonlar — hammasi o'chadi (ish nusxasi vaqtinchalik)
+    asyncio.create_task(github_sandbox.sweeper())  # bo'sh turgan ish nusxalarini har 5 daqiqada o'chiradi
     db = await tgdb.load(bot)  # DB'ni pin qilingan xabardan tiklaydi (agar bo'lsa) — _register_commands'dan OLDIN kerak (roles.list_admins() DB'ni talab qiladi)
     await _register_commands(bot)
 

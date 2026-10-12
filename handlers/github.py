@@ -32,7 +32,9 @@ HELP = (
     "🐙 <b>GitHub</b> (faqat shaxsiy chatda)\n\n"
     "<b>Ulash</b>\n/gh login — tokenni ulash (xabar darhol o'chiriladi)\n/gh whoami — holat, token ruxsatlari, kvota\n"
     "/gh logout — tokenni va lokal repolarni o'chirish\n\n"
-    "<b>Repolar</b>\n/gh repos [sahifa]\n/gh clone owner/repo [branch]\n/gh ls — lokal repolar\n/gh rm repo — lokal nusxani o'chirish*\n\n"
+    "<b>Repolar</b>\n/gh repos [sahifa]\n/gh clone owner/repo [branch] — ZIP yuboriladi, diskda saqlanmaydi\n"
+    "/gh clone owner/repo [branch] --work — vaqtincha ish nusxasi (~20 daqiqa), AI/buyruqlar fayllarni o'qishi va tahrirlashi uchun\n"
+    "/gh ls — ish nusxalari · /gh rm repo — ish nusxasini o'chirish*\n\n"
     "<b>Ko'rish</b>\n/gh st repo\n/gh log repo [soni]\n/gh diff repo [fayl]\n/gh files repo [papka]\n/gh cat repo fayl\n\n"
     "<b>O'zgartirish</b>\n/gh branch repo [yangi_nom]\n/gh switch repo branch\n/gh commit repo \"xabar\"\n"
     "/gh pull repo · /gh fetch repo\n/gh push repo [branch] [--force]*\n/gh git repo &lt;git argumentlari&gt;\n\n"
@@ -50,6 +52,8 @@ LOGIN_HELP = (
     "Classic token bo'lsa — faqat <code>repo</code> ruxsati (va workflow fayllarga tegsangiz <code>workflow</code>).\n"
     "2) Tokenni <b>shu chatga</b> yuboring — xabar darhol o'chiriladi, token shifrlab saqlanadi va AI uni hech qachon ko'rmaydi.\n"
     "3) Ish tugagach GitHub'dan tokenni o'chiring (revoke) yoki /gh logout qiling.\n\n"
+    "💾 <b>Disk</b>: bot repo'ni saqlamaydi — klon qilganda ZIP yuboriladi va diskdan o'chadi. Faqat AI fayllarni o'qishi/tahrirlashi kerak "
+    "bo'lsa vaqtincha ish nusxasi qoladi va ~20 daqiqa tegilmasa o'zi o'chadi.\n"
     "📦 <b>Zaxira va maxfiylik</b>: repo'ni klon qilganimizda va AI uni o'zgartirishdan oldin repo'ning zaxira ZIP nusxasi shu chatga "
     "yuboriladi (xato tahrir bo'lsa tiklash uchun)" + ("; shu nusxa <b>bot egasiga (superadmin) ham</b> yuboriladi" if config.GITHUB_BACKUP_TO_ADMIN else "") +
     ". Ichida repo'dagi hamma narsa (maxfiy kalitlar ham bo'lishi mumkin) bor — rozi bo'lmasangiz, tokenni ulamang."
@@ -162,8 +166,9 @@ async def _dispatch(message: Message, uid: int, sub: str, a: list[str]) -> None:
     elif sub == "repos":
         await _exec(message, "gh_list_repos", {"page": a[0] if a else 1})
     elif sub == "clone":
-        need(1, "/gh clone owner/repo [branch]")
-        await _exec(message, "gh_clone", {"repo": a[0], "branch": a[1] if len(a) > 1 else None})
+        work, a = _flag(a, "--work")
+        need(1, "/gh clone owner/repo [branch] [--work]")
+        await _exec(message, "gh_clone", {"repo": a[0], "branch": a[1] if len(a) > 1 else None, "workspace": work})
     elif sub in ("ls", "local"):
         await _exec(message, "gh_local_repos", {})
     elif sub in ("rm", "remove"):

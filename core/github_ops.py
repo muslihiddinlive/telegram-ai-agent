@@ -298,26 +298,30 @@ async def op_list_repos(ctx: Ctx, args: dict, bind=None) -> dict:
 async def op_local_repos(ctx: Ctx, args: dict, bind=None) -> dict:
     local = [f"{o}/{r}" for o, r in sb.list_local(ctx.uid)]
     used = sb.dir_size(sb.user_root(ctx.uid)) // 1024 // 1024
-    return _ok(("Klon qilingan repolar:\n" + "\n".join(local) if local else "Hali klon qilingan repo yo'q.")
+    return _ok(("Vaqtinchalik ish nusxalari:\n" + "\n".join(local) if local else "Diskda ish nusxasi yo'q (klon qilganda ZIP yuboriladi va diskda saqlanmaydi).")
                + f"\nDisk: {used}/{sb.USER_DISK_LIMIT // 1024 // 1024} MB", repos=local)
 
 
 # ── klon / yangilash ──
 async def op_clone(ctx: Ctx, args: dict, bind=None) -> dict:
+    """Klon qiladi va ZIP'ni foydalanuvchiga (+superadminga) yuboradi. Diskda SAQLANMAYDI, faqat workspace=true bo'lsa AI
+    fayl o'qishi/tahrirlashi uchun vaqtincha (WORKSPACE_TTL) qoladi."""
     owner, repo = sb.parse_repo(args.get("repo"))
     branch = sb.valid_branch(args["branch"]) if args.get("branch") else None
     depth = _int(args.get("depth"), 1, 1000, 50)
+    keep = bool(args.get("workspace"))
     dest = sb.repo_dir(ctx.uid, owner, repo)
-    if os.path.isdir(dest):
-        raise GitHubError(f"{owner}/{repo} allaqachon klon qilingan. Yangilash uchun pull qiling, yoki avval o'chiring.")
+    if keep and os.path.isdir(dest):
+        raise GitHubError(f"{owner}/{repo} ish nusxasi allaqachon bor. Yangilash uchun pull qiling, yoki avval o'chiring.")
     info = await api.get_repo(ctx.token, owner, repo)
     size_kb = int(info.get("size_kb") or 0)
     if size_kb > sb.MAX_REPO_KB:
         raise GitHubError(f"Repo juda katta ({size_kb // 1024} MB). Chegara: {sb.MAX_REPO_KB // 1024} MB.")
-    sb.ensure_capacity(ctx.uid, size_kb * 1024, new_repo=True)
+    sb.ensure_capacity(ctx.uid, size_kb * 1024, new_repo=keep)
     progress = await _say(ctx, f"⏳ <b>{_e(owner)}/{_e(repo)}</b> clon qilinmoqda…")
     root = sb.repos_root(ctx.uid)
     tmp = os.path.join(root, f".tmp-{secrets.token_hex(6)}")
+    moved = False
     try:
         cmd = ["clone", "--depth", str(depth), "--no-tags", "-c", "core.symlinks=false"]
         if branch:
@@ -328,23 +332,31 @@ async def op_clone(ctx: Ctx, args: dict, bind=None) -> dict:
             raise GitHubError("Klon qilib bo'lmadi: " + (sb.clip(res.text(), 600) or "git xatosi"))
         if sb.dir_size(tmp) > sb.USER_DISK_LIMIT:
             raise GitHubError("Klon disk kvotasidan katta chiqdi, bekor qilindi.")
-        os.replace(tmp, dest)
+        head = await _git_ok(ctx, tmp, ["rev-parse", "--short", "HEAD"], "HEAD")
+        cur = await _current_branch(ctx, tmp)
+        await _edit(ctx, progress, f"✅ {_e(owner)}/{_e(repo)} clon qilindi ({_e(cur)}, {_e(head)}). 📦 Zaxira (ZIP) yuborilmoqda…")
+        backup_ok, note = True, ""
+        try:
+            note = await ensure_backup(ctx, owner, repo, tmp, "Klon qilingan zahoti olingan asl holat", force=True)
+        except GitHubError as e:
+            backup_ok, note = False, f"LEKIN zaxira yuborilmadi: {e}"
+            if not keep:
+                raise GitHubError(f"Zaxira (ZIP) yuborilmadi: {e}")
+        if keep:
+            os.replace(tmp, dest)
+            moved = True
     except Exception:
         await _edit(ctx, progress, f"❌ {_e(owner)}/{_e(repo)} clon qilib bo'lmadi.")
         raise
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    head = await _git_ok(ctx, dest, ["rev-parse", "--short", "HEAD"], "HEAD")
-    cur = await _current_branch(ctx, dest)
-    await _edit(ctx, progress, f"✅ {_e(owner)}/{_e(repo)} clon qilindi ({_e(cur)}, {_e(head)}). Zaxira nusxa yuborilmoqda…")
-    try:
-        done = await ensure_backup(ctx, owner, repo, dest, "Klon qilingan zahoti olingan asl holat", force=True)
-    except GitHubError as e:
-        # Zaxira yuborilmasa — klon saqlanadi, lekin o'zgartirishlar (ensure_backup) baribir to'xtatiladi; sababni aytamiz
-        return _ok(f"✅ {owner}/{repo} klon qilindi (branch: {cur}, commit: {head}), LEKIN zaxira yuborilmadi: {e}", repo=f"{owner}/{repo}",
-                   branch=cur, head=head, backup=False)
-    return _ok(f"✅ {owner}/{repo} klon qilindi (branch: {cur}, commit: {head}, {'private' if info.get('private') else 'public'}). {done}",
-               repo=f"{owner}/{repo}", branch=cur, head=head, backup=True)
+        if not moved:
+            shutil.rmtree(tmp, ignore_errors=True)       # ZIP yuborildi — diskda hech narsa qolmaydi
+    ttl = sb.WORKSPACE_TTL // 60
+    where = (f"Ish nusxasi vaqtincha ({ttl} daqiqa tegilmasa o'chadi) diskda qoldi — AI fayllarni o'qishi/tahrirlashi mumkin."
+             if keep else "Diskda SAQLANMADI: nusxa yuqoridagi ZIP faylda.")
+    await _edit(ctx, progress, f"✅ {_e(owner)}/{_e(repo)}: {_e(note or 'zaxira yuborildi')}. {_e(where)}")
+    return _ok(f"✅ {owner}/{repo} klon qilindi (branch: {cur}, commit: {head}, {'private' if info.get('private') else 'public'}). {note} {where}".strip(),
+               repo=f"{owner}/{repo}", branch=cur, head=head, backup=backup_ok, workspace=keep)
 
 
 async def op_pull(ctx: Ctx, args: dict, bind=None) -> dict:
@@ -427,6 +439,7 @@ async def op_list_files(ctx: Ctx, args: dict, bind=None) -> dict:
 
 async def op_read_file(ctx: Ctx, args: dict, bind=None) -> dict:
     owner, repo, path = sb.resolve_local(ctx.uid, args.get("repo"))
+    sb.touch(path)
     full = sb.safe_path(path, args.get("path"), allow_missing=False)
     if not os.path.isfile(full):
         raise GitHubError("Bu fayl emas.")

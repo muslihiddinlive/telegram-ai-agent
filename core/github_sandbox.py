@@ -41,13 +41,17 @@ NET_TIMEOUT = 150
 LOCAL_TIMEOUT = 40
 MAX_OUTPUT = 30_000            # AI/foydalanuvchiga qaytariladigan matn chegarasi
 MAX_STREAM = 2 * 1024 * 1024   # jarayon shundan ko'p yozsa — to'xtatiladi
-MAX_REPO_KB = 150_000          # GitHub API "size" (KB): ~150 MB dan katta repo klon qilinmaydi
-USER_DISK_LIMIT = 400 * 1024 * 1024
-MAX_REPOS_PER_USER = 5
+# DISK: ish nusxalari VAQTINCHALIK. "Klon qil" = klon -> ZIP yuborish -> diskdan o'chirish; ish nusxasi faqat AI fayl o'qishi/tahrirlashi
+# kerak bo'lganda (workspace=true) qoladi va WORKSPACE_TTL soniya tegilmasa o'zi o'chadi. Zaxira ZIP hech qachon diskka yozilmaydi (xotirada).
+MAX_REPO_KB = 60_000           # GitHub API "size" (KB): ~60 MB dan katta repo klon qilinmaydi
+USER_DISK_LIMIT = 150 * 1024 * 1024
+GLOBAL_DISK_LIMIT = 600 * 1024 * 1024
+MAX_REPOS_PER_USER = 2
+WORKSPACE_TTL = max(60, int(os.environ.get("GITHUB_WORKSPACE_TTL_MIN", "20")) * 60)
+SWEEP_INTERVAL = 300
 MAX_READ_BYTES = 200_000
 MAX_WRITE_BYTES = 500_000
 MAX_LIST_ENTRIES = 300
-STALE_DAYS = 3
 _MAX_PROCS = asyncio.Semaphore(3)
 _user_locks: dict[int, asyncio.Lock] = {}
 
@@ -233,7 +237,9 @@ def ensure_capacity(uid: int, extra_bytes: int = 0, new_repo: bool = False) -> N
     if new_repo and len(list_local(uid)) >= MAX_REPOS_PER_USER:
         raise GitHubError(f"Bir vaqtda {MAX_REPOS_PER_USER} tagacha repo saqlanadi. Keraksizini o'chiring (/gh rm <repo>).")
     if dir_size(user_root(uid)) + extra_bytes > USER_DISK_LIMIT:
-        raise GitHubError(f"Disk kvotasi ({USER_DISK_LIMIT // 1024 // 1024} MB) to'ldi. Keraksiz repolarni o'chiring (/gh rm <repo>).")
+        raise GitHubError(f"Disk kvotasi ({USER_DISK_LIMIT // 1024 // 1024} MB) to'ldi. Keraksiz ish nusxalarini o'chiring (/gh rm <repo>) yoki biroz kuting.")
+    if extra_bytes and dir_size(ROOT) + extra_bytes > GLOBAL_DISK_LIMIT:
+        raise GitHubError("Server diski hozir band (boshqa foydalanuvchilar klon qilmoqda). Birozdan keyin qayta urinib ko'ring.")
 
 
 def remove_local(uid: int, owner: str, repo: str) -> bool:
@@ -248,9 +254,10 @@ def wipe_user(uid: int) -> None:
     shutil.rmtree(user_root(uid), ignore_errors=True)
 
 
-def cleanup_stale(max_age_days: int = STALE_DAYS) -> int:
-    """Uzoq vaqt tegilmagan klonlarni o'chiradi (bot qayta ishga tushganda). Disk to'lib ketmasligi uchun."""
-    n, cutoff = 0, time.time() - max_age_days * 86400
+def cleanup_idle(max_idle: int | None = None) -> int:
+    """max_idle soniya tegilmagan ish nusxalarini (va yarim qolgan .tmp-* klonlarni) o'chiradi. -> o'chirilganlar soni."""
+    idle = WORKSPACE_TTL if max_idle is None else max_idle
+    n, cutoff = 0, time.time() - idle
     if not os.path.isdir(ROOT):
         return 0
     for uid in os.listdir(ROOT):
@@ -258,14 +265,28 @@ def cleanup_stale(max_age_days: int = STALE_DAYS) -> int:
         if not os.path.isdir(rr):
             continue
         for name in os.listdir(rr):
-            p = os.path.join(rr, name)
+            path = os.path.join(rr, name)
             try:
-                if os.path.getmtime(p) < cutoff:
-                    shutil.rmtree(p, ignore_errors=True)
+                if os.path.getmtime(path) < cutoff:
+                    shutil.rmtree(path, ignore_errors=True)
                     n += 1
             except OSError:
                 pass
     return n
+
+
+async def sweeper() -> None:
+    """Fon vazifasi: har SWEEP_INTERVAL soniyada bo'sh turgan ish nusxalarini o'chiradi (main.on_startup ishga tushiradi)."""
+    while True:
+        try:
+            await asyncio.sleep(SWEEP_INTERVAL)
+            removed = await asyncio.to_thread(cleanup_idle)
+            if removed:
+                logger.info("GitHub: %s ta bo'sh ish nusxasi o'chirildi", removed)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("GitHub sweeper xatosi")
 
 
 def user_lock(uid: int) -> asyncio.Lock:

@@ -95,7 +95,7 @@ def R(env, name, args, uid=U, private=True):
 
 def cloned(env):
     connect(env)
-    r = R(env, "gh_clone", {"repo": "octo/hello"})
+    r = R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})
     assert r.get("ok"), r
     return sb.repo_dir(U, "octo", "hello")
 
@@ -248,12 +248,12 @@ def test_quota_blocks_network_ops_only_and_counts_successes(env):
     limit = tariffs.quota_limit(U, tariffs.KIND_GITHUB)
     assert limit == 10                                         # bepul tarif
     rec["github_today"], rec["last_reset"] = limit, roles.today_str()
-    r = R(env, "gh_clone", {"repo": "octo/hello"})
+    r = R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})
     assert r["kvota_tugadi"] == "github" and not os.path.exists(sb.repo_dir(U, "octo", "hello"))
     assert R(env, "gh_local_repos", {})["ok"]                  # lokal amallar kvotasiz
     rec["github_today"] = 0
-    assert R(env, "gh_clone", {"repo": "octo/hello"})["ok"] and rec["github_today"] == 1
-    assert "error" in R(env, "gh_clone", {"repo": "octo/hello"}) and rec["github_today"] == 1     # xato sanalmaydi
+    assert R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})["ok"] and rec["github_today"] == 1
+    assert "error" in R(env, "gh_clone", {"repo": "octo/hello", "workspace": True}) and rec["github_today"] == 1     # xato sanalmaydi
 
 
 def test_staff_unlimited_and_no_double_counting_in_ai_dispatch(env):
@@ -420,7 +420,7 @@ def test_confirm_callback_owner_only_group_refused_and_replay_proof(env):
     c, st = fake_call(f"gh:ok:{pid}")                                # replay
     run(gh_handler.confirm_cb(c, env.bot))
     assert "eskirgan" in st["alerts"][0][0]
-    R(env, "gh_clone", {"repo": "octo/hello"}); R(env, "gh_remove_local", {"repo": "hello"})
+    R(env, "gh_clone", {"repo": "octo/hello", "workspace": True}); R(env, "gh_remove_local", {"repo": "hello"})
     pid = next(iter(ops._PENDING))
     c, st = fake_call(f"gh:no:{pid}")
     run(gh_handler.confirm_cb(c, env.bot))
@@ -547,3 +547,120 @@ def test_destructive_git_triggers_backup_before_confirmation_flow_and_login_disc
     m, out = fake_message(TOKEN, bot=env.bot)
     run(gh_handler.private_token(m))
     assert "bot egasiga" in " ".join(out["answers"])
+
+
+# ── DISK: klon = ZIP yuborish, diskda saqlanmaydi; ish nusxasi vaqtinchalik ───────────────────────
+def all_files(root):
+    return [os.path.join(dp, f) for dp, _, fs in os.walk(root) for f in fs]
+
+
+def test_plain_clone_posts_zip_and_leaves_nothing_on_disk(env):
+    connect(env)
+    r = R(env, "gh_clone", {"repo": "octo/hello"})
+    assert r["ok"] and r["workspace"] is False and "SAQLANMADI" in r["text"]
+    assert sorted(d["chat_id"] for d in env.bot.docs) == [SUPER, U]                  # userga ham, superadminga ham berildi
+    assert sb.list_local(U) == [] and not any(n.startswith(".tmp-") for n in os.listdir(sb.repos_root(U)))
+    assert os.listdir(sb.repos_root(U)) == []                                         # klon ham, vaqtinchalik papka ham yo'q
+    assert not [f for f in all_files(sb.ROOT) if f.endswith(".zip")]                  # ZIP hech qachon diskka yozilmagan (xotirada)
+    assert sb.dir_size(sb.user_root(U)) < 1024                                        # foydalanuvchi papkasi deyarli bo'sh
+    assert any("clon qilinmoqda" in m["text"] for m in env.bot.progress) and any("Diskda SAQLANMADI" in e for e in env.bot.edits)
+    # ZIP ichida repo bor, .git yo'q
+    z, names = zip_names(env.bot.docs[0])
+    assert "README.md" in names and not any(n.startswith(".git") for n in names)
+
+
+def test_workspace_clone_keeps_temporary_copy_with_ttl_notice(env):
+    connect(env)
+    r = R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})
+    assert r["workspace"] is True and sb.list_local(U) == [("octo", "hello")] and "daqiqa" in r["text"]
+    assert len(env.bot.docs) == 2                                                     # workspace'da ham zaxira ZIP yuboriladi
+
+
+def test_plain_clone_fails_cleanly_when_zip_cannot_reach_user(env):
+    connect(env)
+    env.bot.fail_docs_for.add(U)
+    r = R(env, "gh_clone", {"repo": "octo/hello"})
+    assert "Zaxira" in r["error"] and sb.list_local(U) == [] and os.listdir(sb.repos_root(U)) == []
+
+
+def test_failed_clone_leaves_no_tmp_dirs(env):
+    connect(env)
+    assert "error" in R(env, "gh_clone", {"repo": "octo/doesnotexist"})
+    assert os.listdir(sb.repos_root(U)) == []
+
+
+def test_idle_sweep_removes_old_workspaces_and_stale_tmp_but_keeps_fresh(env):
+    path = cloned(env)
+    uid_root = sb.repos_root(U)
+    stale_tmp = os.path.join(uid_root, ".tmp-crash"); os.makedirs(stale_tmp)
+    old = time.time() - sb.WORKSPACE_TTL - 60
+    os.utime(stale_tmp, (old, old))
+    assert sb.cleanup_idle() == 1 and os.path.isdir(path) and not os.path.exists(stale_tmp)       # yangi ish nusxasi qoladi
+    os.utime(path, (old, old))
+    assert sb.cleanup_idle() == 1 and not os.path.exists(path)                                    # bo'sh turgani o'chdi
+    path = cloned_again(env)
+    assert sb.cleanup_idle(0) >= 1 and not os.path.exists(path)                                   # restartda hammasi tozalanadi
+
+
+def cloned_again(env):
+    r = R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})
+    assert r["ok"], r
+    return sb.repo_dir(U, "octo", "hello")
+
+
+def test_using_a_workspace_keeps_it_alive(env):
+    path = cloned(env)
+    old = time.time() - sb.WORKSPACE_TTL - 60
+    os.utime(path, (old, old))
+    assert R(env, "gh_read_file", {"repo": "hello", "path": "README.md"})["ok"]                   # ishlatish TTL'ni yangilaydi
+    assert sb.cleanup_idle() == 0 and os.path.isdir(path)
+
+
+def test_sweeper_background_task_deletes_idle_workspaces(env, monkeypatch):
+    path = cloned(env)
+    monkeypatch.setattr(sb, "WORKSPACE_TTL", 0)
+    monkeypatch.setattr(sb, "SWEEP_INTERVAL", 0.01)
+    os.utime(path, (time.time() - 5, time.time() - 5))
+
+    async def go():
+        t = asyncio.create_task(sb.sweeper())
+        await asyncio.sleep(0.3)
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    run(go())
+    assert not os.path.exists(path)
+
+
+def test_disk_caps_per_user_global_and_repo_count(env, monkeypatch):
+    connect(env)
+    monkeypatch.setattr(sb, "GLOBAL_DISK_LIMIT", 1)
+    assert "band" in R(env, "gh_clone", {"repo": "octo/hello"})["error"]
+    monkeypatch.setattr(sb, "GLOBAL_DISK_LIMIT", 600 * 1024 * 1024)
+    monkeypatch.setattr(sb, "USER_DISK_LIMIT", 1)
+    assert "kvotasi" in R(env, "gh_clone", {"repo": "octo/hello", "workspace": True})["error"]
+    monkeypatch.setattr(sb, "USER_DISK_LIMIT", 150 * 1024 * 1024)
+    assert sb.MAX_REPOS_PER_USER == 2 and sb.MAX_REPO_KB == 60_000 and sb.USER_DISK_LIMIT == 150 * 1024 * 1024
+    # ZIP-rejimi repo sonini to'ldirmaydi
+    for _ in range(3):
+        assert R(env, "gh_clone", {"repo": "octo/hello"})["ok"]
+    assert sb.list_local(U) == []
+
+
+def test_clone_command_flag_and_tool_schema(env, monkeypatch):
+    from aiogram.filters import CommandObject
+    seen = []
+
+    async def fake_run(name, uid, args, **kw):
+        seen.append((name, args)); return {"ok": True, "text": "ok"}
+    monkeypatch.setattr(ops, "run", fake_run)
+    m, out = fake_message("/gh", bot=env.bot)
+    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="clone octo/hello")))
+    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="clone octo/hello dev --work")))
+    assert seen[0][1]["workspace"] is False and seen[1][1] == {"repo": "octo/hello", "branch": "dev", "workspace": True}
+    clone = next(s for s in gtools.SCHEMAS if s["function"]["name"] == "gh_clone")["function"]
+    assert "workspace" in clone["parameters"]["properties"] and "SAQLAMAYDI" in clone["description"]
+    assert "workspace=true" in gtools.SYSTEM_HINT and "diskda saqlanmaydi" in gtools.SYSTEM_HINT
+    assert "saqlamaydi" in gh_handler.LOGIN_HELP and "--work" in gh_handler.HELP
