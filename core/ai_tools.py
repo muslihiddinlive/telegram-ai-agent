@@ -21,6 +21,7 @@ import core.moderation as moderation
 import core.userbot_tools as userbot_tools
 import core.tariffs as tariffs
 import core.instagram_tools as instagram_tools
+import core.github_tools as github_tools
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -66,6 +67,7 @@ _TOOL_STATUS_LABELS = {
 }
 
 _TOOL_STATUS_LABELS.update(instagram_tools.STATUS_LABELS)
+_TOOL_STATUS_LABELS.update(github_tools.STATUS_LABELS)
 
 _TOOL_STATUS_FORMAT_LABELS = [
     ("pptx", "PPTX"), ("docx", "Word hujjat"), ("xlsx", "Excel jadval"),
@@ -910,6 +912,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     # dispatch() DISPATCH'ni is_file_tool()'dan OLDIN tekshiradi).
     **userbot_tools.HANDLERS,  # userbot (core/userbot.py) — schema'lar faqat u ulangan bo'lsa AI'ga beriladi
     **instagram_tools.HANDLERS,
+    **github_tools.HANDLERS,   # gh_* — schema'lar faqat GitHub'ni ulagan odamga (shaxsiy chatda) beriladi; ruxsat har chaqiruvda core/github_ops.run() da
 }
 
 

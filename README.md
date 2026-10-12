@@ -565,3 +565,21 @@ eslatmalari, `/laqab` taxallusi) tegilmaydi. O'chirishdan OLDIN eski ma'lumotlar
   (zaxira faylga sozlamalar ham yoziladi). Faqat bot adminlari va guruh egasi uchun.
 
 Tozalangan navbatda AI eski kontekst bilan javob yozmaydi (tayyor matn yuboriladi) va yangi bo'sh logga hech narsa yozilmaydi.
+
+
+## 🐙 GitHub integratsiyasi (`/gh` va AI `gh_*` tool'lari)
+
+Har bir foydalanuvchi **o'z** GitHub tokenini ulaydi (`/gh login`, faqat shaxsiy chat) va botga repo'larni klon qildirish, fayllarni
+o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni oddiy suhbatda yoki `/gh` buyruqlari bilan topshiradi.
+
+- **Token**: Fernet bilan shifrlanadi (`ENCRYPTION_KEY`), AI uni ko'rmaydi; token yozilgan xabar darhol o'chiriladi va AI/xotiraga yetmaydi.
+  Guruhga token yuborilsa — o'chirishga urinadi va revoke qilishni eslatadi.
+- **Tasdiq**: push, PR, merge, issue/izoh, repo yaratish, fork, branch o'chirish va lokal xavfli amallar (`reset --hard`, `clean`, repo'ni o'chirish)
+  HAR SAFAR inline tugma bilan tasdiqlanadi (egasi, shaxsiy chat, bir martalik, 10 daqiqa). Push tasdig'i holatga (commit SHA) bog'langan:
+  tasdiqdan keyin yangi commit qo'shilsa — rad etiladi. Preview'da haqiqiy commit/fayllar, CI workflow va maxfiy kalit ogohlantirishlari ko'rsatiladi.
+- **Sandbox** (`core/github_sandbox.py`): shell yo'q, toza muhit (bot sirlari git'ga berilmaydi), hooklar/symlink/submodule o'chiq, faqat
+  `https://github.com/owner/repo` (URL'ni o'zimiz quramiz), git argumentlari ruxsat ro'yxati + xavfli flaglar taqiqi, fayl yo'llari repo ichida qulflangan,
+  timeout / chiqish hajmi / disk (400 MB) / repo soni (5) chegaralari.
+- **Kvota**: tarmoqqa chiquvchi amallar `tariffs` kvotasiga sanaladi (`github`: Bepul 10, Plus 100, Pro 500 / kun — `/panel → Tariflar`'dan tahrirlanadi).
+- **Prompt-injection**: repo/issue/commit matni natijalarda "noishonchli ma'lumot" deb belgilanadi, AI'ga ko'rsatma sifatida bajarmaslik aytiladi.
+- Deploy: `Dockerfile`da `git` o'rnatiladi. Render'da disk vaqtinchalik — klonlar qayta deploy'da o'chadi (kerak bo'lsa qayta klon qilinadi).

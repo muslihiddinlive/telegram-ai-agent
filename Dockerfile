@@ -6,6 +6,7 @@ FROM python:3.11-slim
 # ishlamas edi (test qilib aniqlandi) — shuning uchun barcha uchtasi kerak.
 # tesseract-ocr — ms-file-toolkit'ning read_image_text (OCR) funksiyasi uchun.
 # ffmpeg — Story uchun videoni H.265/720x1280 formatiga o'tkazish (core/stories.py).
+# git — GitHub integratsiyasi (core/github_sandbox.py: /gh va AI gh_* tool'lari).
 # Katta (~700MB+), lekin bu funksiyalar uchun shart. Kerak bo'lmasa olib tashlang.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
@@ -13,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-impress \
     tesseract-ocr \
     ffmpeg \
+    git \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 

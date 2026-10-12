@@ -216,7 +216,7 @@ async def set_limit_start(call: CallbackQuery):
 
 def _usage_text(uid: int) -> str:
     parts = []
-    for kind, label in ((tariffs.KIND_FILES, "Fayl"), (tariffs.KIND_VISION, "Rasm")):
+    for kind, label in ((tariffs.KIND_FILES, "Fayl"), (tariffs.KIND_VISION, "Rasm"), (tariffs.KIND_GITHUB, "GitHub")):
         limit = tariffs.quota_limit(uid, kind)
         parts.append(f"{label}: {tariffs.quota_used(uid, kind)}/{'∞' if limit is None else limit}")
     return "Bugun — " + ", ".join(parts)
