@@ -23,7 +23,7 @@ _CMD_RE = re.compile(r"^/([A-Za-z0-9_]{1,32})(?:@(\w+))?(?=\s|$|:)")
 PRIVATE_ONLY = {"profil", "start", "instagram", "gh"}
 GROUP_ONLY = {"guruh_ruxsat", "guruh_ruxsat_ochirish", "chatmode", "qoida_qoshish", "qoidalar", "qoida_ochir", "taqiq_qoshish",
               "taqiq_ochir", "taqiqlar", "statistika", "top_faollar", "aireakmode", "antispam"}
-EVERYWHERE = {"yangi_mavzu", "mavzular", "apikalit", "laqab"}
+EVERYWHERE = {"yangi_mavzu", "mavzular", "apikalit", "laqab", "site"}
 STAFF_ONLY = {"panel"}
 SUPERADMIN_ONLY = {"vipchatmode"}
 KNOWN = PRIVATE_ONLY | GROUP_ONLY | EVERYWHERE | STAFF_ONLY | SUPERADMIN_ONLY | {"vipchatmode"}

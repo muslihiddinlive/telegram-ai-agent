@@ -174,6 +174,7 @@ def _reset_if_new_day(rec: dict):
         rec["files_today"] = 0   # tarif kvotalari (core/tariffs.py): fayl yaratish / rasm o'qish — kunlik
         rec["vision_today"] = 0
         rec["github_today"] = 0   # GitHub amallari kvotasi (core/github_ops.py)
+        rec["site_today"] = 0     # sayt o'qish/ko'chirish kvotasi (core/site_ops.py)
         rec["last_reset"] = today_str()
 
 

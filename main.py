@@ -31,6 +31,7 @@ from handlers.api_integration import router as api_integration_router
 from handlers.instagram import router as instagram_router
 from handlers.group_mod import router as group_mod_router
 from handlers.github import router as github_router
+from handlers.site import router as site_router
 from handlers.profile import router as profile_router
 from handlers.story_tools import router as story_tools_router
 from handlers.pending_text import router as pending_text_router
@@ -55,6 +56,7 @@ dp.message.outer_middleware(GroupObserver())  # guruhdagi HAR BIR xabarni kuzata
 
 dp.include_router(support_router)  # BIRINCHI: murojaat sessiyasi paytidagi xabarlar/komandalar boshqa handler'larga (start, panel, AI...) ketmasin
 dp.include_router(group_mod_router)  # .ban/.mute/... — botga tag shart EMAS, shuning uchun ai_chat'dan (va boshqalardan) oldin
+dp.include_router(site_router)  # /site — sayt frontend'ini o'qish/ko'chirish
 dp.include_router(github_router)  # /gh + token ushlagich: token yozilgan xabar AI/xotira/boshqa handler'larga HECH QACHON yetmasin
 dp.include_router(panel_router)
 dp.include_router(start_router)

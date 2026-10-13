@@ -587,3 +587,18 @@ o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni od
 - **Prompt-injection**: repo/issue/commit matni natijalarda "noishonchli ma'lumot" deb belgilanadi, AI'ga ko'rsatma sifatida bajarmaslik aytiladi.
 - **Disk to'lmaydi**: `clone` = klon → ZIP foydalanuvchiga (+superadminga) → klon diskdan darhol o'chadi (ZIP hech qachon diskka yozilmaydi, xotirada yasaladi). AI fayllarni o'qishi/tahrirlashi kerak bo'lsa (`gh_clone workspace=true` yoki `/gh clone repo --work`) vaqtincha ish nusxasi qoladi va `GITHUB_WORKSPACE_TTL_MIN` (standart 20) daqiqa tegilmasa fon vazifasi (`sweeper`) uni o'chiradi; bot qayta ishga tushganda hammasi tozalanadi.
 - Deploy: `Dockerfile`da `git` o'rnatiladi.
+
+
+## 🌐 Sayt frontend'ini o'qish va ko'chirish (`/site` va AI `site_*` tool'lari)
+
+Foydalanuvchi sayt havolasini beradi — bot sahifa tuzilishini **o'qiydi** yoki frontend'ini (HTML + CSS + JS + rasm + shrift) **ko'chirib** fayl qilib yuboradi.
+
+- `/site <havola>` — sarlavha, meta, sarlavhalar, matn namunasi, havolalar, formalar (faqat maydon NOMLARI), CSS/JS/rasm ro'yxati, texnologiyalar (React, Next.js, Vue, Tailwind, WordPress ...), SPA ekanligi.
+- `/site <havola> html` — hammasi ichiga joylangan **bitta .html** (CSS/JS inline, rasm/shrift base64; offline ochiladi).
+- `/site <havola> zip` — `index.html` + `assets/css|js|img|fonts` + source map'lar + `MANIFEST.txt` (o'qish va tahrirlash uchun).
+- `/site cat <fayl_havolasi> [start]` — bitta CSS/JS fayl matni (sahifalab). AI uchun: `site_read`, `site_resource`, `site_download`.
+- Natija **xotirada** yasaladi va Telegram'ga hujjat sifatida yuboriladi — diskka yozilmaydi. Kvota: tarif `site` maydoni (Bepul 3, Plus 25, Pro 100 / kun; `/panel → Tariflar`).
+- **SSRF himoyasi** (`core/site_fetch.py`): faqat http/https va 80/443/8080/8443; barcha DNS javoblari ommaviy IP bo'lishi shart (private/loopback/link-local/CGNAT/metadata/IPv6-mapped rad); tekshirilgan IP'ga ulanish
+  (DNS-rebinding yo'q; TLS SNI/sertifikat asl host bo'yicha); har redirect qadami qayta tekshiriladi; muhit proksilari e'tiborsiz; hajm/vaqt/fayl soni chegaralari (150 fayl, 40 MB, 90 s).
+- JS **bajarilmaydi**: React/Vue/Next saytlarda server qaytargan qobiq va bundle tushadi (asl manba emas — source map bo'lsa zip'da). Sayt matni AI uchun «noishonchli ma'lumot».
+- Faqat o'zingizga tegishli yoki nusxalashga ruxsat berilgan saytlar uchun; boshqa brendni taqlid qiluvchi (phishing) nusxa yasash taqiqlanadi.

@@ -42,7 +42,8 @@ CHARGES_KEPT = 30
 KIND_FILES = "files"
 KIND_VISION = "vision"
 KIND_GITHUB = "github"     # GitHub amallari (tarmoqqa chiqadiganlari): core/github_ops.py
-KINDS = (KIND_FILES, KIND_VISION, KIND_GITHUB)
+KIND_SITE = "site"         # sayt frontend'ini o'qish/ko'chirish: core/site_ops.py
+KINDS = (KIND_FILES, KIND_VISION, KIND_GITHUB, KIND_SITE)
 FILES_OWN_TOOLS = frozenset({"create_presentation", "create_diagram"})
 VISION_TOOLS = frozenset({"look_at_image"})
 # Fayl chiqarmaydigan (faqat o'qiydigan/qidiradigan) tool'lar prefikslari — kvota tugaganda ham ishlayveradi
@@ -57,8 +58,9 @@ FIELDS = {
     "files": (0, 100000, False),
     "vision": (0, 100000, False),
     "github": (0, 100000, False),
+    "site": (0, 100000, False),
 }
-FIELD_LABELS = {"stars": "Narx (⭐)", "daily_limit": "So'rov/kun", "files": "Fayl/kun", "vision": "Rasm o'qish/kun", "github": "GitHub amal/kun"}
+FIELD_LABELS = {"stars": "Narx (⭐)", "daily_limit": "So'rov/kun", "files": "Fayl/kun", "vision": "Rasm o'qish/kun", "github": "GitHub amal/kun", "site": "Sayt o'qish/ko'chirish/kun"}
 
 
 @dataclass(frozen=True)
@@ -72,15 +74,16 @@ class Tier:
     vision: int
     caption: bool
     github: int = 0
+    site: int = 0
 
 
 def _defaults() -> dict[str, dict]:
     return {
-        "free": {"name": "Bepul", "rank": 0, "stars": 0, "daily_limit": None, "files": 4, "vision": 2, "caption": False, "github": 10},
+        "free": {"name": "Bepul", "rank": 0, "stars": 0, "daily_limit": None, "files": 4, "vision": 2, "caption": False, "github": 10, "site": 3},
         "plus": {"name": "Plus ⭐", "rank": 1, "stars": config.TARIFF_PLUS_STARS, "daily_limit": config.TARIFF_PLUS_LIMIT,
-                 "files": 20, "vision": 10, "caption": True, "github": 100},
+                 "files": 20, "vision": 10, "caption": True, "github": 100, "site": 25},
         "pro": {"name": "Pro 💎", "rank": 2, "stars": config.TARIFF_PRO_STARS, "daily_limit": config.TARIFF_PRO_LIMIT,
-                "files": 100, "vision": 70, "caption": True, "github": 500},
+                "files": 100, "vision": 70, "caption": True, "github": 500, "site": 100},
     }
 
 
@@ -95,7 +98,7 @@ def tiers() -> dict[str, Tier]:
     for tid, base in _defaults().items():
         vals = {**base, **{k: v for k, v in over.get(tid, {}).items() if k in FIELDS and isinstance(v, int)}}
         out[tid] = Tier(tid, vals["name"], vals["rank"], vals["stars"], vals["daily_limit"], vals["files"],
-                        vals["vision"], vals["caption"], vals.get("github", 0))
+                        vals["vision"], vals["caption"], vals.get("github", 0), vals.get("site", 0))
     return out
 
 
@@ -236,7 +239,7 @@ def quota_available(user_id: int, kind: str) -> bool:
 
 
 def quota_denied_text(user_id: int, kind: str) -> str:
-    what = {KIND_FILES: "fayl yaratish", KIND_GITHUB: "GitHub amallari"}.get(kind, "rasm o'qish")
+    what = {KIND_FILES: "fayl yaratish", KIND_GITHUB: "GitHub amallari", KIND_SITE: "sayt o'qish/ko'chirish"}.get(kind, "rasm o'qish")
     limit = quota_limit(user_id, kind)
     return (f"Bugungi {what} limiti tugadi ({limit}/{limit}). Limit ertaga yangilanadi; ko'proq kerak bo'lsa Plus/Pro tarifini olish "
             f"mumkin — javobingiz tagiga «💳 Tariflar» tugmasi avtomatik qo'shiladi. Foydalanuvchiga shuni muloyim ayting "
