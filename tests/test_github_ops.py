@@ -114,7 +114,7 @@ def test_connect_encrypts_token_and_rejects_bad_format(env):
 
 def test_not_connected_and_group_are_refused(env):
     r = R(env, "gh_status", {})
-    assert "/gh login" in r["error"]
+    assert "token" in r["error"].lower() and "/gh" not in r["error"]
     connect(env)
     assert "shaxsiy chat" in R(env, "gh_status", {}, private=False)["error"]
     assert "Noma'lum" in R(env, "gh_nope", {})["error"]
@@ -366,25 +366,6 @@ def test_group_token_is_deleted_with_warning(env):
     assert out["deleted"] and "revoke" in out["answers"][0] and TOKEN not in out["answers"][0] and not ops.is_connected(U)
 
 
-def test_gh_command_private_only_and_parsing(env):
-    from aiogram.filters import CommandObject
-    m, out = fake_message("/gh help", chat_type="supergroup", bot=env.bot)
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="repos")))
-    assert "shaxsiy chat" in out["answers"][0]
-    m, out = fake_message("/gh", bot=env.bot)
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args='clone "unterminated')))
-    assert "Qo'shtirnoq" in out["answers"][0]
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="")))
-    assert "GitHub" in out["answers"][-1]
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="nope")))
-    assert "Noma'lum" in out["answers"][-1]
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="clone")))
-    assert "Format" in out["answers"][-1]
-    assert gh_handler._flag(["a", "--base", "x", "b"], "--base", True) == ("x", ["a", "b"])
-    with pytest.raises(sb.GitHubError):
-        gh_handler._flag(["a", "--base"], "--base", True)
-
-
 def fake_call(data, uid=U, chat_type="private"):
     st = {"alerts": [], "edits": []}
 
@@ -543,7 +524,6 @@ def test_destructive_git_triggers_backup_before_confirmation_flow_and_login_disc
     env.bot.docs.clear()
     R(env, "gh_git", {"repo": "hello", "args": ["stash", "list"]})
     assert len(env.bot.docs) == 2
-    assert "bot egasiga" in gh_handler.LOGIN_HELP
     m, out = fake_message(TOKEN, bot=env.bot)
     run(gh_handler.private_token(m))
     assert "bot egasiga" in " ".join(out["answers"])
@@ -647,23 +627,6 @@ def test_disk_caps_per_user_global_and_repo_count(env, monkeypatch):
     for _ in range(3):
         assert R(env, "gh_clone", {"repo": "octo/hello"})["ok"]
     assert sb.list_local(U) == []
-
-
-def test_clone_command_flag_and_tool_schema(env, monkeypatch):
-    from aiogram.filters import CommandObject
-    seen = []
-
-    async def fake_run(name, uid, args, **kw):
-        seen.append((name, args)); return {"ok": True, "text": "ok"}
-    monkeypatch.setattr(ops, "run", fake_run)
-    m, out = fake_message("/gh", bot=env.bot)
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="clone octo/hello")))
-    run(gh_handler.gh_cmd(m, CommandObject(command="gh", args="clone octo/hello dev --work")))
-    assert seen[0][1]["workspace"] is False and seen[1][1] == {"repo": "octo/hello", "branch": "dev", "workspace": True}
-    clone = next(s for s in gtools.SCHEMAS if s["function"]["name"] == "gh_clone")["function"]
-    assert "workspace" in clone["parameters"]["properties"] and "SAQLAMAYDI" in clone["description"]
-    assert "workspace=true" in gtools.SYSTEM_HINT and "diskda saqlanmaydi" in gtools.SYSTEM_HINT
-    assert "saqlamaydi" in gh_handler.LOGIN_HELP and "--work" in gh_handler.HELP
 
 
 # ── ommaviy klon (profil repolari) + ochiq ma'lumot (profil/repo/qidiruv) ─────────────────────────
@@ -871,18 +834,35 @@ def test_get_readme_decodes_redacts_and_handles_missing(monkeypatch):
         run(api.get_readme(TOKEN, "o", "r"))
 
 
-def test_new_commands_parse(env, monkeypatch):
-    from aiogram.filters import CommandObject
-    seen = []
-    async def fake_run(name, uid, args, **kw):
-        seen.append((name, args)); return {"ok": True, "text": "ok"}
-    monkeypatch.setattr(ops, "run", fake_run)
-    m, out = fake_message("/gh", bot=env.bot)
-    for a in ("profile", "profile octocat", "info octo/hello", "search repos language:go bot", "repos 2 octocat", "cloneall", "cloneall octocat --max 5 --forks", "cloneall --all"):
-        run(gh_handler.gh_cmd(m, CommandObject(command="gh", args=a)))
-    got = dict(seen[:1])
-    assert seen[0] == ("gh_profile", {"username": None}) and seen[1] == ("gh_profile", {"username": "octocat"})
-    assert seen[2] == ("gh_repo_info", {"repo": "octo/hello"}) and seen[3] == ("gh_search", {"kind": "repos", "query": "language:go bot"})
-    assert seen[4] == ("gh_list_repos", {"page": "2", "username": "octocat"})
-    assert seen[5][1] == {"owner": None, "visibility": "public", "include_forks": False, "max": 20}
-    assert seen[6][1] == {"owner": "octocat", "visibility": "public", "include_forks": True, "max": "5"} and seen[7][1]["visibility"] == "all"
+
+
+# ── buyruqsiz: GitHub'dan chiqish ham AI orqali (tasdiq tugmasi bilan) ───────────────────────────
+def test_disconnect_needs_confirmation_then_wipes_token_and_workspaces(env):
+    path = cloned(env)
+    r = R(env, "gh_disconnect", {})
+    assert r["pending_confirmation"] and "octo" in env.bot.sent[-1]["text"] and "1 ta" in env.bot.sent[-1]["text"]
+    assert ops.is_connected(U) and os.path.isdir(path)                       # tasdiqsiz hech narsa o'chmaydi
+    pid = next(iter(ops._PENDING))
+    c, st = fake_call(f"gh:ok:{pid}")
+    run(gh_handler.confirm_cb(c, env.bot))
+    assert not ops.is_connected(U) and not os.path.exists(path) and any("uzildi" in e for e in st["edits"])
+    assert "token" in R(env, "gh_status", {})["error"].lower() and "github_token" not in tgdb.get()["ai_sessions"].get(str(U), {})
+
+
+def test_disconnect_can_be_cancelled_and_is_private_only(env):
+    cloned(env)
+    assert "shaxsiy chat" in R(env, "gh_disconnect", {}, private=False)["error"]
+    R(env, "gh_disconnect", {})
+    pid = next(iter(ops._PENDING))
+    c, st = fake_call(f"gh:no:{pid}")
+    run(gh_handler.confirm_cb(c, env.bot))
+    assert ops.is_connected(U) and sb.list_local(U) == [("octo", "hello")] and "Bekor" in st["edits"][0]
+    assert "gh_disconnect" in ops.CONFIRM_TOOLS and "gh_disconnect" not in ops.COUNTED_TOOLS          # kvotasiz, lekin tasdiqli
+
+
+def test_connect_reply_explains_chat_usage_without_any_commands(env):
+    m, out = fake_message(TOKEN, bot=env.bot)
+    run(gh_handler.private_token(m))
+    reply = " ".join(out["answers"])
+    assert "oddiy yozing" in reply and "GitHub'dan chiq" in reply and "klon qil" in reply and "bot egasiga" in reply
+    assert "/gh" not in reply and TOKEN not in reply

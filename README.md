@@ -567,10 +567,10 @@ eslatmalari, `/laqab` taxallusi) tegilmaydi. O'chirishdan OLDIN eski ma'lumotlar
 Tozalangan navbatda AI eski kontekst bilan javob yozmaydi (tayyor matn yuboriladi) va yangi bo'sh logga hech narsa yozilmaydi.
 
 
-## 🐙 GitHub integratsiyasi (`/gh` va AI `gh_*` tool'lari)
+## 🐙 GitHub integratsiyasi (faqat suhbat orqali — AI `gh_*` tool'lari, buyruq yo'q)
 
-Har bir foydalanuvchi **o'z** GitHub tokenini ulaydi (`/gh login`, faqat shaxsiy chat) va botga repo'larni klon qildirish, fayllarni
-o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni oddiy suhbatda yoki `/gh` buyruqlari bilan topshiradi.
+Har bir foydalanuvchi **o'z** GitHub tokenini shaxsiy chatga yuborib ulaydi (xabar darhol o'chadi, token shifrlanadi) va botga repo'larni klon qildirish, fayllarni
+o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni oddiy gap bilan topshiradi («repolarimni ko'rsat», «X ni klon qil», «README'dagi xatoni tuzat va push qil», «GitHub'dan chiq»). **Slash-buyruqlar yo'q**; yozuvchi amallar uchun inline tasdiq tugmasi chiqadi.
 
 - **Token**: Fernet bilan shifrlanadi (`ENCRYPTION_KEY`), AI uni ko'rmaydi; token yozilgan xabar darhol o'chiriladi va AI/xotiraga yetmaydi.
   Guruhga token yuborilsa — o'chirishga urinadi va revoke qilishni eslatadi.
@@ -580,25 +580,37 @@ o'qish/tahrirlash, commit, push, PR, issue, CI holatini ko'rish kabi ishlarni od
 - **Sandbox** (`core/github_sandbox.py`): shell yo'q, toza muhit (bot sirlari git'ga berilmaydi), hooklar/symlink/submodule o'chiq, faqat
   `https://github.com/owner/repo` (URL'ni o'zimiz quramiz), git argumentlari ruxsat ro'yxati + xavfli flaglar taqiqi, fayl yo'llari repo ichida qulflangan,
   timeout / chiqish hajmi chegaralari; disk: foydalanuvchiga 150 MB, jami 600 MB, 2 ta ish nusxasi, repo ≤ 60 MB.
-- **Zaxira (tiklash uchun)**: repo klon qilinganda («clon qilinmoqda…» → «zaxira yuborilmoqda…») va AI uni o'zgartirishdan oldin (fayl yozish/tahrir/o'chirish, pull, merge/reset/... ) repo'ning ZIP nusxasi foydalanuvchiga va bot egasiga (`GITHUB_BACKUP_TO_ADMIN=1`, standart) yuboriladi; foydalanuvchiga bu `/gh login` paytida va har zaxirada OCHIQ aytiladi. Zaxira foydalanuvchiga yetmasa — o'zgartirish bajarilmaydi. ZIP'da `.git`, symlink va token yo'q; ichida repo'dagi maxfiy fayllar bo'lishi mumkin.
-- **Ommaviy klon** (`gh_clone_all`, `/gh cloneall [username] [--private|--all] [--forks] [--max N]`): profildagi hamma repo (standart: public, forksiz, arxivsiz, ≤20; ≤30) bitta tasdiqdan keyin ketma-ket klon qilinadi va ≤40 MB li ZIP qismlarida (ichida har repo alohida ZIP + INDEX.txt) foydalanuvchiga va superadminga yuboriladi; bir vaqtda faqat bitta vaqtinchalik klon (diskda saqlanmaydi), jarayon bitta xabarda yangilanadi, har repo kvotadan 1 amal oladi, umumiy vaqt ≤15 daqiqa. Boshqa odamning faqat PUBLIC repolari olinadi; private — faqat o'z akkauntingniki.
-- **Ochiq ma'lumot** (`gh_profile`, `gh_repo_info`, `gh_search`, `gh_list_repos username=…`; `/gh profile|info|search|repos`): rasmiy REST API orqali (HTML scraping emas), faqat public maydonlar: bio, kompaniya, joy, kuzatuvchilar, tashkilotlar, repolar tahlili (tillar, ⭐, mavzular, faol repolar), oxirgi faollik, profil README. Commit mualliflari emaillari yig'ilmaydi. Natijalar «noishonchli matn» deb belgilanadi (bio/README ichidagi ko'rsatmalarga bo'ysunilmaydi).
+- **Zaxira (tiklash uchun)**: repo klon qilinganda («clon qilinmoqda…» → «zaxira yuborilmoqda…») va AI uni o'zgartirishdan oldin (fayl yozish/tahrir/o'chirish, pull, merge/reset/... ) repo'ning ZIP nusxasi foydalanuvchiga va bot egasiga (`GITHUB_BACKUP_TO_ADMIN=1`, standart) yuboriladi; foydalanuvchiga bu token ulanganda va har zaxirada OCHIQ aytiladi. Zaxira foydalanuvchiga yetmasa — o'zgartirish bajarilmaydi. ZIP'da `.git`, symlink va token yo'q; ichida repo'dagi maxfiy fayllar bo'lishi mumkin.
+- **Ommaviy klon** (`gh_clone_all`; «profildagi hamma repolarni klon qil»): profildagi hamma repo (standart: public, forksiz, arxivsiz, ≤20; ≤30) bitta tasdiqdan keyin ketma-ket klon qilinadi va ≤40 MB li ZIP qismlarida (ichida har repo alohida ZIP + INDEX.txt) foydalanuvchiga va superadminga yuboriladi; bir vaqtda faqat bitta vaqtinchalik klon (diskda saqlanmaydi), jarayon bitta xabarda yangilanadi, har repo kvotadan 1 amal oladi, umumiy vaqt ≤15 daqiqa. Boshqa odamning faqat PUBLIC repolari olinadi; private — faqat o'z akkauntingniki.
+- **Ochiq ma'lumot** (`gh_profile`, `gh_repo_info`, `gh_search`, `gh_list_repos username=…`): rasmiy REST API orqali (HTML scraping emas), faqat public maydonlar: bio, kompaniya, joy, kuzatuvchilar, tashkilotlar, repolar tahlili (tillar, ⭐, mavzular, faol repolar), oxirgi faollik, profil README. Commit mualliflari emaillari yig'ilmaydi. Natijalar «noishonchli matn» deb belgilanadi (bio/README ichidagi ko'rsatmalarga bo'ysunilmaydi).
 - **Kvota**: tarmoqqa chiquvchi amallar `tariffs` kvotasiga sanaladi (`github`: Bepul 10, Plus 100, Pro 500 / kun — `/panel → Tariflar`'dan tahrirlanadi).
 - **Prompt-injection**: repo/issue/commit matni natijalarda "noishonchli ma'lumot" deb belgilanadi, AI'ga ko'rsatma sifatida bajarmaslik aytiladi.
-- **Disk to'lmaydi**: `clone` = klon → ZIP foydalanuvchiga (+superadminga) → klon diskdan darhol o'chadi (ZIP hech qachon diskka yozilmaydi, xotirada yasaladi). AI fayllarni o'qishi/tahrirlashi kerak bo'lsa (`gh_clone workspace=true` yoki `/gh clone repo --work`) vaqtincha ish nusxasi qoladi va `GITHUB_WORKSPACE_TTL_MIN` (standart 20) daqiqa tegilmasa fon vazifasi (`sweeper`) uni o'chiradi; bot qayta ishga tushganda hammasi tozalanadi.
+- **Disk to'lmaydi**: `clone` = klon → ZIP foydalanuvchiga (+superadminga) → klon diskdan darhol o'chadi (ZIP hech qachon diskka yozilmaydi, xotirada yasaladi). AI fayllarni o'qishi/tahrirlashi kerak bo'lsa (`gh_clone workspace=true`) vaqtincha ish nusxasi qoladi va `GITHUB_WORKSPACE_TTL_MIN` (standart 20) daqiqa tegilmasa fon vazifasi (`sweeper`) uni o'chiradi; bot qayta ishga tushganda hammasi tozalanadi.
 - Deploy: `Dockerfile`da `git` o'rnatiladi.
 
 
-## 🌐 Sayt frontend'ini o'qish va ko'chirish (`/site` va AI `site_*` tool'lari)
+## 🌐 Sayt frontend'ini o'qish va ko'chirish (faqat suhbat orqali — AI `site_*` tool'lari, buyruq yo'q)
 
 Foydalanuvchi sayt havolasini beradi — bot sahifa tuzilishini **o'qiydi** yoki frontend'ini (HTML + CSS + JS + rasm + shrift) **ko'chirib** fayl qilib yuboradi.
 
-- `/site <havola>` — sarlavha, meta, sarlavhalar, matn namunasi, havolalar, formalar (faqat maydon NOMLARI), CSS/JS/rasm ro'yxati, texnologiyalar (React, Next.js, Vue, Tailwind, WordPress ...), SPA ekanligi.
-- `/site <havola> html` — hammasi ichiga joylangan **bitta .html** (CSS/JS inline, rasm/shrift base64; offline ochiladi).
-- `/site <havola> zip` — `index.html` + `assets/css|js|img|fonts` + source map'lar + `MANIFEST.txt` (o'qish va tahrirlash uchun).
-- `/site cat <fayl_havolasi> [start]` — bitta CSS/JS fayl matni (sahifalab). AI uchun: `site_read`, `site_resource`, `site_download`.
+- «<havola> saytini o'qib ber» (`site_read`) — sarlavha, meta, sarlavhalar, matn namunasi, havolalar, formalar (faqat maydon NOMLARI), CSS/JS/rasm ro'yxati, texnologiyalar (React, Next.js, Vue, Tailwind, WordPress ...), SPA ekanligi.
+- «frontend'ini bitta HTML qilib ber» (`site_download`, `single`) — hammasi ichiga joylangan **bitta .html** (CSS/JS inline, rasm/shrift base64; offline ochiladi).
+- «ZIP qilib ber» (`site_download`, `zip`) — `index.html` + `assets/css|js|img|fonts` + source map'lar + `MANIFEST.txt` (o'qish va tahrirlash uchun).
+- «shu CSS/JS faylni o'qib ber» (`site_resource`) — bitta fayl matni (sahifalab).
 - Natija **xotirada** yasaladi va Telegram'ga hujjat sifatida yuboriladi — diskka yozilmaydi. Kvota: tarif `site` maydoni (Bepul 3, Plus 25, Pro 100 / kun; `/panel → Tariflar`).
 - **SSRF himoyasi** (`core/site_fetch.py`): faqat http/https va 80/443/8080/8443; barcha DNS javoblari ommaviy IP bo'lishi shart (private/loopback/link-local/CGNAT/metadata/IPv6-mapped rad); tekshirilgan IP'ga ulanish
   (DNS-rebinding yo'q; TLS SNI/sertifikat asl host bo'yicha); har redirect qadami qayta tekshiriladi; muhit proksilari e'tiborsiz; hajm/vaqt/fayl soni chegaralari (150 fayl, 40 MB, 90 s).
 - JS **bajarilmaydi**: React/Vue/Next saytlarda server qaytargan qobiq va bundle tushadi (asl manba emas — source map bo'lsa zip'da). Sayt matni AI uchun «noishonchli ma'lumot».
 - Faqat o'zingizga tegishli yoki nusxalashga ruxsat berilgan saytlar uchun; boshqa brendni taqlid qiluvchi (phishing) nusxa yasash taqiqlanadi.
+
+
+## 🧠 AI o'zi haqida hamma narsani biladi (`core/capabilities.py`)
+
+Avval imkoniyatlar ro'yxati qo'lda yozilgan va eskirgan edi (GitHub, sayt, Instagram, moderatsiya ... yo'q edi). Endi **yagona manba**:
+
+- **`STATIC_BLOCK`** — har suhbat tizim promptiga qo'shiladigan ixcham to'liq ro'yxat (fayllar, prezentatsiya, rasm ko'rish, internet, sayt, GitHub, xotira,
+  profil/guruh, userbot, moderatsiya, Instagram, tariflar); `core/ai_persona.py` shuni ishlatadi (superadmin shaxsiyatni o'zgartirsa ham qo'shiladi).
+- **`state_line()`** — shu foydalanuvchining HAQIQIY holati: tarif, bugungi kvotalar (ishlatilgan/limit), GitHub ulanganmi, guruhmi yoki shaxsiy chatmi.
+- **`bot_capabilities` tool'i** — mavzu bo'yicha batafsil yo'riqnoma (qanday so'raladi, qoidalar, chegaralar, tasdiq tugmalari): github, sayt, fayllar, taqdimot,
+  internet, xotira, guruh, moderatsiya, instagram, tarif. AI «nima qila olasan?» savolida taxmin qilmay shuni chaqiradi.
+- **Eskirmaydi:** `tests/test_capabilities.py` HAR BIR ro'yxatdan o'tgan tool shu yerdagi guruhga tushishini tekshiradi — yangi tool qo'shilib, yo'riqnomaga yozilmasa test yiqiladi.

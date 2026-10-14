@@ -206,7 +206,7 @@ def resolve_local(uid: int, spec: str) -> tuple[str, str, str]:
             return o, r, repo_dir(uid, o, r)
         if len(hits) > 1:
             raise GitHubError("Bu nomli bir nechta repo bor, to'liq yozing: " + ", ".join(f"{o}/{r}" for o, r in hits))
-        raise GitHubError(f"'{s}' klon qilinmagan. Avval klon qiling yoki /gh ls ni ko'ring.")
+        raise GitHubError(f"'{s}' klon qilinmagan. Avval workspace bilan klon qiling (yoki ish nusxalari ro'yxatini so'rang).")
     owner, repo = parse_repo(s)
     path = repo_dir(uid, owner, repo)
     if not os.path.isdir(os.path.join(path, ".git")):
@@ -235,9 +235,9 @@ def touch(path: str) -> None:
 
 def ensure_capacity(uid: int, extra_bytes: int = 0, new_repo: bool = False) -> None:
     if new_repo and len(list_local(uid)) >= MAX_REPOS_PER_USER:
-        raise GitHubError(f"Bir vaqtda {MAX_REPOS_PER_USER} tagacha repo saqlanadi. Keraksizini o'chiring (/gh rm <repo>).")
+        raise GitHubError(f"Bir vaqtda {MAX_REPOS_PER_USER} tagacha repo saqlanadi. Keraksizini o'chirishni so'rang (gh_remove_local).")
     if dir_size(user_root(uid)) + extra_bytes > USER_DISK_LIMIT:
-        raise GitHubError(f"Disk kvotasi ({USER_DISK_LIMIT // 1024 // 1024} MB) to'ldi. Keraksiz ish nusxalarini o'chiring (/gh rm <repo>) yoki biroz kuting.")
+        raise GitHubError(f"Disk kvotasi ({USER_DISK_LIMIT // 1024 // 1024} MB) to'ldi. Keraksiz ish nusxalarini o'chiring (gh_remove_local) yoki biroz kuting.")
     if extra_bytes and dir_size(ROOT) + extra_bytes > GLOBAL_DISK_LIMIT:
         raise GitHubError("Server diski hozir band (boshqa foydalanuvchilar klon qilmoqda). Birozdan keyin qayta urinib ko'ring.")
 

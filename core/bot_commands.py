@@ -31,8 +31,6 @@ _BASE_COMMANDS = [
     BotCommand(command="apikalit", description="🔑 O'z AI API kalitimni ulash"),
     BotCommand(command="profil", description="👤 Profil boshqaruvi (story qo'yish)"),
     BotCommand(command="laqab", description="🏷 Guruhda ishlatiladigan taxallusingiz"),
-    BotCommand(command="gh", description="🐙 GitHub: clone, commit, push, PR (shaxsiy chat)"),
-    BotCommand(command="site", description="🌐 Sayt frontend'ini o'qish/ko'chirish"),
 ]
 _IG_COMMAND = BotCommand(command="instagram", description="📸 Instagram akkauntimni ulash")
 

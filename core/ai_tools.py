@@ -23,6 +23,7 @@ import core.tariffs as tariffs
 import core.instagram_tools as instagram_tools
 import core.github_tools as github_tools
 import core.site_tools as site_tools
+import core.capabilities as capabilities
 import config
 
 logger = logging.getLogger("ai_tools")
@@ -70,6 +71,7 @@ _TOOL_STATUS_LABELS = {
 _TOOL_STATUS_LABELS.update(instagram_tools.STATUS_LABELS)
 _TOOL_STATUS_LABELS.update(github_tools.STATUS_LABELS)
 _TOOL_STATUS_LABELS.update(site_tools.STATUS_LABELS)
+_TOOL_STATUS_LABELS.update(capabilities.STATUS_LABELS)
 
 _TOOL_STATUS_FORMAT_LABELS = [
     ("pptx", "PPTX"), ("docx", "Word hujjat"), ("xlsx", "Excel jadval"),
@@ -915,6 +917,7 @@ DISPATCH: dict[str, Callable[[int, dict, dict], Awaitable[dict]]] = {
     **userbot_tools.HANDLERS,  # userbot (core/userbot.py) — schema'lar faqat u ulangan bo'lsa AI'ga beriladi
     **instagram_tools.HANDLERS,
     **github_tools.HANDLERS,
+    **capabilities.HANDLERS,   # bot_capabilities — AI'ning o'zi haqida batafsil bilimi
     **site_tools.HANDLERS,     # site_read/site_resource/site_download — SSRF-xavfsiz (core/site_fetch.py), kvota core/site_ops.py da   # gh_* — schema'lar faqat GitHub'ni ulagan odamga (shaxsiy chatda) beriladi; ruxsat har chaqiruvda core/github_ops.run() da
 }
 

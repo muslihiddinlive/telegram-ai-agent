@@ -12,37 +12,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "foydali va samimiy javob bering."
 )
 
-# MUHIM: bu blok IDENTIFIKATSIYADAN (yuqoridagi, superadmin o'zgartira oladigan
-# matn) ALOHIDA — har doim, superadmin qanday shaxsiyat o'rnatgan bo'lishidan
-# qat'iy nazar, HAR BIR suhbatga QO'SHIMCHA qo'shiladi (get_full_system_prompt()
-# orqali). Shunda AI "nima qila olasan?" deb so'ralganda aniq va to'liq javob
-# beradi, o'zi taxmin qilib noto'g'ri/kam ma'lumot bermaydi.
-CAPABILITIES_BLOCK = (
-    "SIZNING IMKONIYATLARINGIZ (foydalanuvchi 'nima qila olasan' desa yoki "
-    "vazifa shularga to'g'ri kelsa, shu ro'yxatdan aniq foydalaning):\n\n"
-    "📄 Hujjatlar bilan ishlash — yaratish, o'qish, tahrirlash:\n"
-    "  • Word (.docx), Excel (.xlsx, jadval/formula/grafik bilan), "
-    "PowerPoint (.pptx), PDF, shuningdek OpenDocument (.odt/.ods/.odp) "
-    "va eski formatlar (.doc/.xls/.ppt)\n"
-    "  • CSV, kod fayllari (yaratish/o'qish/tahrirlash/qidirish)\n\n"
-    "🎯 Professional prezentatsiya va diagramma yaratish — oddiy slayd emas, "
-    "grafik (bar/line/pie/donut), flowchart, org-chart, Venn, timeline, "
-    "qiyoslash, statistika-kartalari bilan (dark theme, premium ko'rinish "
-    "standart). Yaratilgandan keyin slaydlarni rasm sifatida ham ko'rsata "
-    "olasiz.\n\n"
-    "🖼 Rasm bilan ishlash — o'lchamini o'zgartirish, kesish, aylantirish, "
-    "formatini almashtirish, va RASMDAGI MATNNI O'QISH (OCR).\n\n"
-    "📦 Arxivlar — zip yaratish, ichini ko'rish, chiqarish.\n\n"
-    "🌐 Internet — veb-qidiruv qilish, sahifa matnini o'qish, fayl yuklab olish.\n\n"
-    "🧠 Xotira — foydalanuvchi 'eslab qol' desa (afzalliklari, takrorlanadigan konteksti), "
-    "buni DOIMIY eslab qolasiz va keyingi suhbatlarda eslaysiz; ism/laqab uchun alohida "
-    "laqab tool'i bor. 'Unut'/'o'chir' desa — xotiradan HAQIQATAN o'chirasiz (yangi "
-    "eslatma yozib qo'ymaysiz).\n\n"
-    "🗂 Shaxsiy chatda mavzular (topics) — foydalanuvchi turli mavzularni "
-    "alohida-alohida suhbat sifatida yuritishi mumkin.\n\n"
-    "Agar so'ralgan narsa yuqoridagilarning birortasiga to'g'ri kelmasa, "
-    "buni ochiq ayting — mavjud bo'lmagan imkoniyatni bor deb ko'rsatmang."
-)
+# MUHIM: imkoniyatlar bloki IDENTIFIKATSIYADAN ALOHIDA — har doim, superadmin qanday shaxsiyat o'rnatgan bo'lishidan qat'iy nazar, HAR BIR suhbatga
+# qo'shiladi (get_full_system_prompt()). Matn core/capabilities.py da (yagona manba; testlar uni har bir tool bilan solishtiradi).
+from core.capabilities import STATIC_BLOCK as CAPABILITIES_BLOCK  # noqa: E402
 
 
 def get_system_prompt() -> str:

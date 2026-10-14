@@ -1,7 +1,7 @@
 """
 core/site_ops.py
 ----------------
-Sayt frontend'ini O'QISH va KO'CHIRISH amallarining yagona kirish nuqtasi (AI tool'lari va /site buyrug'i shu yerdan o'tadi).
+Sayt frontend'ini O'QISH va KO'CHIRISH amallarining yagona kirish nuqtasi (AI tool'lari shu yerdan o'tadi).
 
   site_read      — sahifa tuzilishi/texnologiyalari/matni (nusxalamasdan)
   site_resource  — bitta CSS/JS/HTML faylning matni (sahifalab)

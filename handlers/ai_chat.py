@@ -26,6 +26,7 @@ import core.userbot_tools as userbot_tools
 import core.instagram_tools as instagram_tools
 import core.github_tools as github_tools
 import core.site_tools as site_tools
+import core.capabilities as capabilities
 from core.thinking_indicator import ThinkingIndicator
 import core.topic_sessions as topic_sessions
 import core.group_memory as group_memory
@@ -312,6 +313,8 @@ async def handle_message(message: Message):
             system_prompt += f"\n\n{gh_hint}"
         if (site_hint := site_tools.hint_for(user_text)):
             system_prompt += f"\n\n{site_hint}"
+        if (state := capabilities.state_line(user_id, is_group)):
+            system_prompt += f"\n\n{state}"   # foydalanuvchining HAQIQIY holati: tarif, kvotalar, GitHub ulanganmi, guruhmi
         if is_group:
             system_prompt += group_rules.as_prompt_block(message.chat.id)
             system_prompt += group_memory.roster_block(message.chat.id, group_mem_thread)  # "kim kim" — aralashib ketmasin
@@ -369,6 +372,7 @@ async def handle_message(message: Message):
         active_tools = active_tools + instagram_tools.schemas_for(user_id)
         active_tools = active_tools + github_tools.schemas_for(user_id)   # gh_* — faqat GitHub ulagan odamga (core/github_tools.py)
         active_tools = active_tools + site_tools.SCHEMAS                  # site_* — sayt frontend'ini o'qish/ko'chirish (kvotali)
+        active_tools = active_tools + [capabilities.SCHEMA]               # bot_capabilities — AI o'zi haqida batafsil bilimni shu orqali oladi
     if mod_access is not None:
         recent_context = " ".join((m.get("content") or "") for m in history[-6:]) + " " + user_text
         if moderation.looks_like_mod_request(recent_context):

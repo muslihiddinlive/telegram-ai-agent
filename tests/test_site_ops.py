@@ -13,7 +13,6 @@ import core.site_ops as ops
 import core.site_tools as stools
 import core.tariffs as tariffs
 import core.tgdb as tgdb
-import handlers.site as site_handler
 
 U, ADMIN, SUPER = 5, 2, 1
 PAGE = b'<html><head><title>T</title><link rel="stylesheet" href="/a.css"></head><body><h1>Hi</h1><img src="/p.png"></body></html>'
@@ -170,36 +169,3 @@ def test_ai_tools_wiring_and_group_use(env):
     assert next(s for s in stools.SCHEMAS if s["function"]["name"] == "site_download")["function"]["description"].count("phishing") == 1
 
 
-def test_site_command(env, monkeypatch):
-    from aiogram.filters import CommandObject
-    assert run(tariffs.set_config(None, "free", "site", "50"))[0]                              # kvota to'smasin
-    out = []
-
-    async def answer(t, **kw):
-        out.append(t)
-    msg = SimpleNamespace(from_user=SimpleNamespace(id=U), chat=SimpleNamespace(id=U, type="private"), bot=env.bot, answer=answer)
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args="")))
-    assert "SSRF" not in out[-1] and "mualliflik" in out[-1] and "/site" in out[-1]
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args=env.url)))
-    assert out[-1].startswith("<pre>") and "Sarlavha: T" in out[-1] and used() == 1
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args=f"{env.url} html")))
-    assert env.bot.docs and used() == 2
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args=f"{env.url} zip")))
-    assert env.bot.docs[-1]["name"].endswith(".zip")
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args="http://169.254.169.254/ zip")))
-    assert out[-1].startswith("❌") and "taqiqlangan" in out[-1]
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args='"unterminated')))
-    assert "Qo'shtirnoq" in out[-1]
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args=f"cat http://site.test:{env.port}/a.css")))
-    assert "color:red" in out[-1]
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args="cat")))
-    assert "Format" in out[-1]
-    run(site_handler.site_cmd(msg, CommandObject(command="site", args="<script>alert(1)</script>.com")))
-    assert "<script>" not in out[-1]                                                           # xato matni HTML-escape qilinadi
-
-
-def test_command_registered_in_menu_and_guard():
-    import core.bot_commands as bc
-    import core.command_guard as cg
-    assert any(c.command == "site" for c in (bc.GENERAL_COMMANDS if hasattr(bc, "GENERAL_COMMANDS") else bc.__dict__.get("_BASE_COMMANDS", [])) ) or "site" in open("core/bot_commands.py").read()
-    assert "site" in cg.KNOWN

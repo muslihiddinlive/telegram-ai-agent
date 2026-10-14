@@ -1,8 +1,8 @@
 """
 core/github_ops.py
 ------------------
-GitHub amallarining YAGONA kirish nuqtasi: `run(name, uid, args, ...)`. Ham AI tool'lari (core/github_tools.py), ham `/gh`
-buyruqlari (handlers/github.py) shu yerdan o'tadi — shuning uchun tekshiruvlar bir xil va chetlab o'tib bo'lmaydi.
+GitHub amallarining YAGONA kirish nuqtasi: `run(name, uid, args, ...)`. AI tool'lari (core/github_tools.py) va tasdiq tugmalari
+(handlers/github.py) shu yerdan o'tadi — buyruq yo'q, hamma ish suhbat orqali; tekshiruvlar bir joyda va chetlab o'tib bo'lmaydi.
 
 Majburiy qoidalar (serverda, AI'ga ishonmasdan):
   1. FAQAT shaxsiy chat. Guruhda hech narsa bajarilmaydi.
@@ -767,6 +767,19 @@ async def op_clone_all(ctx: Ctx, args: dict, bind=None) -> dict:
     return _ok(text, cloned=done, failed=failed, parts=state["parts"])
 
 
+# ── GitHub'dan chiqish (tasdiq bilan) ──
+async def prep_disconnect(ctx: Ctx, args: dict):
+    login = (meta(ctx.uid) or {}).get("login", "?")
+    local = [f"{o}/{r}" for o, r in sb.list_local(ctx.uid)]
+    return ({}, {}, f"🔌 <b>GitHub uziladi</b>: {_e(login)}\nSaqlangan token va barcha vaqtinchalik ish nusxalari ({len(local)} ta) o'chadi. "
+                    f"GitHub'dagi repolaringizga tegilmaydi. (Tokenni GitHub'dan ham o'chirib qo'ying — revoke.)")
+
+
+async def op_disconnect(ctx: Ctx, args: dict, bind=None) -> dict:
+    await disconnect(ctx.bot, ctx.uid)
+    return _ok("✅ GitHub uzildi: token va ish nusxalari o'chirildi. Tokenni GitHub'dan ham o'chirib (revoke) qo'yishni unutmang.")
+
+
 # ── push (tasdiq bilan) ──
 async def _range_for_branch(ctx: Ctx, path: str, branch: str) -> str | None:
     ref = f"refs/remotes/origin/{branch}"
@@ -988,6 +1001,7 @@ class OpDef:
 
 OPS: dict[str, OpDef] = {
     "gh_status": OpDef(op_status),
+    "gh_disconnect": OpDef(op_disconnect, prepare=prep_disconnect),
     "gh_list_repos": OpDef(op_list_repos, counted=True),
     "gh_profile": OpDef(op_profile, counted=True),
     "gh_repo_info": OpDef(op_repo_info, counted=True),
@@ -1035,8 +1049,8 @@ def _safe_error(e: Exception, token: str | None) -> dict:
 def _ctx_for(uid: int, bot, chat_id) -> Ctx | dict:
     token = get_token(uid)
     if not token or meta(uid) is None:
-        return {"error": "GitHub ulanmagan. Foydalanuvchi shaxsiy chatda /gh login buyrug'i bilan o'z tokenini kiritsin "
-                         "(tokenni AI suhbatiga yozmang)."}
+        return {"error": "GitHub ulanmagan. Foydalanuvchi o'z GitHub tokenini SHAXSIY chatga yuborsin: xabar darhol o'chiriladi, token shifrlab saqlanadi va "
+                         "AI uni ko'rmaydi."}
     return Ctx(uid, token, identity(uid), bot, chat_id)
 
 
